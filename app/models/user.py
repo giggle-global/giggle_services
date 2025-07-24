@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel, Field, EmailStr
 from enum import Enum
 
@@ -7,7 +7,20 @@ class RoleEnum(str, Enum):
     SUPER_ADMIN = "SA"
     CLIENT = "CL"
     FREELANCER = "FL"
-    # Add more roles as needed
+
+class NotificationService(BaseModel):
+    email: bool = False
+    sms: bool = False
+    in_app: bool = False
+
+class PaymentInformation(BaseModel):
+    account_holder_name: Optional[str] = None
+    account_number: Optional[str] = None
+    ifsc_code: Optional[str] = None
+    bank_name: Optional[str] = None
+    upi_id: Optional[str] = None
+    gst: Optional[str] = None
+    account_type: Optional[str] = None  # e.g., "Savings", "Current"
 
 
 class UserBase(BaseModel):
@@ -27,16 +40,30 @@ class UserCreate(UserBase):
 
 class UserUpdate(BaseModel):
     name: Optional[str] = None
+    last_name: Optional[str] = None
     photo_id: Optional[str] = None
     email: Optional[EmailStr] = None
     phone_number: Optional[str] = None
     role: Optional[RoleEnum] = None
+    bio: Optional[str] = None
+    profile_pic: Optional[bytes] = None  # Or handle as UploadFile in your route
+    notification_service: Optional[NotificationService] = None
+    language_preference: Optional[str] = None  # "en", "hi", etc.
+    payment_information: Optional[PaymentInformation] = None
+    username: Optional[str] = None
+    skill_set: Optional[List[str]] = None
+
 
 class UserOut(UserBase):
     user_id: str
 
     class Config:
         orm_mode = True
+
+
+
+
+
 
 class LoginRequest(BaseModel):
     username: str  # email or username, as per Keycloak config

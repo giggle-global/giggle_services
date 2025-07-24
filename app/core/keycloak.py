@@ -171,6 +171,7 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
                 if not enabled:
                     raise HTTPException(status_code=401, detail="User is disabled")
                 user["sid"] = sid
+                print("User details:", user)
                 return user
             else:
                 define_logger(
