@@ -1,22 +1,43 @@
+# -------------------
+# 📁 services/chat_service.py
+# -------------------
 from app.repositories.chat import ChatRepository
-from app.models.chat import MessageIn, MessageOut
-from typing import List
+from datetime import datetime
 
 class ChatService:
-    def __init__(self, repo: ChatRepository):
-        self.repo = repo
+    def __init__(self):
+        self.repo = ChatRepository()
 
-    async def send_message(self, client_id: str, freelancer_id: str, sender_id: str, sender_role: str, message: str):
-        chat_id = await self.repo.get_or_create_chat(client_id, freelancer_id)
-        return await self.repo.add_message(chat_id, sender_id, sender_role, message)
+    def log_chat(self, project_id, user_id, message, role, user_name):
+        chat_entry = {
+            "project_id": project_id,
+            "user_id": user_id,
+            "message": message,
+            "role": role,
+            "user_name": user_name,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        self.repo.save(chat_entry)
 
-    async def mark_all_seen(self, chat_id: str, user_id: str):
-        await self.repo.mark_seen(chat_id, user_id)
+    def get_chat_history(self, project_id):
+        return self.repo.get_history(project_id)
 
-    async def get_chat_messages(self, chat_id: str, skip: int, limit: int) -> List[MessageOut]:
-        messages = await self.repo.get_messages(chat_id, skip, limit)
-        return [MessageOut(**msg.dict()) for msg in messages]
 
-    async def get_unread_message_count(self, chat_id: str, user_id: str) -> int:
-        return await self.repo.count_unread(chat_id, user_id)
+class WebSocketManager:
+    def __init__(self):
+        self.connections = {}  # user_id: websocket
+        self.groups = {}       # project_id: set(user_ids)
 
+    async def connect(self, user_id, project_id, websocket):
+        self.connections[user_id] = websocket
+        self.groups.setdefault(project_id, set()).add(user_id)
+
+    async def disconnect(self, user_id, project_id):
+        self.connections.pop(user_id, None)
+        if project_id in self.groups:
+            self.groups[project_id].discard(user_id)
+
+    async def send_to_group(self, project_id, message: dict):
+        for uid in self.groups.get(project_id, []):
+            if uid in self.connections:
+                await self.connections[uid].send_json(message)

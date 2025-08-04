@@ -3,6 +3,7 @@ from app.models.user import UserCreate, UserUpdate, LoginRequest, RefreshRequest
 from app.core.keycloak import create_user_in_keycloak, authenticate_with_keycloak, refresh_access_token
 from app.core.config import config
 import uuid
+from fastapi import HTTPException
 
 class UserService:
     def __init__(self, user_repo: UserRepository = None):
@@ -50,6 +51,14 @@ class UserService:
     def user_refresh(self, data: RefreshRequest) -> dict:
         data = refresh_access_token(refresh_token=data.refresh_token)
         return data
+    
+    def ban_user(self, user_id: str):
+        user = self.user_repo.get_user_by_id(user_id)
+        if not user:
+            raise HTTPException(404, "User not found.")
+        if user.get("status") == "BANNED":
+            raise HTTPException(400, "User already banned.")
+        return self.user_repo.ban_user(user_id)
     
     def create_root_user(self) -> dict:
         # Use values from config, not os.environ!

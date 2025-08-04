@@ -19,6 +19,8 @@ config = {}
 if not config:
     config["db_url"] = os.environ["DB_URL"]
     config["db_name"] = os.environ["DB_NAME"]
+    config["db_user"] = os.environ["DB_USER"]
+    config["db_password"] = os.environ["DB_PASSWORD"]
 
     config["keyclock_url"] = os.environ["KEYCLOAK_URL"]
     config["realm_name"] = os.environ["REALM_NAME"]

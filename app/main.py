@@ -1,8 +1,14 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import user
+
 from app.services.user import UserService
+
+from app.routes import user
 from app.routes import auth
+from app.routes import chat
+from app.routes import request
+from app.routes import ticket
+
 
 
 app = FastAPI()
@@ -17,6 +23,9 @@ app.add_middleware(
 
 app.include_router(user.router)
 app.include_router(auth.router)
+app.include_router(request.router)
+app.include_router(chat.router)
+app.include_router(ticket.router)
 
 
 user_service = UserService()
@@ -26,3 +35,7 @@ user_service = UserService()
 def on_startup():
     """This function will be executed when the server starts"""
     user_service.create_root_user()
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}

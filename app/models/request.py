@@ -10,7 +10,7 @@ class RequestStatus(str, Enum):
     CANCELLED = "cancelled"
 
 class RequestCreate(BaseModel):
-    client_id: str  # user_id of client (CL)
+    project_id: str  # user_id of client (CL)
     freelancer_id: str  # user_id of freelancer (FL)
 
 class RequestUpdate(BaseModel):

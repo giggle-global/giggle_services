@@ -1,51 +1,66 @@
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, Query
-from app.services.chat import ChatService
-from app.models.chat import MessageIn, MessageOut
-from typing import List
-from uuid import uuid4
-from app.core.keycloak import get_current_user
-from .manager import ConnectionManager
+# -------------------
+# 📁 router/chat_router.py
+# -------------------
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from app.services.chat import ChatService, WebSocketManager
+from datetime import datetime
+from app.services.user import UserService
+from app.core.keycloak import decode_token
+from app.services.request import RequestService
 
-router = APIRouter(prefix="/chat", tags=["Chat"])
-manager = ConnectionManager()
+router = APIRouter()
 
-@router.websocket("/ws/chat/{chat_id}")
-async def websocket_endpoint(websocket: WebSocket, chat_id: str, user_id: str, role: str):
-    await manager.connect(chat_id, websocket, user_id)
+chat_service = ChatService()
+websocket_manager = WebSocketManager()
+
+
+@router.websocket("/ws/{project_id}/{user_id}")
+async def websocket_endpoint(project_id: str, user_id: str, websocket: WebSocket):
+
+    # ✅ Accept connection
+    await websocket.accept() 
+    await websocket_manager.connect(user_id, project_id, websocket)
+
+    user_detail = UserService().get_user(user_id)
+    if not user_detail:
+        await websocket.close(code=4404)  # 4404: User not found
+        return
+    
+    # ✅ Validate project access
+    request_service = RequestService().project_exists(project_id, user_id, user_detail["role"])
+    if not request_service:
+        print("Project not found")
+        await websocket.close(code=4403)  # 4403: Forbidden
+        return
+
+    # ✅ Send chat history
+    chat_history = chat_service.get_chat_history(project_id)
+    for chat in chat_history:
+        chat.pop("_id", None)  # Avoid ObjectId serialization error
+        await websocket.send_json(chat)
+
     try:
         while True:
-            data = await websocket.receive_json()
-            message = data.get("message")
-            sender_id = user_id
-            sender_role = role
+            message = await websocket.receive_json()
+            content = message.get("content", "").strip()
+            if not content:
+                await websocket.send_json({"error": "Message cannot be empty."})
+                continue
 
-            await manager.chat_service.send_message(chat_id, sender_id, sender_role, message)
-            saved_msg = {
-                "chat_id": chat_id,
-                "sender_id": sender_id,
-                "sender_role": sender_role,
-                "message": message,
-                "seen_by": [sender_id],
-            }
-            await manager.broadcast(chat_id, saved_msg)
+            chat_service.log_chat(
+                project_id=project_id,
+                user_id=user_id,
+                message=content,
+                role=user_detail["role"],
+                user_name=user_detail["name"]
+            )
+
+            await websocket_manager.send_to_group(project_id, {
+                "user_id": user_id,
+                "message": content,
+                "role": user_detail["role"],
+                "user_name": user_detail["name"],
+                "timestamp": datetime.utcnow().isoformat()
+            })
     except WebSocketDisconnect:
-        await manager.disconnect(chat_id, websocket, user_id)
-
-@router.get("/{chat_id}/messages", response_model=List[MessageOut])
-async def get_paginated_messages(
-    chat_id: str,
-    skip: int = Query(0),
-    limit: int = Query(20),
-    current_user=Depends(get_current_user),
-    service: ChatService = Depends()
-):
-    await service.mark_all_seen(chat_id, current_user.id)
-    return await service.get_chat_messages(chat_id, skip=skip, limit=limit)
-
-@router.get("/{chat_id}/unread-count")
-async def get_unread_count(
-    chat_id: str,
-    current_user=Depends(get_current_user),
-    service: ChatService = Depends()
-):
-    return {"unread_count": await service.get_unread_message_count(chat_id, current_user.id)}
+        await websocket_manager.disconnect(user_id, project_id)

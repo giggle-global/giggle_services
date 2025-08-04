@@ -24,13 +24,14 @@ class PaymentInformation(BaseModel):
 
 
 class UserBase(BaseModel):
-    name: Optional[str]
-    photo_id: Optional[str] = None
-    email: Optional[EmailStr]
+    username: str
+    email: EmailStr
     phone_number: str
+    passcode: str
+    role: RoleEnum
+    first_name: Optional[str]
+    last_name: Optional[str]
     status: Optional[str] = "ACTIVE"
-    passcode: Optional[str] = None
-    role: Optional[RoleEnum]
     keycloak_id: Optional[str] = None
     user_id: Optional[str] = None
 
@@ -39,18 +40,16 @@ class UserCreate(UserBase):
     
 
 class UserUpdate(BaseModel):
-    name: Optional[str] = None
+    first_name: Optional[str] = None
     last_name: Optional[str] = None
-    photo_id: Optional[str] = None
+    username: Optional[str] = None
     email: Optional[EmailStr] = None
     phone_number: Optional[str] = None
-    role: Optional[RoleEnum] = None
     bio: Optional[str] = None
     profile_pic: Optional[bytes] = None  # Or handle as UploadFile in your route
     notification_service: Optional[NotificationService] = None
     language_preference: Optional[str] = None  # "en", "hi", etc.
     payment_information: Optional[PaymentInformation] = None
-    username: Optional[str] = None
     skill_set: Optional[List[str]] = None
 
 

@@ -45,8 +45,34 @@ class RequestRepository:
 
     def get_request(self, request_id: str) -> Optional[dict]:
         return self.collection.find_one({"request_id": request_id}, {"_id": 0})
+    
+    def request_exists(self, client_id: str, freelancer_id: str) -> bool:
+        return self.collection.count_documents({
+            "client_id": client_id,
+            "freelancer_id": freelancer_id,
+            "status": RequestStatus.PENDING.value
+        }) > 0
 
     def delete_request(self, request_id: str, client_id: str):
         result = self.collection.delete_one({"request_id": request_id, "client_id": client_id})
         if result.deleted_count == 0:
             raise HTTPException(404, "Request not found or unauthorized.")
+        
+    def project_exists(self, project_id: str, status: str, client_id: str = None, freelancer_id: str = None) -> bool:
+        if client_id:
+            data = self.collection.count_documents({
+                "project_id": project_id,
+                "client_id": client_id,
+                "status": status
+            })
+        elif freelancer_id:
+            data = self.collection.count_documents({
+                "project_id": project_id,
+                "freelancer_id": freelancer_id,
+                "status": status
+            })
+        else:
+            return False
+        if data > 0:
+            return True
+        return False

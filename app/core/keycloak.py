@@ -5,6 +5,7 @@ from keycloak import KeycloakOpenID, KeycloakAdmin
 from base64 import b64decode
 from jwt.exceptions import DecodeError, InvalidTokenError
 from app.core.audit_log import define_logger
+from app.repositories.user import UserRepository
 
 from cryptography.hazmat.primitives import serialization
 import jwt
@@ -171,8 +172,103 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
                 if not enabled:
                     raise HTTPException(status_code=401, detail="User is disabled")
                 user["sid"] = sid
+                print("User details check:", user['username'])
+                user_repo = UserRepository()
+                user = user_repo.get_user_by_id(user_id=user["username"])
                 print("User details:", user)
                 return user
+
+            else:
+                define_logger(
+                    level=40,
+                    message="User not found",
+                    pid=os.getpid(),
+                    loggName=inspect.stack()[0],
+                )
+                raise HTTPException(status_code=404, detail="User not found")
+
+        # If 'sub' is missing, token might be malformed
+        define_logger(
+            level=40,
+            message="Invalid token structure",
+            pid=os.getpid(),
+            loggName=inspect.stack()[0],
+        )
+
+        # If 'sub' is missing, token might be malformed
+        raise HTTPException(status_code=400, detail="Invalid token structure")
+
+    except (DecodeError, InvalidTokenError) as exception:
+        define_logger(
+            level=40,
+            message="Invalid or expired token",
+            pid=os.getpid(),
+            loggName=inspect.stack()[0],
+        )
+        # Handle JWT decoding errors
+        raise HTTPException(
+            status_code=401, detail="Invalid or expired token"
+        ) from exception
+
+    except HTTPException as exception:
+        # Pass through known HTTP errors
+        define_logger(
+            level=40,
+            message="Unknown HTTP error",
+            pid=os.getpid(),
+            loggName=inspect.stack()[0],
+            body={"error": str(exception)},
+        )
+        raise HTTPException(
+            status_code=exception.status_code, detail=exception.detail
+        ) from exception
+
+    except Exception as exception:
+        # Catch all other errors
+        define_logger(
+            level=40,
+            message="Internal Server Error",
+            pid=os.getpid(),
+            loggName=inspect.stack()[0],
+            body={"error": str(exception)},
+        )
+        raise HTTPException(
+            status_code=500, detail="Internal Server Error"
+        ) from exception
+    
+
+def decode_token(token: str):
+    try:
+        if token.startswith("Bearer "):
+            token = token[len("Bearer ") :]
+
+        key_der_base64 = keycloak_openid.public_key()
+        key_der = b64decode(key_der_base64.encode())
+        public_key = serialization.load_der_public_key(key_der)
+
+        # Decode JWT token
+        user_base_detail = jwt.decode(
+            token, public_key, algorithms=["RS256"], audience="account"
+        )
+
+        # Debugging: print decoded user details
+        # print("Decoded user details:", user_base_detail)
+        keycloak_admin = keycloak_instance()
+        sid = user_base_detail["sid"]
+        # Check if the token is active and user exists
+        if "sub" in user_base_detail:
+            user = keycloak_admin.get_user(user_base_detail["sub"])
+            if user:
+                enabled = user.get("enabled")
+                if not enabled:
+                    raise HTTPException(status_code=401, detail="User is disabled")
+                print("User details check:", user)
+                user_repo = UserRepository()
+                user = user_repo.get_user_by_id(user_id=user["username"])
+                user["sid"] = sid
+                print("User details:", user)
+                return user
+
             else:
                 define_logger(
                     level=40,
@@ -348,13 +444,14 @@ def delete_user_in_keycloak(token, keycloak_user_id):
     """
     keycloak_admin = keycloak_instance()
     keycloak_admin.delete_user(keycloak_user_id)
-def logout_user_session(token, session_id):
+def logout_user_session(session_id):
     """
     Logout a specific user session in Keycloak.
 
     :param token: Admin access token
     :param session_id: ID of the session to logout
     """
+    token = get_client_access_token()
     url = f"{KEYCLOAK_URL}/admin/realms/{REALM_NAME}/sessions/{session_id}"
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
