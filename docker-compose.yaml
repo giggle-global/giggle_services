@@ -1,0 +1,77 @@
+version: "3.8"
+
+services:
+  # MongoDB Service
+  mongo-db:
+    image: mongo
+    container_name: mongodb
+    volumes:
+      - ./lib/mongodb:/data/db
+      - ./lib/mongodb/logs:/var/log/mongodb
+    env_file:
+      - .env
+    ports:
+      - "27017:27017"
+    restart: unless-stopped
+    networks:
+      - backend_net
+    user: "0:0"
+
+  # Postgres for Keycloak
+  postgres:
+    image: postgres:15
+    container_name: postgres-database
+    env_file:
+      - .env
+    restart: unless-stopped
+    volumes:
+      - .misc/lib/postgresql/data:/var/lib/postgresql/data
+      - .misc/keycloak/import/psql:/lib/postgresql/data
+      - .misc/keycloak/import/psql/keycloak:/docker-entrypoint-initdb.d
+    networks:
+      - backend_net
+    user: "0:0"
+
+  # Keycloak Identity Provider
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0
+    container_name: keycloak
+    env_file:
+      - .env
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    volumes:
+      - .misc/keycloak/import/realm:/opt/keycloak/data/import
+    ports:
+      - "3000:8080"
+    networks:
+      - backend_net
+    command: >
+      start-dev
+      --features=scripts,preview
+      --import-realm
+    user: "0:0"
+
+  # Python FastAPI Backend
+  gig-backend:
+    build: .
+    image: gig-backend:latest
+    container_name: gig-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - .misc/logger:/app/logger/
+    depends_on:
+      - mongo-db
+      - keycloak
+    networks:
+      - backend_net
+
+# Shared Network
+networks:
+  backend_net:
+    name: backend_net

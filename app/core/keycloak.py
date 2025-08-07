@@ -10,6 +10,8 @@ from app.repositories.user import UserRepository
 from cryptography.hazmat.primitives import serialization
 import jwt
 
+import time
+
 from fastapi import HTTPException, Depends
 from fastapi.security import APIKeyHeader
 
@@ -18,6 +20,9 @@ KEYCLOAK_URL = config["keyclock_url"]
 REALM_NAME = config["realm_name"]
 CLIENT_ID = config["client_id"]
 CLIENT_SECRET = config["client_secret"]
+
+MAX_RETRIES = 5
+RETRY_INTERVAL = 3  # seconds
 
 # Initialize Keycloak OpenID Client
 keycloak_openid = KeycloakOpenID(
@@ -43,33 +48,56 @@ def keycloak_instance():
     return keycloak_admin
 
 
+
 def get_client_access_token():
-    """Get an access token using client credentials."""
+    """Get an access token using client credentials, with retry logic."""
     url = f"{KEYCLOAK_URL}/realms/{REALM_NAME}/protocol/openid-connect/token"
     data = {
         "grant_type": "client_credentials",
         "client_id": CLIENT_ID,
         "client_secret": CLIENT_SECRET,
     }
-    response = requests.post(url, data=data)
-    response.raise_for_status()
-    token = response.json()
-    access_token = token["access_token"]
-    #     print(f"Client Access Token: {access_token}")
-    if access_token is None:
-        define_logger(
-            level=40,
-            message="Client Access Token for keycloak not found",
-            pid=os.getpid(),
-            loggName=inspect.stack()[0],
-        )
-        raise HTTPException(
-            status_code=500, detail="Client Access Token for keycloak not found"
-        )
-    return access_token
+
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            print(f"🔁 Attempt {attempt}: Connecting to Keycloak at {url}")
+            response = requests.post(url, data=data, timeout=5)
+            response.raise_for_status()
+            token = response.json()
+            access_token = token.get("access_token")
+
+            if access_token:
+                print("✅ Successfully retrieved Keycloak access token.")
+                return access_token
+            else:
+                define_logger(
+                    level=40,
+                    message="Client Access Token is missing in response",
+                    pid=os.getpid(),
+                    loggName=inspect.stack()[0],
+                )
+                raise HTTPException(
+                    status_code=500, detail="Client Access Token not found in response"
+                )
+
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Attempt {attempt} failed: {e}")
+            if attempt == MAX_RETRIES:
+                define_logger(
+                    level=40,
+                    message="Failed to connect to Keycloak after multiple attempts",
+                    pid=os.getpid(),
+                    loggName=inspect.stack()[0],
+                )
+                raise HTTPException(
+                    status_code=500,
+                    detail="Keycloak not reachable after multiple attempts",
+                )
+            time.sleep(RETRY_INTERVAL)
 
 
 def create_user_in_keycloak(user_data):
+    print("Creating user in Keycloak with data:", json.dumps(user_data, indent=2))
     token = get_client_access_token()
     """Create a user in Keycloak using the client access token and return the Keycloak user ID."""
     url = f"{KEYCLOAK_URL}/admin/realms/{REALM_NAME}/users"

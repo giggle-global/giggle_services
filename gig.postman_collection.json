@@ -1,0 +1,587 @@
+{
+	"info": {
+		"_postman_id": "d26ed41a-ec02-4768-9329-e3f584a9ac69",
+		"name": "gig",
+		"schema": "https://schema.getpostman.com/json/collection/v2.0.0/collection.json",
+		"_exporter_id": "25942966"
+	},
+	"item": [
+		{
+			"name": "auth",
+			"item": [
+				{
+					"name": "signup",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"deepak+fl1\",\n  \"email\": \"deepak+fl1@keydraft.com\",\n  \"phone_number\": \"1234567892\",\n  \"passcode\": \"deepak123\",\n  \"role\": \"FL\"\n}"
+						},
+						"url": "{{base_url}}/auth/signup"
+					},
+					"response": []
+				},
+				{
+					"name": "login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200 && pm.response.json().access_token && pm.response.json().refresh_token ) {",
+									"    pm.environment.set('access_token', pm.response.json().access_token);",
+									"    pm.environment.set('refresh_token', pm.response.json().refresh_token);",
+									"    console.log(\"Access token saved to environment variable.\");",
+									"} else {",
+									"    console.warn(\"Access token not found in response.\");",
+									"}",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"deepak+cl@keydraft.com\",\n  \"password\": \"deepak123\"\n}"
+						},
+						"url": "{{base_url}}/auth/login"
+					},
+					"response": []
+				},
+				{
+					"name": "refresh token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200 && pm.response.json().access_token && pm.response.json().refresh_token ) {",
+									"    pm.environment.set('access_token', pm.response.json().access_token);",
+									"    pm.environment.set('refresh_token', pm.response.json().refresh_token);",
+									"    console.log(\"Access token saved to environment variable.\");",
+									"} else {",
+									"    console.warn(\"Access token not found in response.\");",
+									"}",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+						},
+						"url": "{{base_url}}/auth/refresh"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "users",
+			"item": [
+				{
+					"name": "get user profile",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{access_token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/users?user_id=cf9cd256-2b93-4cb6-9def-2d4dd59fdbe0",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users"
+							],
+							"query": [
+								{
+									"key": "user_id",
+									"value": "cf9cd256-2b93-4cb6-9def-2d4dd59fdbe0"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "update user",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": {
+								"key": "{{access_token}}",
+								"in": "header",
+								"name": "Authorization"
+							}
+						},
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "{{access_token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"first_name\": \"Deepak\",\n  \"last_name\": \"Baskar\",\n  \"username\": \"deepak_baskar\",\n  \"bio\": \"I have seven years of experience\",\n  \"notification_service\": {\n    \"email\": true,\n    \"sms\": false,\n    \"in_app\": true\n  },\n  \"language_preference\": \"English\",\n  \"skill_set\": [\n    \"Docker\", \"git\", \"github\", \"python\"\n  ]\n}"
+						},
+						"url": "{{base_url}}/users"
+					},
+					"response": []
+				},
+				{
+					"name": "ban user",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": {
+								"key": "{{access_token}}",
+								"in": "header",
+								"name": "Authorization"
+							}
+						},
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/users/ban/0ef3e53f-e0b2-4da7-b4f6-6063a0646eeb"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "requests",
+			"item": [
+				{
+					"name": "create request",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": {
+								"key": "{{access_token}}",
+								"in": "header",
+								"name": "Authorization"
+							}
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "{{access_token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"project_id\": \"project_456\",\n  \"freelancer_id\": \"3bea5ad4-5847-4b1f-b725-07e336f9f729\"\n}"
+						},
+						"url": "{{base_url}}/requests"
+					},
+					"response": []
+				},
+				{
+					"name": "cancel request",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": {
+								"key": "{{access_token}}",
+								"in": "header",
+								"name": "Authorization"
+							}
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						},
+						"url": "{{base_url}}/requests/{{request_id}}/cancel"
+					},
+					"response": []
+				},
+				{
+					"name": "get sent request",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": {
+								"key": "{{access_token}}",
+								"in": "header",
+								"name": "Authorization"
+							}
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/requests/sent"
+					},
+					"response": []
+				},
+				{
+					"name": "get received request",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": {
+								"key": "{{access_token}}",
+								"in": "header",
+								"name": "Authorization"
+							}
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/requests/received"
+					},
+					"response": []
+				},
+				{
+					"name": "accept request",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": {
+								"key": "{{access_token}}",
+								"in": "header",
+								"name": "Authorization"
+							}
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "{{access_token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						},
+						"url": {
+							"raw": "{{base_url}}/requests/{{request_id}}/respond?accept=true",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"requests",
+								"{{request_id}}",
+								"respond"
+							],
+							"query": [
+								{
+									"key": "accept",
+									"value": "true"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "ticket",
+			"item": [
+				{
+					"name": "create ticket",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200 && pm.response.json().ticket_id) {",
+									"    pm.environment.set('ticket_id', pm.response.json().ticket_id);",
+									"    console.log(\"Ticker ID saved to environment variable.\");",
+									"} else {",
+									"    console.warn(\"Ticket ID not found in response.\");",
+									"}",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": {
+								"key": "{{access_token}}",
+								"in": "header",
+								"name": "Authorization"
+							}
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "{{access_token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"client_id\": \"{{client_id}}\",\n  \"subject\": \"complaint on Payment - 1\",\n  \"description\": \"Client is not paying the money which we both agreed for\"\n}"
+						},
+						"url": "{{base_url}}/tickets"
+					},
+					"response": []
+				},
+				{
+					"name": "ticket status",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": {
+								"key": "{{access_token}}",
+								"in": "header",
+								"name": "Authorization"
+							}
+						},
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "{{access_token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"reopened\"\n}"
+						},
+						"url": "{{base_url}}/tickets/{{ticket_id}}/status"
+					},
+					"response": []
+				},
+				{
+					"name": "get ticket",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": {
+								"key": "{{access_token}}",
+								"in": "header",
+								"name": "Authorization"
+							}
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/tickets"
+					},
+					"response": []
+				},
+				{
+					"name": "get one ticket",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": {
+								"key": "{{access_token}}",
+								"in": "header",
+								"name": "Authorization"
+							}
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/tickets/{{ticket_id}}"
+					},
+					"response": []
+				},
+				{
+					"name": "update ticket description",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": {
+								"key": "{{access_token}}",
+								"in": "header",
+								"name": "Authorization"
+							}
+						},
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "{{access_token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subject\": \"updated subject\",\n  \"description\": \"it s not payment issue it is related to bad contract\"\n}"
+						},
+						"url": "{{base_url}}/tickets/{{ticket_id}}"
+					},
+					"response": []
+				},
+				{
+					"name": "admin comment",
+					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": {
+								"key": "{{access_token}}",
+								"in": "header",
+								"name": "Authorization"
+							}
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "{{access_token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"comment\": \"we have banned the client\"\n}"
+						},
+						"url": "{{base_url}}/tickets/{{ticket_id}}/admin-respond"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "GET /health",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": "{{base_url}}/health"
+			},
+			"response": []
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000"
+		},
+		{
+			"key": "access_token",
+			"value": ""
+		}
+	]
+}

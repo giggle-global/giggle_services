@@ -97,6 +97,9 @@ class UserService:
         # Build Mongo user object
         user = UserCreate(
             user_id=user_id,
+            first_name=root_name,
+            last_name=root_name,
+            username=user_id,
             name=root_name,
             email=root_email,
             phone_number="9999999999",

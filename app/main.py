@@ -8,7 +8,7 @@ from app.routes import auth
 from app.routes import chat
 from app.routes import request
 from app.routes import ticket
-
+import time
 
 
 app = FastAPI()
@@ -33,6 +33,7 @@ user_service = UserService()
 
 @app.on_event("startup")
 def on_startup():
+    time.sleep(5)  # Wait for DB to be ready
     """This function will be executed when the server starts"""
     user_service.create_root_user()
 
