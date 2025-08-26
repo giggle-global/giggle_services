@@ -33,6 +33,26 @@ services:
     user: "0:0"
 
   # Keycloak Identity Provider
+  # keycloak:
+  #   image: quay.io/keycloak/keycloak:25.0
+  #   container_name: keycloak
+  #   env_file:
+  #     - .env
+  #   depends_on:
+  #     - postgres
+  #   restart: unless-stopped
+  #   volumes:
+  #     - .misc/keycloak/import/realm:/opt/keycloak/data/import
+  #   ports:
+  #     - "3000:8080"
+  #   networks:
+  #     - backend_net
+  #   command: >
+  #     start-dev
+  #     --features=scripts,preview
+  #     --import-realm
+  #   user: "0:0"
+
   keycloak:
     image: quay.io/keycloak/keycloak:25.0
     container_name: keycloak
@@ -44,13 +64,16 @@ services:
     volumes:
       - .misc/keycloak/import/realm:/opt/keycloak/data/import
     ports:
-      - "3000:8080"
+      - "3000:8080"   # Bind only to localhost, not public
     networks:
       - backend_net
     command: >
-      start-dev
+      start
       --features=scripts,preview
       --import-realm
+    environment:
+      KC_HOSTNAME: "auth.giggle.global"
+      KC_PROXY: "edge"
     user: "0:0"
 
   # Python FastAPI Backend
