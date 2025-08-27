@@ -34,9 +34,7 @@ class UserService:
 
         # 4. Save user to Mongo
         data =self.user_repo.create_user(user)
-        login_data = LoginRequest(username=user.email, password=user.passcode)
-        token = self.user_login(login_data)
-        return token
+        return data
 
     def get_user(self, user_id: str) -> dict:
         return self.user_repo.get_user_by_id(user_id)

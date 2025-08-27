@@ -38,4 +38,13 @@ class UserRepository:
         )
         if result.matched_count == 0:
             raise HTTPException(404, "User not found.")
-        return self.get_user_by_id(user_id)
+        return None
+    
+    def delete_user(self, user_id: str) -> dict:
+        result = self.collection.update_one(
+            {"user_id": user_id},
+            {"$set": {"status": "DELETED"}}
+        )
+        if result.matched_count == 0:
+            raise HTTPException(404, "User not found.")
+        return None

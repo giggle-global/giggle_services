@@ -11,7 +11,6 @@ user_service = UserService()
 @router.post("/signup")
 def create_user(user: UserCreate):
     data = user_service.create_user(user)
-    data = TokenResponse(**data)
     return data
 
 @router.post("/login", response_model=TokenResponse)

@@ -22,10 +22,13 @@ def update_user(update: UserUpdate, current_user: dict = Depends(get_current_use
     update_data = update.model_dump(exclude_unset=True)
     return user_service.update_user(user_id=user_id, user=update_data)
 
-@router.delete("/")
+@router.delete("/delete/{user_id}")
 def delete_user(user_id: str, current_user: dict = Depends(get_current_user)):
-    user_id=current_user.get("username")
-    print("collected user id", user_id)
+    if current_user["role"] != "SA":
+        raise HTTPException(403, "Only super admin can delete users")
+    print("current user role", current_user["role"])
+    if not user_id:
+        raise HTTPException(400, "User ID is required to ban a user")
     user_service.delete_user(user_id)
     return {"detail": "User deleted"}
 
