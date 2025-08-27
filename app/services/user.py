@@ -15,8 +15,8 @@ class UserService:
         keycloak_payload = {
             "username": user.user_id,
             "email": user.email,
-            "firstName": user.name,
-            "lastName": user.name,
+            "firstName": user.first_name,
+            "lastName": user.last_name,
             "enabled": True,
             "emailVerified": True, 
             "credentials": [
