@@ -27,7 +27,6 @@ class UserBase(BaseModel):
     username: str
     email: EmailStr
     phone_number: str
-    passcode: str
     role: RoleEnum
     first_name: Optional[str]
     last_name: Optional[str]
