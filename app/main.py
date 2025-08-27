@@ -18,9 +18,27 @@ from app.routes import ticket
 import time
 
 import logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
-# use DEBUG during development
-# logging.getLogger().setLevel(logging.DEBUG)
+
+logging.basicConfig(
+    level=logging.DEBUG,   # DEBUG, INFO, WARNING, ERROR, CRITICAL
+    format="%(asctime)s [%(levelname)s] [%(name)s] %(message)s",
+    handlers=[
+        logging.StreamHandler(),                    # console
+        logging.FileHandler("app.log", "a"),   # file
+    ]
+)
+
+# Turn down noisy loggers
+for noisy in (
+    "pymongo",              # all pymongo logs
+    "pymongo.topology",     # heartbeats
+    "pymongo.connection",
+    "pymongo.pool",
+):
+    logging.getLogger(noisy).setLevel(logging.WARNING)
+
+logger = logging.getLogger(__name__)
+logger.info("App started")
 
 
 

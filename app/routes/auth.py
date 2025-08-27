@@ -20,16 +20,25 @@ def create_user(user: UserCreate, svc: UserService = Depends(get_user_service)):
     if getattr(user, "role", None) == "SA":
         logger.warning("Attempt to create Super Admin user blocked.")
         raise Forbidden("Cannot create super admin users.")
-    created: UserOut = svc.create_user(user)
-    logger.info(f"User created successfully: {created.id}")
+
+    created_raw = svc.create_user(user)
+
+    # Normalize to UserOut (works whether repo returned dict or model)
+    created = created_raw if isinstance(created_raw, UserOut) else UserOut(**created_raw)
+
+    # Safe user_id extraction for logging
+    user_id = getattr(created, "user_id", None)
+    logger.info(f"User created successfully: {user_id}")
+
     return ok(data=created, message="User created", status_code=status.HTTP_201_CREATED)
+
 
 @router.post("/login", response_model=APIResponse[TokenResponse], status_code=status.HTTP_200_OK)
 def login(payload: LoginRequest, svc: UserService = Depends(get_user_service)):
-    logger.debug(f"Login attempt for email: {payload.email}")
+    logger.debug(f"Login attempt for email: {payload.username}")
     tokens_dict = svc.user_login(payload)
     tokens = TokenResponse(**tokens_dict)
-    logger.info(f"Login successful for email: {payload.email}")
+    logger.info(f"Login successful for email: {payload.username}")
     return ok(data=tokens, message="Login successful")
 
 @router.post("/refresh", response_model=APIResponse[TokenResponse], status_code=status.HTTP_200_OK)
