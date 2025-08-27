@@ -10,8 +10,7 @@ services:
     volumes:
       - .misc/lib/postgresql/data:/var/lib/postgresql/data
       - .misc/keycloak/import/psql/keycloak:/docker-entrypoint-initdb.d
-    networks:
-      - backend_net
+    networks: [backend_net]
     user: "0:0"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
@@ -25,27 +24,38 @@ services:
     env_file:
       - .env
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
     volumes:
       - .misc/keycloak/import/realm:/opt/keycloak/data/import
-    ports:
-      - "127.0.0.1:3000:8080"  # bind to localhost only
-    networks:
-      - backend_net
-    command: >
-      start
-      --features=scripts,preview
-      --import-realm
+    # ❌ no "ports:" here — not exposed to host
+    networks: [backend_net]
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
       KC_DB_USERNAME: ${POSTGRES_USER}
       KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+
+      # hostname locked to your domain
+      KC_HOSTNAME: auth.giggle.global
+      KC_HOSTNAME_URL: https://auth.giggle.global
+      KC_HOSTNAME_ADMIN_URL: https://auth.giggle.global
+      KC_HOSTNAME_STRICT: "true"
+      KC_HOSTNAME_STRICT_HTTPS: "true"
+
+      # behind reverse proxy (Nginx) terminating TLS
+      KC_PROXY: edge
+      KC_HTTP_ENABLED: "true"        # Keycloak listens HTTP :8080 internally
+      # (Nginx will pass X-Forwarded-* headers)
+
+      # admin bootstrap
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
-      KC_HOSTNAME: "auth.giggle.global"
-      KC_PROXY: "edge"
+    command: >
+      start
+      --features=scripts,preview
+      --import-realm
     user: "0:0"
 
 networks:
