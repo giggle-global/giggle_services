@@ -38,6 +38,9 @@ class UserService:
 
     def get_user(self, user_id: str) -> dict:
         return self.user_repo.get_user_by_id(user_id)
+    
+    def list_freelancer(self) -> dict:
+        return self.user_repo.get_freelancers()
 
     def update_user(self, user_id: str, user: UserUpdate) -> dict:
         return self.user_repo.update_user(user_id, user)

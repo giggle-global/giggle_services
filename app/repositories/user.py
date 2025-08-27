@@ -24,6 +24,10 @@ class UserRepository:
         if not user:
             raise HTTPException(404, "User not found")
         return user
+    
+    def get_freelancers(self) -> list[dict]:
+        freelancers = self.collection.find({"role": "FL", "status": "ACTIVE"}, {"_id": 0})
+        return list(freelancers)
 
     def update_user(self, user_id: str, user_data: UserUpdate) -> Optional[dict]:
         if not user_data:
