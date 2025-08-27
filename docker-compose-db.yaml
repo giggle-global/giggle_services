@@ -1,0 +1,23 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    env_file:
+      - .env
+    volumes:
+      - ./lib/mongodb:/data/db
+    restart: unless-stopped
+    networks:
+      - backend_net
+    user: "0:0"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+networks:
+  backend_net:
+    name: backend_net
