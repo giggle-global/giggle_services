@@ -27,6 +27,8 @@ services:
       postgres:
         condition: service_healthy
     restart: unless-stopped
+    ports:
+      - "3000:8080"
     volumes:
       - .misc/keycloak/import/realm:/opt/keycloak/data/import
     # ❌ no "ports:" here — not exposed to host
