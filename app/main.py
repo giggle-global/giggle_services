@@ -6,7 +6,9 @@ from starlette.status import HTTP_422_UNPROCESSABLE_ENTITY, HTTP_500_INTERNAL_SE
 from starlette.responses import JSONResponse
 from app.schemas.response import APIResponse
 
+from app.core.db import check_db_connection
 from app.services.user import UserService
+
 
 from app.routes import user
 from app.routes import auth
