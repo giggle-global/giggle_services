@@ -9,10 +9,15 @@ router = APIRouter(prefix="/users", tags=["auth"])
 user_service = UserService()
 
 @router.get("/", response_model=UserOut)
-def get_user(user_id: str, current_user: dict = Depends(get_current_user)):
-    print("user_id", user_id)
+def get_user(current_user: dict = Depends(get_current_user)):
     user_id=current_user.get("user_id")
     print("collected user id", user_id)
+    return user_service.get_user(user_id=user_id)
+
+@router.get("/profile/{user_id}", response_model=UserOut)
+def get_user(user_id: str, current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "SA":
+        raise HTTPException(403, "Only super admin can view other users")
     return user_service.get_user(user_id=user_id)
 
 @router.put("/", response_model=UserOut)
