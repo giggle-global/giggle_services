@@ -8,9 +8,11 @@ router = APIRouter(prefix="/auth", tags=["users"])
 
 user_service = UserService()
 
-@router.post("/signup", response_model=UserOut)
+@router.post("/signup")
 def create_user(user: UserCreate):
-    return user_service.create_user(user)
+    data = user_service.create_user(user)
+    data = TokenResponse(**data)
+    return data
 
 @router.post("/login", response_model=TokenResponse)
 def login(data: LoginRequest):

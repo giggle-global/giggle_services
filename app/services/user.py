@@ -33,7 +33,10 @@ class UserService:
         user.keycloak_id = keycloak_id
 
         # 4. Save user to Mongo
-        return self.user_repo.create_user(user)
+        data =self.user_repo.create_user(user)
+        login_data = LoginRequest(username=user.email, password=user.passcode)
+        token = self.user_login(login_data)
+        return token
 
     def get_user(self, user_id: str) -> dict:
         return self.user_repo.get_user_by_id(user_id)
