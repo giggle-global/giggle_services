@@ -1,50 +1,48 @@
-# app/routers/auth.py  (your optimized router)
+# app/routers/auth.py
+import logging
 from fastapi import APIRouter, Depends
 from starlette import status
-from app.models.user import (
-    UserCreate, UserUpdate, UserOut,
-    TokenResponse, LoginRequest, RefreshRequest
-)
+from app.models.user import UserCreate, UserUpdate, UserOut, TokenResponse, LoginRequest, RefreshRequest
 from app.services.user import UserService
 from app.schemas.response import APIResponse, ok
 from app.core.exceptions import Forbidden
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/auth", tags=["AUTHENTICATION"])
 
-# --- Prefer DI for testability (easy to mock in tests) ---
 def get_user_service() -> UserService:
     return UserService()
 
-@router.post("/signup",
-             response_model=APIResponse[UserOut],
-             status_code=status.HTTP_201_CREATED)
+@router.post("/signup", response_model=APIResponse[UserOut], status_code=status.HTTP_201_CREATED)
 def create_user(user: UserCreate, svc: UserService = Depends(get_user_service)):
+    logger.debug(f"Signup request received: {user.model_dump()}")
     if getattr(user, "role", None) == "SA":
-        # This will be caught by the global HTTPException handler and wrapped
+        logger.warning("Attempt to create Super Admin user blocked.")
         raise Forbidden("Cannot create super admin users.")
     created: UserOut = svc.create_user(user)
+    logger.info(f"User created successfully: {created.id}")
     return ok(data=created, message="User created", status_code=status.HTTP_201_CREATED)
 
-@router.post("/login",
-             response_model=APIResponse[TokenResponse],
-             status_code=status.HTTP_200_OK)
+@router.post("/login", response_model=APIResponse[TokenResponse], status_code=status.HTTP_200_OK)
 def login(payload: LoginRequest, svc: UserService = Depends(get_user_service)):
-    tokens_dict = svc.user_login(payload)        # returns dict or model
-    tokens = TokenResponse(**tokens_dict)        # normalize
+    logger.debug(f"Login attempt for email: {payload.email}")
+    tokens_dict = svc.user_login(payload)
+    tokens = TokenResponse(**tokens_dict)
+    logger.info(f"Login successful for email: {payload.email}")
     return ok(data=tokens, message="Login successful")
 
-@router.post("/refresh",
-             response_model=APIResponse[TokenResponse],
-             status_code=status.HTTP_200_OK)
+@router.post("/refresh", response_model=APIResponse[TokenResponse], status_code=status.HTTP_200_OK)
 def refresh_token(payload: RefreshRequest, svc: UserService = Depends(get_user_service)):
+    logger.debug("Token refresh requested")
     tokens_dict = svc.user_refresh(payload)
     tokens = TokenResponse(**tokens_dict)
+    logger.info("Token refreshed successfully")
     return ok(data=tokens, message="Token refreshed")
 
-# Example (optional) update profile route to show uniform response
-@router.put("/me",
-            response_model=APIResponse[UserOut],
-            status_code=status.HTTP_200_OK)
+@router.put("/me", response_model=APIResponse[UserOut], status_code=status.HTTP_200_OK)
 def update_me(update: UserUpdate, svc: UserService = Depends(get_user_service)):
+    logger.debug(f"Update profile request: {update.model_dump(exclude_unset=True)}")
     updated: UserOut = svc.update_current_user(update)
+    logger.info(f"Profile updated for user: {updated.id}")
     return ok(data=updated, message="Profile updated")

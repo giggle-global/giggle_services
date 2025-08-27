@@ -17,6 +17,13 @@ from app.routes import request
 from app.routes import ticket
 import time
 
+import logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
+# use DEBUG during development
+# logging.getLogger().setLevel(logging.DEBUG)
+
+
+
 
 app = FastAPI()
 
