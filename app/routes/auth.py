@@ -2,10 +2,11 @@
 import logging
 from fastapi import APIRouter, Depends
 from starlette import status
-from app.models.user import UserCreate, UserUpdate, UserOut, TokenResponse, LoginRequest, RefreshRequest
+from app.models.user import UserCreate, UserUpdate, UserOut, TokenResponse, LoginRequest, RefreshRequest, LoginResponse
 from app.services.user import UserService
 from app.schemas.response import APIResponse, ok
 from app.core.exceptions import Forbidden
+from app.core.keycloak import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -33,13 +34,21 @@ def create_user(user: UserCreate, svc: UserService = Depends(get_user_service)):
     return ok(data=created, message="User created", status_code=status.HTTP_201_CREATED)
 
 
-@router.post("/login", response_model=APIResponse[TokenResponse], status_code=status.HTTP_200_OK)
+@router.post("/login", response_model=APIResponse[LoginResponse], status_code=status.HTTP_200_OK)
 def login(payload: LoginRequest, svc: UserService = Depends(get_user_service)):
     logger.debug(f"Login attempt for email: {payload.username}")
+
     tokens_dict = svc.user_login(payload)
     tokens = TokenResponse(**tokens_dict)
+
     logger.info(f"Login successful for email: {payload.username}")
-    return ok(data=tokens, message="Login successful")
+
+    # get_current_user currently returns a dict
+    user_details: dict = get_current_user(token=tokens.access_token)
+    logger.debug(f"User details fetched: {user_details}")
+
+    login_data = LoginResponse(tokens=tokens, user=UserOut(**user_details))
+    return ok(data=login_data, message="Login successful")
 
 @router.post("/refresh", response_model=APIResponse[TokenResponse], status_code=status.HTTP_200_OK)
 def refresh_token(payload: RefreshRequest, svc: UserService = Depends(get_user_service)):

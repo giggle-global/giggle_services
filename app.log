@@ -76,3 +76,45 @@
 2025-08-27 20:31:34,646 [DEBUG] [urllib3.connectionpool] https://auth.giggle.global:443 "GET /admin/realms/giggle/users/88003e87-ab23-4de5-bbd4-6ff8f6fed669?userProfileMetadata=False HTTP/1.1" 200 426
 2025-08-27 20:31:34,737 [DEBUG] [app.routes.user] Profile fetch requested by user_id=d186809c-29cd-47da-9e2a-81ffbcbf4a8f for target=025c441c-499a-4ba7-9ed0-03fdd833b727
 2025-08-27 20:31:34,831 [INFO] [app.routes.user] Profile fetched for user_id=025c441c-499a-4ba7-9ed0-03fdd833b727
+2025-08-29 18:50:40,618 [INFO] [app.main] App started
+2025-08-29 18:50:41,713 [INFO] [app.services.user] Root user already exists: email=deepak@keydraft.com
+2025-08-29 18:50:46,157 [DEBUG] [app.routes.auth] Login attempt for email: deepak@keydraft.com
+2025-08-29 18:50:46,157 [DEBUG] [app.services.user] Keycloak auth attempt for username=deepak@keydraft.com
+2025-08-29 18:50:46,159 [DEBUG] [urllib3.connectionpool] Starting new HTTPS connection (1): auth.giggle.global:443
+2025-08-29 18:50:46,748 [DEBUG] [urllib3.connectionpool] https://auth.giggle.global:443 "POST /realms/giggle/protocol/openid-connect/token HTTP/1.1" 200 1907
+2025-08-29 18:50:46,750 [DEBUG] [urllib3.connectionpool] Starting new HTTPS connection (1): auth.giggle.global:443
+2025-08-29 18:50:47,114 [DEBUG] [urllib3.connectionpool] https://auth.giggle.global:443 "POST /realms/giggle/protocol/openid-connect/token HTTP/1.1" 200 2266
+2025-08-29 18:50:47,116 [INFO] [app.services.user] Login success for username=deepak@keydraft.com
+2025-08-29 18:50:47,116 [INFO] [app.routes.auth] Login successful for email: deepak@keydraft.com
+2025-08-29 18:50:47,118 [DEBUG] [urllib3.connectionpool] Starting new HTTPS connection (1): auth.giggle.global:443
+2025-08-29 18:50:47,385 [DEBUG] [urllib3.connectionpool] https://auth.giggle.global:443 "GET /realms/giggle HTTP/1.1" 200 600
+2025-08-29 18:50:47,396 [DEBUG] [urllib3.util.retry] Converted retries value: 1 -> Retry(total=1, connect=None, read=None, redirect=None, status=None)
+2025-08-29 18:50:47,396 [DEBUG] [urllib3.util.retry] Converted retries value: 1 -> Retry(total=1, connect=None, read=None, redirect=None, status=None)
+2025-08-29 18:50:47,448 [DEBUG] [urllib3.util.retry] Converted retries value: 1 -> Retry(total=1, connect=None, read=None, redirect=None, status=None)
+2025-08-29 18:50:47,449 [DEBUG] [urllib3.util.retry] Converted retries value: 1 -> Retry(total=1, connect=None, read=None, redirect=None, status=None)
+2025-08-29 18:50:47,502 [DEBUG] [urllib3.connectionpool] Starting new HTTPS connection (1): auth.giggle.global:443
+2025-08-29 18:50:47,743 [DEBUG] [urllib3.connectionpool] https://auth.giggle.global:443 "POST /realms/giggle/protocol/openid-connect/token HTTP/1.1" 200 2949
+2025-08-29 18:50:47,745 [DEBUG] [urllib3.connectionpool] Starting new HTTPS connection (1): auth.giggle.global:443
+2025-08-29 18:50:47,989 [DEBUG] [urllib3.connectionpool] https://auth.giggle.global:443 "GET /admin/realms/giggle/users/88003e87-ab23-4de5-bbd4-6ff8f6fed669?userProfileMetadata=False HTTP/1.1" 200 426
+2025-08-29 18:50:48,066 [DEBUG] [app.routes.auth] User details fetched: {'username': 'd186809c-29cd-47da-9e2a-81ffbcbf4a8f', 'email': 'deepak@keydraft.com', 'phone_number': '9999999999', 'role': 'SA', 'first_name': 'Super Admin', 'last_name': 'Super Admin', 'status': 'ACTIVE', 'keycloak_id': '88003e87-ab23-4de5-bbd4-6ff8f6fed669', 'user_id': 'd186809c-29cd-47da-9e2a-81ffbcbf4a8f'}
+2025-08-29 18:54:29,228 [INFO] [app.main] App started
+2025-08-29 18:54:30,305 [INFO] [app.services.user] Root user already exists: email=deepak@keydraft.com
+2025-08-29 18:54:31,663 [DEBUG] [app.routes.auth] Login attempt for email: deepak@keydraft.com
+2025-08-29 18:54:31,663 [DEBUG] [app.services.user] Keycloak auth attempt for username=deepak@keydraft.com
+2025-08-29 18:54:31,664 [DEBUG] [urllib3.connectionpool] Starting new HTTPS connection (1): auth.giggle.global:443
+2025-08-29 18:54:46,946 [DEBUG] [urllib3.connectionpool] https://auth.giggle.global:443 "POST /realms/giggle/protocol/openid-connect/token HTTP/1.1" 200 1907
+2025-08-29 18:54:46,949 [DEBUG] [urllib3.connectionpool] Starting new HTTPS connection (1): auth.giggle.global:443
+2025-08-29 18:54:47,490 [DEBUG] [urllib3.connectionpool] https://auth.giggle.global:443 "POST /realms/giggle/protocol/openid-connect/token HTTP/1.1" 200 2266
+2025-08-29 18:54:47,492 [INFO] [app.services.user] Login success for username=deepak@keydraft.com
+2025-08-29 18:54:47,492 [INFO] [app.routes.auth] Login successful for email: deepak@keydraft.com
+2025-08-29 18:54:47,494 [DEBUG] [urllib3.connectionpool] Starting new HTTPS connection (1): auth.giggle.global:443
+2025-08-29 18:54:47,793 [DEBUG] [urllib3.connectionpool] https://auth.giggle.global:443 "GET /realms/giggle HTTP/1.1" 200 600
+2025-08-29 18:54:47,796 [DEBUG] [urllib3.util.retry] Converted retries value: 1 -> Retry(total=1, connect=None, read=None, redirect=None, status=None)
+2025-08-29 18:54:47,796 [DEBUG] [urllib3.util.retry] Converted retries value: 1 -> Retry(total=1, connect=None, read=None, redirect=None, status=None)
+2025-08-29 18:54:47,839 [DEBUG] [urllib3.util.retry] Converted retries value: 1 -> Retry(total=1, connect=None, read=None, redirect=None, status=None)
+2025-08-29 18:54:47,839 [DEBUG] [urllib3.util.retry] Converted retries value: 1 -> Retry(total=1, connect=None, read=None, redirect=None, status=None)
+2025-08-29 18:54:47,894 [DEBUG] [urllib3.connectionpool] Starting new HTTPS connection (1): auth.giggle.global:443
+2025-08-29 18:54:48,156 [DEBUG] [urllib3.connectionpool] https://auth.giggle.global:443 "POST /realms/giggle/protocol/openid-connect/token HTTP/1.1" 200 2949
+2025-08-29 18:54:48,158 [DEBUG] [urllib3.connectionpool] Starting new HTTPS connection (1): auth.giggle.global:443
+2025-08-29 18:54:48,631 [DEBUG] [urllib3.connectionpool] https://auth.giggle.global:443 "GET /admin/realms/giggle/users/88003e87-ab23-4de5-bbd4-6ff8f6fed669?userProfileMetadata=False HTTP/1.1" 200 426
+2025-08-29 18:54:48,708 [DEBUG] [app.routes.auth] User details fetched: {'username': 'd186809c-29cd-47da-9e2a-81ffbcbf4a8f', 'email': 'deepak@keydraft.com', 'phone_number': '9999999999', 'role': 'SA', 'first_name': 'Super Admin', 'last_name': 'Super Admin', 'status': 'ACTIVE', 'keycloak_id': '88003e87-ab23-4de5-bbd4-6ff8f6fed669', 'user_id': 'd186809c-29cd-47da-9e2a-81ffbcbf4a8f'}

@@ -81,3 +81,7 @@ class TokenResponse(BaseModel):
     expires_in: int
     refresh_expires_in: int
     token_type: str
+
+class LoginResponse(BaseModel):
+    tokens: TokenResponse
+    user: UserOut

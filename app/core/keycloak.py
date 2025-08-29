@@ -179,6 +179,8 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
         if token.startswith("Bearer "):
             token = token[len("Bearer ") :]
 
+        print("check")
+
         key_der_base64 = keycloak_openid.public_key()
         key_der = b64decode(key_der_base64.encode())
         public_key = serialization.load_der_public_key(key_der)
