@@ -15,6 +15,7 @@ from app.routes import auth
 from app.routes import chat
 from app.routes import request
 from app.routes import ticket
+from app.routes import project
 import time
 
 import logging
@@ -82,6 +83,7 @@ app.include_router(auth.router)
 app.include_router(request.router)
 app.include_router(chat.router)
 app.include_router(ticket.router)
+app.include_router(project.router)
 
 
 user_service = UserService()
