@@ -278,3 +278,57 @@
 2025-08-30 13:18:32,760 [DEBUG] [urllib3.connectionpool] https://auth.giggle.global:443 "POST /realms/giggle/protocol/openid-connect/token HTTP/1.1" 200 2949
 2025-08-30 13:18:32,762 [DEBUG] [urllib3.connectionpool] Starting new HTTPS connection (1): auth.giggle.global:443
 2025-08-30 13:18:33,552 [DEBUG] [urllib3.connectionpool] https://auth.giggle.global:443 "GET /admin/realms/giggle/users/88003e87-ab23-4de5-bbd4-6ff8f6fed669?userProfileMetadata=False HTTP/1.1" 200 426
+2025-09-04 19:46:38,491 [INFO] [app.main] App started
+2025-09-04 19:46:39,698 [DEBUG] [app.services.user] Creating root user in Keycloak: email=deepak@keydraft.com
+2025-09-04 19:46:39,700 [DEBUG] [urllib3.connectionpool] Starting new HTTPS connection (1): auth.giggle.global:443
+2025-09-04 19:46:40,347 [DEBUG] [urllib3.connectionpool] https://auth.giggle.global:443 "POST /realms/giggle/protocol/openid-connect/token HTTP/1.1" 200 1902
+2025-09-04 19:46:40,348 [DEBUG] [urllib3.connectionpool] Starting new HTTPS connection (1): auth.giggle.global:443
+2025-09-04 19:46:40,686 [DEBUG] [urllib3.connectionpool] https://auth.giggle.global:443 "POST /admin/realms/giggle/users HTTP/1.1" 409 46
+2025-09-04 19:46:40,727 [ERROR] [ASMP] - MESSAGE: Failed to create user 43f25101-f299-44f2-b2a1-5fd8bb261338: b'{"errorMessage":"User exists with same email"}' - PID: 21387 - FILE: /home/deepak/Desktop/Deepak/Projects/giggle_services/app/core/keycloak.py:create_user_in_keycloak 
+2025-09-04 19:50:11,252 [INFO] [app.main] App started
+2025-09-04 19:50:12,343 [DEBUG] [app.services.user] Creating root user in Keycloak: email=deepak@keydraft.com
+2025-09-04 19:50:12,345 [DEBUG] [urllib3.connectionpool] Starting new HTTPS connection (1): auth.giggle.global:443
+2025-09-04 19:50:12,588 [DEBUG] [urllib3.connectionpool] https://auth.giggle.global:443 "POST /realms/giggle/protocol/openid-connect/token HTTP/1.1" 200 1902
+2025-09-04 19:50:12,589 [DEBUG] [urllib3.connectionpool] Starting new HTTPS connection (1): auth.giggle.global:443
+2025-09-04 19:50:12,899 [DEBUG] [urllib3.connectionpool] https://auth.giggle.global:443 "POST /admin/realms/giggle/users HTTP/1.1" 409 46
+2025-09-04 19:50:12,933 [ERROR] [ASMP] - MESSAGE: Failed to create user 7660475b-1724-4193-ac72-648504dac46f: b'{"errorMessage":"User exists with same email"}' - PID: 26458 - FILE: /home/deepak/Desktop/Deepak/Projects/giggle_services/app/core/keycloak.py:create_user_in_keycloak 
+2025-09-04 19:56:13,041 [INFO] [app.main] App started
+2025-09-04 19:56:14,139 [DEBUG] [app.services.user] Creating root user in Keycloak: email=deepak@keydraft.com
+2025-09-04 19:56:14,140 [DEBUG] [urllib3.connectionpool] Starting new HTTPS connection (1): auth.giggle.global:443
+2025-09-04 19:56:14,352 [DEBUG] [urllib3.connectionpool] https://auth.giggle.global:443 "POST /realms/giggle/protocol/openid-connect/token HTTP/1.1" 200 1902
+2025-09-04 19:56:14,353 [DEBUG] [urllib3.connectionpool] Starting new HTTPS connection (1): auth.giggle.global:443
+2025-09-04 19:56:14,671 [DEBUG] [urllib3.connectionpool] https://auth.giggle.global:443 "POST /admin/realms/giggle/users HTTP/1.1" 201 0
+2025-09-04 19:56:14,704 [INFO] [ASMP] - MESSAGE: User eaa845ee-a4d3-4ab6-9db3-6dc315da864e created with Keycloak ID 75545e13-2760-4935-9b7a-f8f0b3e7a66e - PID: 32858 - FILE: /home/deepak/Desktop/Deepak/Projects/giggle_services/app/core/keycloak.py:create_user_in_keycloak 
+2025-09-04 19:56:14,879 [INFO] [app.services.user] Root user created/ensured: email=deepak@keydraft.com user_id=eaa845ee-a4d3-4ab6-9db3-6dc315da864e
+2025-09-04 19:58:34,462 [INFO] [app.main] App started
+2025-09-04 19:58:35,552 [INFO] [app.services.user] Root user already exists: email=deepak@keydraft.com
+2025-09-04 19:58:40,267 [DEBUG] [app.routes.auth] Login attempt for email: deepak@keydraft.com
+2025-09-04 19:58:40,267 [DEBUG] [app.services.user] Keycloak auth attempt for username=deepak@keydraft.com
+2025-09-04 19:58:40,268 [DEBUG] [urllib3.connectionpool] Starting new HTTPS connection (1): auth.giggle.global:443
+2025-09-04 19:58:41,035 [DEBUG] [urllib3.connectionpool] https://auth.giggle.global:443 "POST /realms/giggle/protocol/openid-connect/token HTTP/1.1" 200 1902
+2025-09-04 19:58:41,036 [DEBUG] [urllib3.connectionpool] Starting new HTTPS connection (1): auth.giggle.global:443
+2025-09-04 19:58:41,356 [DEBUG] [urllib3.connectionpool] https://auth.giggle.global:443 "POST /realms/giggle/protocol/openid-connect/token HTTP/1.1" 200 2266
+2025-09-04 19:58:41,357 [INFO] [app.services.user] Login success for username=deepak@keydraft.com
+2025-09-04 19:58:41,357 [INFO] [app.routes.auth] Login successful for email: deepak@keydraft.com
+2025-09-04 19:58:41,358 [DEBUG] [urllib3.connectionpool] Starting new HTTPS connection (1): auth.giggle.global:443
+2025-09-04 19:58:41,603 [DEBUG] [urllib3.connectionpool] https://auth.giggle.global:443 "GET /realms/giggle HTTP/1.1" 200 600
+2025-09-04 19:58:41,611 [DEBUG] [urllib3.util.retry] Converted retries value: 1 -> Retry(total=1, connect=None, read=None, redirect=None, status=None)
+2025-09-04 19:58:41,612 [DEBUG] [urllib3.util.retry] Converted retries value: 1 -> Retry(total=1, connect=None, read=None, redirect=None, status=None)
+2025-09-04 19:58:41,632 [DEBUG] [urllib3.util.retry] Converted retries value: 1 -> Retry(total=1, connect=None, read=None, redirect=None, status=None)
+2025-09-04 19:58:41,632 [DEBUG] [urllib3.util.retry] Converted retries value: 1 -> Retry(total=1, connect=None, read=None, redirect=None, status=None)
+2025-09-04 19:58:41,646 [DEBUG] [urllib3.connectionpool] Starting new HTTPS connection (1): auth.giggle.global:443
+2025-09-04 19:58:41,897 [DEBUG] [urllib3.connectionpool] https://auth.giggle.global:443 "POST /realms/giggle/protocol/openid-connect/token HTTP/1.1" 200 2938
+2025-09-04 19:58:41,897 [DEBUG] [urllib3.connectionpool] Starting new HTTPS connection (1): auth.giggle.global:443
+2025-09-04 19:58:42,117 [DEBUG] [urllib3.connectionpool] https://auth.giggle.global:443 "GET /admin/realms/giggle/users/75545e13-2760-4935-9b7a-f8f0b3e7a66e?userProfileMetadata=False HTTP/1.1" 200 426
+2025-09-04 19:58:42,173 [DEBUG] [app.routes.auth] User details fetched: {'username': 'eaa845ee-a4d3-4ab6-9db3-6dc315da864e', 'email': 'deepak@keydraft.com', 'phone_number': '9999999999', 'role': 'SA', 'first_name': 'Super Admin', 'last_name': 'Super Admin', 'status': 'ACTIVE', 'keycloak_id': '75545e13-2760-4935-9b7a-f8f0b3e7a66e', 'user_id': 'eaa845ee-a4d3-4ab6-9db3-6dc315da864e'}
+2025-09-04 19:59:33,338 [DEBUG] [urllib3.connectionpool] https://auth.giggle.global:443 "GET /realms/giggle HTTP/1.1" 200 600
+2025-09-04 19:59:33,339 [DEBUG] [urllib3.util.retry] Converted retries value: 1 -> Retry(total=1, connect=None, read=None, redirect=None, status=None)
+2025-09-04 19:59:33,339 [DEBUG] [urllib3.util.retry] Converted retries value: 1 -> Retry(total=1, connect=None, read=None, redirect=None, status=None)
+2025-09-04 19:59:33,353 [DEBUG] [urllib3.util.retry] Converted retries value: 1 -> Retry(total=1, connect=None, read=None, redirect=None, status=None)
+2025-09-04 19:59:33,353 [DEBUG] [urllib3.util.retry] Converted retries value: 1 -> Retry(total=1, connect=None, read=None, redirect=None, status=None)
+2025-09-04 19:59:33,371 [DEBUG] [urllib3.connectionpool] Starting new HTTPS connection (1): auth.giggle.global:443
+2025-09-04 19:59:33,609 [DEBUG] [urllib3.connectionpool] https://auth.giggle.global:443 "POST /realms/giggle/protocol/openid-connect/token HTTP/1.1" 200 2938
+2025-09-04 19:59:33,609 [DEBUG] [urllib3.connectionpool] Starting new HTTPS connection (1): auth.giggle.global:443
+2025-09-04 19:59:33,838 [DEBUG] [urllib3.connectionpool] https://auth.giggle.global:443 "GET /admin/realms/giggle/users/75545e13-2760-4935-9b7a-f8f0b3e7a66e?userProfileMetadata=False HTTP/1.1" 200 426
+2025-09-04 19:59:33,886 [DEBUG] [app.routes.user] Fetching current user: user_id=eaa845ee-a4d3-4ab6-9db3-6dc315da864e
+2025-09-04 19:59:33,956 [INFO] [app.routes.user] Fetched current user: user_id=eaa845ee-a4d3-4ab6-9db3-6dc315da864e

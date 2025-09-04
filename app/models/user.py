@@ -148,7 +148,7 @@ class UserOut(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    username: str = Field(..., example="johndoe@example.com")
+    email: str = Field(..., example="johndoe@example.com")
     password: str = Field(..., example="StrongPass@123")
 
     class Config:

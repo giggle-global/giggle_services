@@ -149,19 +149,19 @@ class UserService:
 
     # ---------- Auth ----------
     def user_login(self, data: LoginRequest) -> Dict[str, Any]:
-        if not data.username or not data.password:
+        if not data.email or not data.password:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "username and password are required")
         try:
-            logger.debug("Keycloak auth attempt for username=%s", data.username)
-            tokens = authenticate_with_keycloak(username=data.username, passcode=data.password)
-            logger.info("Login success for username=%s", data.username)
+            logger.debug("Keycloak auth attempt for username=%s", data.email)
+            tokens = authenticate_with_keycloak(username=data.email, passcode=data.password)
+            logger.info("Login success for username=%s", data.email)
             return tokens
         except HTTPException:
             # your keycloak client can raise 401/403; bubble up
-            logger.warning("Login failed for username=%s", data.username)
+            logger.warning("Login failed for username=%s", data.email)
             raise
         except Exception as e:
-            logger.exception("Keycloak auth error for username=%s", data.username)
+            logger.exception("Keycloak auth error for username=%s", data.email)
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Identity provider error: {e}")
 
     def user_refresh(self, data: RefreshRequest) -> Dict[str, Any]:

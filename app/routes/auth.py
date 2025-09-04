@@ -36,12 +36,12 @@ def create_user(user: UserCreate, svc: UserService = Depends(get_user_service)):
 
 @router.post("/login", response_model=APIResponse[LoginResponse], status_code=status.HTTP_200_OK)
 def login(payload: LoginRequest, svc: UserService = Depends(get_user_service)):
-    logger.debug(f"Login attempt for email: {payload.username}")
+    logger.debug(f"Login attempt for email: {payload.email}")
 
     tokens_dict = svc.user_login(payload)
     tokens = TokenResponse(**tokens_dict)
 
-    logger.info(f"Login successful for email: {payload.username}")
+    logger.info(f"Login successful for email: {payload.email}")
 
     # get_current_user currently returns a dict
     user_details: dict = get_current_user(token=tokens.access_token)
