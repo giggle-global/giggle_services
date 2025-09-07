@@ -8,6 +8,7 @@ from pymongo.errors import PyMongoError
 
 from app.repositories.user import UserRepository
 from app.models.user import UserCreate, UserUpdate, LoginRequest, RefreshRequest
+from app.services.token import TokenService
 from app.core.keycloak import (
     create_user_in_keycloak,
     authenticate_with_keycloak,
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 class UserService:
     def __init__(self, user_repo: Optional[UserRepository] = None):
         self.user_repo = user_repo or UserRepository()
+        self.token_service = TokenService()
 
     # ---------- Helpers ----------
     def _ensure_unique_email(self, email: str) -> None:
@@ -36,7 +38,73 @@ class UserService:
             raise HTTPException(status.HTTP_409_CONFLICT, "Email already in use")
 
     # ---------- CRUD ----------
+    # def create_user(self, user: UserCreate) -> Dict[str, Any]:
+    #     if not user.email or not user.passcode:
+    #         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Email and password are required")
+    #     if user.role == "SA":
+    #         raise HTTPException(status.HTTP_403_FORBIDDEN, "Cannot create super admin users")
+
+    #     # Ensure email unique in our DB first
+    #     self._ensure_unique_email(user.email)
+
+    #     if user.role in ("FL"):
+    #         signup_token = getattr(user, "signup_token", None)
+    #         if signup_token:
+    #             logger.debug("Validating signup token: %s", signup_token)
+    #             token_validity_check = self.token_service.validate_token_for_signup(token=signup_token)
+    #             if not token_validity_check:
+    #                 logger.warning("Invalid signup token: %s", signup_token)
+    #                 raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid signup token")
+    #         else:
+    #             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Missing signup token")
+
+    #     user.user_id = user.user_id or str(uuid.uuid4())
+    #     keycloak_payload = {
+    #         "username": user.user_id,
+    #         "email": user.email,
+    #         "firstName": user.first_name,
+    #         "lastName": user.last_name,
+    #         "enabled": True,
+    #         "emailVerified": True,
+    #         "credentials": [{"type": "password", "value": user.passcode, "temporary": False}],
+    #         "attributes": {"role": user.role},
+    #     }
+
+    #     keycloak_id = None
+    #     try:
+    #         logger.debug("Creating user in Keycloak: %s", {"username": user.user_id, "email": user.email})
+    #         keycloak_id = create_user_in_keycloak(keycloak_payload)
+    #         user.keycloak_id = keycloak_id
+    #     except HTTPException:
+    #         # If your keycloak client already raises HTTPException, just bubble it.
+    #         logger.exception("Keycloak creation failed for email=%s", user.email)
+    #         raise
+    #     except Exception as e:
+    #         logger.exception("Keycloak creation failed (unexpected) for email=%s", user.email)
+    #         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Identity provider error: {e}")
+
+    #     # Save to Mongo; roll back Keycloak if DB fails
+    #     try:
+    #         logger.debug("Persisting user to Mongo: user_id=%s email=%s", user.user_id, user.email)
+    #         created = self.user_repo.create_user(user)
+    #         logger.info("User created: user_id=%s email=%s", user.user_id, user.email)
+    #         return created
+    #     except PyMongoError as e:
+    #         logger.exception("Mongo error on user create; attempting Keycloak rollback. user_id=%s", user.user_id)
+    #         # Best effort rollback in Keycloak
+    #         try:
+    #             if keycloak_id:
+    #                 delete_user_in_keycloak(keycloak_id)
+    #                 logger.info("Rolled back Keycloak user: keycloak_id=%s", keycloak_id)
+    #         except Exception:
+    #             logger.error("Failed to roll back Keycloak user keycloak_id=%s", keycloak_id)
+    #         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to save user")
+    #     except Exception as e:
+    #         logger.exception("Unexpected error on user create: %s", e)
+    #         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to create user")
+        
     def create_user(self, user: UserCreate) -> Dict[str, Any]:
+        # Basic validation
         if not user.email or not user.passcode:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Email and password are required")
         if user.role == "SA":
@@ -45,50 +113,97 @@ class UserService:
         # Ensure email unique in our DB first
         self._ensure_unique_email(user.email)
 
+        # If freelancer signup, require and validate token
+        if user.role == "FL":
+            signup_token = getattr(user, "signup_token", None)
+            if not signup_token:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, "Missing signup token for freelancer signup")
+
+            logger.debug("Validating signup token: %s", signup_token)
+            # call instance method correctly (positional arg)
+            try:
+                token_record = self.token_service.validate_token_for_signup(token=signup_token)
+            except HTTPException as exc:
+                logger.warning("Signup token validation failed: %s", exc.detail)
+                raise
+
+        # create user ids etc
         user.user_id = user.user_id or str(uuid.uuid4())
+
         keycloak_payload = {
             "username": user.user_id,
             "email": user.email,
-            "firstName": user.first_name,
-            "lastName": user.last_name,
+            "firstName": getattr(user, "first_name", user.first_name or ""),
+            "lastName": getattr(user, "last_name", None),
             "enabled": True,
             "emailVerified": True,
             "credentials": [{"type": "password", "value": user.passcode, "temporary": False}],
             "attributes": {"role": user.role},
         }
 
+        # Create in Keycloak: acquire admin token then call creation function
         keycloak_id = None
         try:
+            logger.debug("Acquiring Keycloak admin token to create user")
+            # kc_token = get_client_access_token()  # returns a token string
             logger.debug("Creating user in Keycloak: %s", {"username": user.user_id, "email": user.email})
+            # Note: create_user_in_keycloak(token, payload) expected signature
             keycloak_id = create_user_in_keycloak(keycloak_payload)
             user.keycloak_id = keycloak_id
         except HTTPException:
-            # If your keycloak client already raises HTTPException, just bubble it.
             logger.exception("Keycloak creation failed for email=%s", user.email)
             raise
         except Exception as e:
-            logger.exception("Keycloak creation failed (unexpected) for email=%s", user.email)
+            logger.exception("Keycloak creation failed (unexpected) for email=%s: %s", user.email, e)
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Identity provider error: {e}")
 
-        # Save to Mongo; roll back Keycloak if DB fails
+        # Persist to Mongo; if DB fails, rollback Keycloak
+        created = None
         try:
             logger.debug("Persisting user to Mongo: user_id=%s email=%s", user.user_id, user.email)
             created = self.user_repo.create_user(user)
-            logger.info("User created: user_id=%s email=%s", user.user_id, user.email)
-            return created
+            logger.info("User created in DB: user_id=%s email=%s", user.user_id, user.email)
         except PyMongoError as e:
             logger.exception("Mongo error on user create; attempting Keycloak rollback. user_id=%s", user.user_id)
-            # Best effort rollback in Keycloak
             try:
                 if keycloak_id:
                     delete_user_in_keycloak(keycloak_id)
                     logger.info("Rolled back Keycloak user: keycloak_id=%s", keycloak_id)
             except Exception:
-                logger.error("Failed to roll back Keycloak user keycloak_id=%s", keycloak_id)
+                logger.exception("Failed to roll back Keycloak user keycloak_id=%s", keycloak_id)
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to save user")
-        except Exception as e:
-            logger.exception("Unexpected error on user create: %s", e)
-            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to create user")
+
+        # If freelancer signup, consume the token atomically AFTER successful DB write
+        if user.role == "FL":
+            try:
+                logger.debug("Consuming signup token '%s' for new user %s", signup_token, created["user_id"])
+                consumed = self.token_service.consume_token(signup_token, created["user_id"])
+                logger.info("Signup token consumed: %s -> used_by=%s", signup_token, created["user_id"])
+            except HTTPException as exc:
+                # Token consumption failed (e.g. token raced and was consumed already).
+                # Attempt to rollback created user (best-effort) in DB and Keycloak then raise meaningful error.
+                logger.exception("Failed to consume signup token after DB create; performing rollback. token=%s", signup_token)
+                # delete from Mongo
+                try:
+                    self.user_repo.delete_user(created["user_id"])
+                    logger.info("Rolled back DB user: user_id=%s", created["user_id"])
+                except Exception:
+                    logger.exception("Failed to roll back DB user: user_id=%s", created["user_id"])
+                # delete from Keycloak
+                try:
+                    if keycloak_id:
+                        delete_user_in_keycloak(kc_token, keycloak_id)
+                        logger.info("Rolled back Keycloak user after token consume failure: keycloak_id=%s", keycloak_id)
+                except Exception:
+                    logger.exception("Failed to roll back Keycloak user after token consume failure: keycloak_id=%s", keycloak_id)
+                # Give a clear client error about token
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Signup token invalid or already used: {exc.detail}")
+
+        # Remove sensitive data before returning (like passcode)
+        if created and "passcode" in created:
+            created.pop("passcode", None)
+
+        return created
 
     def get_user(self, user_id: str) -> Dict[str, Any]:
         if not user_id:

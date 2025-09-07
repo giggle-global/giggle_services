@@ -48,7 +48,7 @@ class PaymentInformation(BaseModel):
 
 
 class UserBase(BaseModel):
-    username: str = Field(..., example="johndoe")
+    username: Optional[str] = Field(None, example="johndoe")
     email: EmailStr = Field(..., example="johndoe@example.com")
     phone_number: str = Field(..., example="+919876543210")
     role: RoleEnum = Field(..., example=RoleEnum.CLIENT.value)
@@ -61,6 +61,7 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     passcode: str = Field(..., example="StrongPass@123")
+    signup_token: Optional[str] = Field(None, example="eyJhbGciOi...signup_token")  # For FL role
 
     class Config:
         schema_extra = {
@@ -72,7 +73,8 @@ class UserCreate(UserBase):
                 "first_name": "John",
                 "last_name": "Doe",
                 "status": "ACTIVE",
-                "passcode": "StrongPass@123"
+                "passcode": "StrongPass@123",
+                "signup_token": "eyJhbGciOi...signup_token"
             }
         }
 

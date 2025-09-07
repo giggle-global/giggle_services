@@ -12,6 +12,7 @@ class UserRepository:
     def create_user(self, user_data: UserCreate) -> Optional[dict]:
         # Create Keycloak user
         # keycloak_id = create_user_in_keycloak(user_data)
+        user_data.username = user_data.first_name.lower() + "_" + user_data.last_name.lower()
         user_dict = user_data.model_dump()
         user_dict.pop("passcode", None)
         

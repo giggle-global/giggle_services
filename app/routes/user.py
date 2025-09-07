@@ -2,7 +2,7 @@
 import logging
 from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
-from app.models.user import UserCreate, UserUpdate, UserOut
+from app.models.user import UserUpdate, UserOut
 from app.services.user import UserService
 from app.core.keycloak import get_current_user
 from app.schemas.response import APIResponse, ok
