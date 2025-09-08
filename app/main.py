@@ -8,6 +8,8 @@ from app.schemas.response import APIResponse
 
 from app.core.db import check_db_connection
 from app.services.user import UserService
+from app.services.skill import SkillService
+
 
 
 from app.routes import user
@@ -96,6 +98,22 @@ def on_startup():
     time.sleep(1)  # Wait for DB to be ready
     """This function will be executed when the server starts"""
     user_service.create_root_user()
+
+    skill_service = SkillService()
+    SKILLS_TO_SEED = [
+        {"name": "Python", "category": "backend"},
+        {"name": "FastAPI", "category": "backend"},
+        {"name": "Django", "category": "backend"},
+        {"name": "Docker", "category": "devops"},
+        {"name": "Git", "category": "tools"},
+        {"name": "React", "category": "frontend"},
+        {"name": "HTML", "category": "frontend"},
+        {"name": "CSS", "category": "frontend"},
+        {"name": "SQL", "category": "database"},
+        {"name": "NoSQL", "category": "database"},
+        # add whatever skills you want seeded
+    ]
+    skill_service.seed_skills_if_missing(SKILLS_TO_SEED)
 
 @app.get("/health")
 def health_check():

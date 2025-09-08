@@ -35,6 +35,18 @@ class UserRepository:
             raise HTTPException(400, "No data to update")
         self.collection.update_one({"user_id": user_id}, {"$set": user_data})
         return self.get_user_by_id(user_id)
+    
+    def update_user_skills(self, user_id: str, skills_payload: list) -> dict:
+        """
+        skills_payload: list of {"skill_id": "...", "level": "basic"}
+        """
+        result = self.collection.update_one(
+            {"user_id": user_id},
+            {"$set": {"skill_set": skills_payload}}
+        )
+        if result.matched_count == 0:
+            raise HTTPException(404, "User not found")
+        return self.get_user_by_id(user_id)
 
     def ban_user(self, user_id: str) -> dict:
         result = self.collection.update_one(

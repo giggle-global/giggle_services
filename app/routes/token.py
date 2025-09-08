@@ -15,12 +15,9 @@ def generate_token(
     ttl_seconds: int = 24*3600, 
     current_user: dict = Depends(get_current_user)
 ):
-    token = token_service.generate_token(current_user, ttl_seconds=ttl_seconds)
-    return APIResponse(
-        data=token,
-        message="Token generated successfully",
-        code=status.HTTP_201_CREATED
-    )
+    token: SignupTokenOut = token_service.generate_token(current_user, ttl_seconds=ttl_seconds)
+    token_dict = token.model_dump()      # convert Pydantic object -> dict
+    return APIResponse(data=token_dict, message="Token generated successfully", status_code=status.HTTP_201_CREATED)
 
 @router.get("/", response_model=List[SignupTokenOut])
 def list_tokens(current_user: dict = Depends(get_current_user)):

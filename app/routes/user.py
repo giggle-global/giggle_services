@@ -6,6 +6,7 @@ from app.models.user import UserUpdate, UserOut
 from app.services.user import UserService
 from app.core.keycloak import get_current_user
 from app.schemas.response import APIResponse, ok
+from app.models.skill import UserSkillEntry
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/users", tags=["USERS"])
@@ -48,6 +49,18 @@ def update_user(update: UserUpdate, current_user: Dict[str, Any] = Depends(get_c
     updated = svc.update_user(user_id=user_id, user=update.model_dump(exclude_unset=True))
     logger.info(f"User updated: user_id={user_id}")
     return ok(data=updated, message="User updated")
+
+@router.patch("/{user_id}/skills")
+def update_user_skills(
+    user_id: str,
+    entries: List[UserSkillEntry],
+    current_user: Dict[str, Any] = Depends(get_current_user), svc: UserService = Depends(get_user_service)
+):
+    """
+    Update user's skills. Body: [{"skill_id": "...", "level": "basic"}, ...]
+    """
+    updated = svc.update_user_skills(user_id, entries, current_user)
+    return {"data": updated, "message": "Skills updated", "code": 200}
 
 @router.delete("/delete/{user_id}", response_model=APIResponse[None])
 def delete_user(user_id: str, current_user: Dict[str, Any] = Depends(get_current_user), svc: UserService = Depends(get_user_service)):

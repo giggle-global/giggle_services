@@ -1,7 +1,7 @@
 # app/services/user.py
 import uuid
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 from fastapi import HTTPException, status
 from pymongo.errors import PyMongoError
@@ -17,6 +17,9 @@ from app.core.keycloak import (
 )
 from app.core.config import config
 
+from app.services.skill import SkillService
+from app.models.skill import UserSkillEntry
+
 logger = logging.getLogger(__name__)
 
 
@@ -24,6 +27,7 @@ class UserService:
     def __init__(self, user_repo: Optional[UserRepository] = None):
         self.user_repo = user_repo or UserRepository()
         self.token_service = TokenService()
+        self.skill_service = SkillService()
 
     # ---------- Helpers ----------
     def _ensure_unique_email(self, email: str) -> None:
@@ -243,6 +247,19 @@ class UserService:
         except Exception:
             logger.exception("Unexpected error updating user_id=%s", user_id)
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to update user")
+        
+    def update_user_skills(self, user_id: str, entries: List[UserSkillEntry], current_user: dict):
+        """
+        current_user used to authorize (user can update own skills or admin can update others)
+        """
+        # authorization: allow user to update their own skills or SA
+        if current_user["user_id"] != user_id and current_user.get("role") != "SA":
+            raise HTTPException(403, "Not authorized to update skills for this user")
+
+        validated = self.skill_service.validate_user_skill_entries(entries)
+        # store validated list in user's 'skill_set' field
+        updated = self.user_repo.update_user_skills(user_id, validated)
+        return updated
 
     def delete_user(self, user_id: str) -> Dict[str, Any]:
         if not user_id:
