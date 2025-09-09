@@ -1,0 +1,68 @@
+# app/services/review.py
+from typing import List, Optional
+from fastapi import HTTPException
+from app.repositories.review import ReviewRepository
+from app.models.review import ReviewCreate, ReviewUpdate, ReviewOut, RoleEnum
+
+class ReviewService:
+    def __init__(self, repo: Optional[ReviewRepository] = None):
+        self.repo = repo or ReviewRepository()
+
+    def create_review(self, review_in: ReviewCreate, current_user: dict) -> dict:
+        # Only clients can create reviews
+        if current_user.get("role") != RoleEnum.CLIENT.value:
+            raise HTTPException(status_code=403, detail="Only clients can create reviews")
+        # Ensure current_user is same as client_id
+        if current_user.get("user_id") != review_in.client_id:
+            raise HTTPException(status_code=403, detail="client_id mismatch")
+        # Optionally: validate freelancer exists (repo or user service)
+        return self.repo.create_review(review_in)
+
+    def update_review(self, review_id: str, update: ReviewUpdate, current_user: dict) -> dict:
+        if current_user.get("role") != RoleEnum.CLIENT.value:
+            raise HTTPException(status_code=403, detail="Only clients can update reviews")
+        update_data = update.model_dump(exclude_unset=True)
+        return self.repo.update_review(review_id, update_data, current_user.get("user_id"))
+
+    def delete_review(self, review_id: str, current_user: dict) -> None:
+        if current_user.get("role") != RoleEnum.CLIENT.value:
+            raise HTTPException(status_code=403, detail="Only clients can delete reviews")
+        self.repo.delete_review(review_id, current_user.get("user_id"))
+
+    def get_review(self, review_id: str, current_user: dict) -> dict:
+        # clients can view own reviews; freelancers can view reviews about them; SA can view all
+        review = self.repo.get_review(review_id)
+        if not review:
+            raise HTTPException(status_code=404, detail="Review not found")
+        role = current_user.get("role")
+        uid = current_user.get("user_id")
+        if role == RoleEnum.SUPER_ADMIN.value:
+            return review
+        if role == RoleEnum.CLIENT.value and review.get("client_id") == uid:
+            return review
+        if role == RoleEnum.FREELANCER.value and review.get("freelancer_id") == uid:
+            return review
+        raise HTTPException(status_code=403, detail="Not authorized to view this review")
+
+    def list_reviews_for_freelancer(self, freelancer_id: str, current_user: dict, limit: int = 50, skip: int = 0) -> List[dict]:
+        # freelancers can see their own reviews; SA can see all
+        role = current_user.get("role")
+        uid = current_user.get("user_id")
+        if role == RoleEnum.SUPER_ADMIN.value or (role == RoleEnum.FREELANCER.value and uid == freelancer_id):
+            return self.repo.list_reviews_for_freelancer(freelancer_id, limit, skip)
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    def list_reviews_by_client(self, client_id: str, current_user: dict, limit: int = 50, skip: int = 0) -> List[dict]:
+        # client can list their reviews; SA can view any
+        role = current_user.get("role")
+        uid = current_user.get("user_id")
+        if role == RoleEnum.SUPER_ADMIN.value or (role == RoleEnum.CLIENT.value and uid == client_id):
+            return self.repo.list_reviews_by_client(client_id, limit, skip)
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    def average_rating(self, freelancer_id: str, current_user: dict) -> float:
+        role = current_user.get("role")
+        uid = current_user.get("user_id")
+        if role == RoleEnum.SUPER_ADMIN.value or (role == RoleEnum.FREELANCER.value and uid == freelancer_id):
+            return self.repo.average_rating_for_freelancer(freelancer_id)
+        raise HTTPException(status_code=403, detail="Not authorized")

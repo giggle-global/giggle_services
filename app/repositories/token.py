@@ -1,5 +1,6 @@
 # app/repositories/token.py
 import secrets
+import string
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List
@@ -21,11 +22,16 @@ class TokenRepository:
 
     def _now(self):
         return datetime.now(timezone.utc)
+    
+    def _generate_signup_code(self, length: int = 9) -> str:
+        alphabet = string.ascii_uppercase + string.digits  # A-Z + 0-9
+        return ''.join(secrets.choice(alphabet) for _ in range(length))
 
     def create_token(self, payload: SignupTokenCreate) -> SignupTokenOut:
         now = self._now()
         expires_at = now + timedelta(seconds=payload.ttl_seconds)
-        token = secrets.token_urlsafe(16)  # safe random token
+        # token = secrets.token_urlsafe(16)  # safe random token
+        token = self._generate_signup_code(9)
         doc = {
             "token": token,
             "generated_by": payload.generated_by,
