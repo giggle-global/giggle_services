@@ -86,6 +86,9 @@ class UserUpdate(BaseModel):
     email: Optional[EmailStr] = Field(None, example="johnny@example.com")
     phone_number: Optional[str] = Field(None, example="+919812345678")
     bio: Optional[str] = Field(None, example="Freelance web developer")
+    designation: Optional[str] = Field(None, example="Web Developer")
+    experience_years: Optional[int] = Field(None, example=2)
+    experience_months: Optional[int] = Field(None, example=6)
     profile_pic: Optional[bytes] = None  # Could be UploadFile in routes
     notification_service: Optional[NotificationService] = None
     language_preference: Optional[str] = Field(None, example="en")

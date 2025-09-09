@@ -22,6 +22,7 @@ class UserRepository:
     def get_user_by_id(self, user_id: str) -> Optional[dict]:
         print("Fetching user by ID:", user_id)
         user = self.collection.find_one({"user_id": user_id, "status": "ACTIVE"}, {"_id": 0})
+        print("Fetched user:", user)
         if not user:
             raise HTTPException(404, "User not found")
         return user

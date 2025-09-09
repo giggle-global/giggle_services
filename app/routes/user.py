@@ -14,7 +14,7 @@ router = APIRouter(prefix="/users", tags=["USERS"])
 def get_user_service() -> UserService:
     return UserService()
 
-@router.get("/", response_model=APIResponse[UserOut])
+@router.get("/", response_model=APIResponse[Dict [str, Any]])
 def get_user(current_user: Dict[str, Any] = Depends(get_current_user), svc: UserService = Depends(get_user_service)):
     user_id = current_user.get("user_id")
     logger.debug(f"Fetching current user: user_id={user_id}")
@@ -22,7 +22,7 @@ def get_user(current_user: Dict[str, Any] = Depends(get_current_user), svc: User
     logger.info(f"Fetched current user: user_id={user_id}")
     return ok(data=user, message="Fetched current user")
 
-@router.get("/freelancer", response_model=APIResponse[List[UserOut]])
+@router.get("/freelancer", response_model=APIResponse[List[Dict [str, Any]]])
 def get_freelancer(current_user: Dict[str, Any] = Depends(get_current_user), svc: UserService = Depends(get_user_service)):
     logger.debug(f"Freelancer list requested by user_id={current_user.get('user_id')} role={current_user.get('role')}")
     if current_user["role"] == "FL":
@@ -32,7 +32,7 @@ def get_freelancer(current_user: Dict[str, Any] = Depends(get_current_user), svc
     logger.info(f"Freelancer list fetched: count={len(freelancers) if freelancers else 0}")
     return ok(data=freelancers, message="Freelancers fetched")
 
-@router.get("/profile/{user_id}", response_model=APIResponse[UserOut])
+@router.get("/profile/{user_id}", response_model=APIResponse[Dict [str, Any]])
 def get_profile(user_id: str, current_user: Dict[str, Any] = Depends(get_current_user), svc: UserService = Depends(get_user_service)):
     logger.debug(f"Profile fetch requested by user_id={current_user.get('user_id')} for target={user_id}")
     if current_user["role"] != "SA":
@@ -42,7 +42,7 @@ def get_profile(user_id: str, current_user: Dict[str, Any] = Depends(get_current
     logger.info(f"Profile fetched for user_id={user_id}")
     return ok(data=user, message="User profile fetched")
 
-@router.put("/", response_model=APIResponse[UserOut])
+@router.put("/", response_model=APIResponse[Dict [str, Any]])
 def update_user(update: UserUpdate, current_user: Dict[str, Any] = Depends(get_current_user), svc: UserService = Depends(get_user_service)):
     user_id = current_user.get("user_id")
     logger.debug(f"Update requested for user_id={user_id} payload={update.model_dump(exclude_unset=True)}")
