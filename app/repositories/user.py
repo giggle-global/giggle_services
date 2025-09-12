@@ -30,6 +30,10 @@ class UserRepository:
     def get_freelancers(self) -> list[dict]:
         freelancers = self.collection.find({"role": "FL", "status": "ACTIVE"}, {"_id": 0})
         return list(freelancers)
+    
+    def get_all_users(self) -> list[dict]:
+        users = self.collection.find({"status": "ACTIVE"}, {"_id": 0})
+        return list(users)
 
     def update_user(self, user_id: str, user_data: UserUpdate) -> Optional[dict]:
         if not user_data:

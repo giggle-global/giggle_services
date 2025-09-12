@@ -229,6 +229,13 @@ class UserService:
         except Exception as e:
             logger.exception("Error listing freelancers: %s", e)
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to fetch freelancers")
+        
+    def list_all_users(self) -> Any:
+        try:
+            return self.user_repo.get_all_users()
+        except Exception as e:
+            logger.exception("Error listing freelancers: %s", e)
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to fetch freelancers")
 
     def update_user(self, user_id: str, user: UserUpdate) -> Dict[str, Any]:
         if not user_id:

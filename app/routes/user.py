@@ -32,6 +32,18 @@ def get_freelancer(current_user: Dict[str, Any] = Depends(get_current_user), svc
     logger.info(f"Freelancer list fetched: count={len(freelancers) if freelancers else 0}")
     return ok(data=freelancers, message="Freelancers fetched")
 
+
+
+@router.get("/all", response_model=APIResponse[List[Dict [str, Any]]])
+def list_all_users(current_user: Dict[str, Any] = Depends(get_current_user), svc: UserService = Depends(get_user_service)):
+    logger.debug(f"All users list requested by user_id={current_user.get('user_id')} role={current_user.get('role')}")
+    if current_user["role"] != "SA":
+        logger.warning("Non-SA attempted to fetch all users list (forbidden).")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only super admin can get the users list")
+    users = svc.list_all_users()
+    logger.info(f"All users list fetched: count={len(users) if users else 0}")
+    return ok(data=users, message="All users fetched")  
+
 @router.get("/profile/{user_id}", response_model=APIResponse[Dict [str, Any]])
 def get_profile(user_id: str, current_user: Dict[str, Any] = Depends(get_current_user), svc: UserService = Depends(get_user_service)):
     logger.debug(f"Profile fetch requested by user_id={current_user.get('user_id')} for target={user_id}")
