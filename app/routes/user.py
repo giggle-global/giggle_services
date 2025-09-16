@@ -4,6 +4,7 @@ from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.models.user import UserUpdate, UserOut
 from app.services.user import UserService
+from app.services.skill import SkillService
 from app.core.keycloak import get_current_user
 from app.schemas.response import APIResponse, ok
 from app.models.skill import UserSkillEntry
@@ -13,6 +14,9 @@ router = APIRouter(prefix="/users", tags=["USERS"])
 
 def get_user_service() -> UserService:
     return UserService()
+
+def get_skill_service() -> SkillService:
+    return SkillService()
 
 @router.get("/", response_model=APIResponse[Dict [str, Any]])
 def get_user(current_user: Dict[str, Any] = Depends(get_current_user), svc: UserService = Depends(get_user_service)):
@@ -58,7 +62,7 @@ def get_profile(user_id: str, current_user: Dict[str, Any] = Depends(get_current
 def update_user(update: UserUpdate, current_user: Dict[str, Any] = Depends(get_current_user), svc: UserService = Depends(get_user_service)):
     user_id = current_user.get("user_id")
     logger.debug(f"Update requested for user_id={user_id} payload={update.model_dump(exclude_unset=True)}")
-    updated = svc.update_user(user_id=user_id, user=update.model_dump(exclude_unset=True))
+    updated = svc.update_user(user_id=user_id, user_data=update.model_dump(exclude_unset=True), current_user=current_user)
     logger.info(f"User updated: user_id={user_id}")
     return ok(data=updated, message="User updated")
 
@@ -97,3 +101,14 @@ def ban_user(user_id: str, current_user: Dict[str, Any] = Depends(get_current_us
     svc.ban_user(user_id)
     logger.info(f"User banned: user_id={user_id}")
     return ok(message="User has been banned", data=None, status_code=status.HTTP_200_OK)
+
+
+@router.get("/skills")
+def get_skills(
+    current_user: Dict[str, Any] = Depends(get_current_user), ssc: SkillService = Depends(get_skill_service)
+):
+    """
+    Update user's skills. Body: [{"skill_id": "...", "level": "basic"}, ...]
+    """
+    updated = ssc.list_skills(category=None)
+    return {"data": updated, "message": "Skills fetched", "code": 200}

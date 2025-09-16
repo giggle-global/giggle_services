@@ -79,6 +79,28 @@ class UserCreate(UserBase):
         }
 
 
+class ContactInfo(BaseModel):
+    linkedin: Optional[str] = Field(None, example="https://linkedin.com/in/johndoe")
+    timezone: Optional[str] = Field(None, example="UTC+05:30")
+    available_time: Optional[str] = Field(None, example="10:00am - 06:30pm")
+
+class CompanyContactInfo(BaseModel):
+    contact_person: Optional[str] = Field(None, example="Jane Doe")
+    contact_email: Optional[EmailStr] = Field(None, example="jane@example")
+    contact_phone: Optional[str] = Field(None, example="+919876543211")
+    contact_address: Optional[str] = Field(None, example="123, Business St, City, Country")
+    contact_designation: Optional[str] = Field(None, example="HR Manager")
+    contact_timezone: Optional[str] = Field(None, example="UTC+05:30 chennai")
+    
+class CompanyInfo(BaseModel):
+    company_name: Optional[str] = Field(None, example="KPS Pvt. Limited")
+    website: Optional[str] = Field(None, example="https://kpspvt.com")
+    industry: Optional[str] = Field(None, example="Tech & IT")
+    company_size: Optional[str] = Field(None, example="11-50 employees")
+    company_contacts: Optional[CompanyContactInfo] = None
+    company_description: Optional[str] = Field(None, example="We build web products")
+
+
 class UserUpdate(BaseModel):
     first_name: Optional[str] = Field(None, example="Johnny")
     last_name: Optional[str] = Field(None, example="Doe")
@@ -94,6 +116,10 @@ class UserUpdate(BaseModel):
     language_preference: Optional[str] = Field(None, example="en")
     payment_information: Optional[PaymentInformation] = None
     skill_set: Optional[List[str]] = Field(None, example=["Python", "FastAPI", "MongoDB"])
+
+    #client-specific fields
+    contact_info: Optional[ContactInfo] = None
+    company_info: Optional[CompanyInfo] = None
 
     class Config:
         schema_extra = {

@@ -237,23 +237,60 @@ class UserService:
             logger.exception("Error listing freelancers: %s", e)
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to fetch freelancers")
 
-    def update_user(self, user_id: str, user: UserUpdate) -> Dict[str, Any]:
+    # def update_user(self, user_id: str, user: UserUpdate) -> Dict[str, Any]:
+    #     if not user_id:
+    #         raise HTTPException(status.HTTP_400_BAD_REQUEST, "user_id is required")
+    #     try:
+    #         updated = self.user_repo.update_user(user_id, user)
+    #         if not updated:
+    #             raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+    #         logger.info("User updated: user_id=%s", user_id)
+    #         return updated
+    #     except HTTPException:
+    #         raise
+    #     except PyMongoError:
+    #         logger.exception("Mongo error updating user_id=%s", user_id)
+    #         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to update user")
+    #     except Exception:
+    #         logger.exception("Unexpected error updating user_id=%s", user_id)
+    #         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to update user")
+        
+    def update_user(self, user_id: str, user_data: Dict[str, Any], current_user: Dict[str, Any]) -> Dict[str, Any]:
         if not user_id:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "user_id is required")
+            raise HTTPException(status_code=400, detail="user_id is required")
+        if not user_data:
+            raise HTTPException(status_code=400, detail="No data to update")
+
+        # Role-based enforcement: if the user is NOT a 'client', drop company/contact info
+        role = current_user.get("role")
+        print("user_data before role check:", user_data)
+        if role != "CL":
+            user_data.pop("contact_info", None)
+            user_data.pop("company_info", None)
+
+        # Optional: whitelist allowed fields to avoid accidental writes
+        allowed_fields = {
+            "first_name", "last_name", "username", "email", "phone_number", "bio",
+            "designation", "experience_years", "experience_months", "profile_pic_filename",
+            "language_preference", "skill_set", "contact_info", "company_info",
+            "profile_pic_url", "payment_information", "notification_service"
+        }
+        update_payload = {k: v for k, v in user_data.items() if k in allowed_fields}
+
         try:
-            updated = self.user_repo.update_user(user_id, user)
+            updated = self.user_repo.update_user(user_id=user_id, update_payload=update_payload)
             if not updated:
-                raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+                raise HTTPException(status_code=404, detail="User not found")
             logger.info("User updated: user_id=%s", user_id)
             return updated
-        except HTTPException:
-            raise
         except PyMongoError:
             logger.exception("Mongo error updating user_id=%s", user_id)
-            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to update user")
+            raise HTTPException(status_code=500, detail="Failed to update user")
+        except HTTPException:
+            raise
         except Exception:
             logger.exception("Unexpected error updating user_id=%s", user_id)
-            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to update user")
+            raise HTTPException(status_code=500, detail="Failed to update user")
         
     def update_user_skills(self, user_id: str, entries: List[UserSkillEntry], current_user: dict):
         """
