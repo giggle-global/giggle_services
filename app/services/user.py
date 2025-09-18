@@ -271,9 +271,8 @@ class UserService:
         # Optional: whitelist allowed fields to avoid accidental writes
         allowed_fields = {
             "first_name", "last_name", "username", "email", "phone_number", "bio",
-            "designation", "experience_years", "experience_months", "profile_pic_filename",
-            "language_preference", "skill_set", "contact_info", "company_info",
-            "profile_pic_url", "payment_information", "notification_service"
+            "designation", "experience_years", "experience_months", "profile_pic",
+            "language_preference", "skill_set", "contact_info", "company_info", "payment_information", "notification_service"
         }
         update_payload = {k: v for k, v in user_data.items() if k in allowed_fields}
 
