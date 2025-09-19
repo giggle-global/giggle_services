@@ -16,8 +16,13 @@ class AgreementService:
         # optionally used to create initial milestones
         self.milestone_service = MilestoneService()
 
-    def _calc_duration_days(self, start_date, end_date) -> int:
-        return (end_date - start_date).days + 1
+    def _calc_duration_days(self, start_date: int, end_date: int) -> int:
+        """
+        Calculate duration in days given start and end epoch timestamps (UTC).
+        """
+        seconds_in_day = 86400
+        return int((end_date - start_date) / seconds_in_day) + 1
+
 
     def _calc_total_from_rate(self, rate: float, rate_unit: str, duration_days: int) -> float:
         # simple default: rate_unit "day" => rate * duration_days

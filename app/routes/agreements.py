@@ -4,7 +4,7 @@ from typing import Dict, Any
 from app.models.agreements import AgreementCreate, AgreementUpdate
 from app.repositories.agreements import AgreementRepository
 from app.services.agreements import AgreementService
-from app.core.keycloak import get_db, get_current_user
+from app.core.keycloak import get_current_user
 
 router = APIRouter(prefix="/api/agreements", tags=["agreements"])
 

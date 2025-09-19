@@ -205,7 +205,7 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
                 print("User details check:", user['username'])
                 user_repo = UserRepository()
                 user = user_repo.get_user_by_id(user_id=user["username"])
-                print("User details:", user)
+                print("User details:", user.get("user_id"))
                 return user
 
             else:
@@ -296,7 +296,6 @@ def decode_token(token: str):
                 user_repo = UserRepository()
                 user = user_repo.get_user_by_id(user_id=user["username"])
                 user["sid"] = sid
-                print("User details:", user)
                 return user
 
             else:

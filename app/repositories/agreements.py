@@ -30,12 +30,14 @@ class AgreementRepository:
         return res
 
     def add_milestone(self, agreement_id: str, milestone_id: str) -> Optional[Dict[str, Any]]:
+        print("Adding milestone to agreement:", agreement_id, milestone_id)
         res = self.col.find_one_and_update(
             {"agreement_id": agreement_id},
             {"$push": {"milestones": milestone_id}, "$set": {"updated_at": datetime.utcnow()}},
             return_document=ReturnDocument.AFTER,
             projection={"_id": 0}
         )
+        print("Updated agreement with new milestone:", res)
         return res
 
     def set_status(self, agreement_id: str, status: str) -> Optional[Dict[str, Any]]:

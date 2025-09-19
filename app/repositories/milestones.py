@@ -13,11 +13,16 @@ class MilestoneRepository:
         self.col = database["milestones"]
 
     def create(self, doc: Dict[str, Any]) -> Dict[str, Any]:
-        self.col.insert_one(doc)
-        return self.get_by_id(doc["milestone_id"])
+        print("Creating milestone:", doc)
+        value = self.col.insert_one(doc)
+        print("Milestone created:", doc.get("milestone_id"))
+        return self.get_by_id(doc.get("milestone_id"))
 
     def get_by_id(self, milestone_id: str) -> Optional[Dict[str, Any]]:
-        return self.col.find_one({"milestone_id": milestone_id}, {"_id": 0})
+        print("Fetching milestone:", milestone_id)
+        data = self.col.find_one({"milestone_id": milestone_id}, {"_id": 0})
+        # print("Fetched milestone:", data.get("milestone_id"))
+        return data
 
     def list_for_agreement(self, agreement_id: str) -> List[Dict[str, Any]]:
         return list(self.col.find({"agreement_id": agreement_id}, {"_id": 0}).sort("created_at", 1))

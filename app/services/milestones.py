@@ -42,8 +42,9 @@ class MilestoneService:
         ).model_dump()
 
         created = self.milestone_repo.create(m_doc)
+        print("Created milestone:", created.get("milestone_id"))
         # update agreement's milestone list and recalc totals (num_milestones, total_amount)
-        self.agreement_repo.add_milestone(agreement_id, created["milestone_id"])
+        self.agreement_repo.add_milestone(agreement_id, created.get("milestone_id"))
 
         # recompute agreement summary: sum milestone payments
         milestones = self.milestone_repo.list_for_agreement(agreement_id)
