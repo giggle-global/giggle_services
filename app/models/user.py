@@ -144,8 +144,7 @@ class UserUpdate(BaseModel):
                     "upi_id": "john@upi",
                     "gst": "29ABCDE1234F2Z5",
                     "account_type": "Savings"
-                },
-                "skill_set": ["Python", "FastAPI", "MongoDB"]
+                }
             }
         }
 

@@ -20,7 +20,7 @@ from app.routes import ticket
 from app.routes import project
 from app.routes import token
 from app.routes import review
-from app.routes import agreement
+from app.routes import agreements
 import time
 
 import logging
@@ -91,7 +91,7 @@ app.include_router(ticket.router)
 app.include_router(project.router)
 app.include_router(token.router)
 app.include_router(review.router)
-app.include_router(agreement.router)
+app.include_router(agreements.router)
 
 
 user_service = UserService()

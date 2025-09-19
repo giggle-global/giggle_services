@@ -1435,3 +1435,5 @@
 2025-09-18 13:44:45,807 [DEBUG] [urllib3.connectionpool] https://auth.giggle.global:443 "GET /admin/realms/giggle/users/6bab27f1-ac5f-48b8-9ac4-1bc8b478f86e?userProfileMetadata=False HTTP/1.1" 200 412
 2025-09-18 13:44:45,968 [DEBUG] [app.routes.user] Fetching current user: user_id=59a9cc4f-a155-4a7e-bad3-d69522bfeef5
 2025-09-18 13:44:45,996 [INFO] [app.routes.user] Fetched current user: user_id=59a9cc4f-a155-4a7e-bad3-d69522bfeef5
+2025-09-19 19:34:36,759 [INFO] [app.main] App started
+2025-09-19 19:34:37,925 [INFO] [app.services.user] Root user already exists: email=deepak@keydraft.com
