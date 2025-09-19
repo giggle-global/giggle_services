@@ -196,7 +196,7 @@ class UserService:
                 # delete from Keycloak
                 try:
                     if keycloak_id:
-                        delete_user_in_keycloak(kc_token, keycloak_id)
+                        delete_user_in_keycloak(keycloak_id)
                         logger.info("Rolled back Keycloak user after token consume failure: keycloak_id=%s", keycloak_id)
                 except Exception:
                     logger.exception("Failed to roll back Keycloak user after token consume failure: keycloak_id=%s", keycloak_id)
