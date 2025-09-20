@@ -36,8 +36,11 @@ class RequestUpdate(BaseModel):
 
 class RequestOut(BaseModel):
     request_id: str = Field(..., example="req-12345")
+    project_id: str = Field(..., example="prj-1001")
     client_id: str = Field(..., example="user-001")
     freelancer_id: str = Field(..., example="user-002")
+    client_name: str = Field(..., example="John Doe")
+    freelancer_name: str = Field(..., example="Jane Smith")
     status: RequestStatus = Field(..., example=RequestStatus.PENDING.value)
 
     class Config:
@@ -46,6 +49,8 @@ class RequestOut(BaseModel):
                 "request_id": "req-12345",
                 "client_id": "user-001",
                 "freelancer_id": "user-002",
+                "client_name": "John Doe",
+                "freelancer_name": "Jane Smith",
                 "status": "pending"
             }
         }

@@ -19,7 +19,7 @@ def send_request(data: RequestCreate, current_user: Dict[str, Any] = Depends(get
     if current_user["role"] != "CL":
         logger.warning("Non-client attempted to send request.")
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only clients can send requests")
-    created = svc.create_request(current_user["user_id"], data.freelancer_id)
+    created = svc.create_request(current_user["user_id"], data.freelancer_id, data.project_id)
     logger.info(f"Request created: id={getattr(created, 'id', None)} sender={current_user.get('user_id')} freelancer={data.freelancer_id}")
     return ok(data=created, message="Request sent", status_code=status.HTTP_201_CREATED)
 

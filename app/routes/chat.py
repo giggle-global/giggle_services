@@ -67,17 +67,18 @@ websocket_manager = WebSocketManager()
 #         await websocket_manager.disconnect(user_id, project_id)
 
 
-@router.websocket("/ws/{project_id}/{user_id}")
+@router.websocket("/ws/project/{project_id}/{user_id}")
 async def ws(project_id: str, user_id: str, websocket: WebSocket):
     # If you use a token, validate BEFORE or right after accept(), and close explicitly.
     await websocket.accept()
     try:
         user = UserService().get_user(user_id)  # must NOT raise HTTPException
+        print("User fetched for WS:", user_id, user)
         if not user:
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION); return
 
         # Send history safely (avoid raw ObjectId)
-        for chat in chat_service.get_chat_history(project_id):
+        for chat in chat_service.get_chat_history(project_id, "project"):
             chat.pop("_id", None)
             await websocket.send_json(chat)
 
@@ -88,12 +89,55 @@ async def ws(project_id: str, user_id: str, websocket: WebSocket):
             if not content:
                 await websocket.send_json({"error": "Message cannot be empty"}); continue
 
-            chat_service.log_chat(project_id, user_id, content, user["role"], user.get("name", ""))
+            chat_service.log_chat("project", project_id, user_id, content, user["role"], user.get("first_name", ""), user.get("last_name", ""))
             await websocket_manager.send_to_group(project_id, {
                 "user_id": user_id,
                 "message": content,
                 "role": user["role"],
-                "user_name": user.get("name", ""),
+                "user_name": user.get("first_name", "") + " " + user.get("last_name", ""),
+                "timestamp": datetime.utcnow().isoformat()
+            })
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        # log the error; don’t let it bubble and kill the socket silently
+        print("WS error:", repr(e))
+        try:
+            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+        except Exception:
+            pass
+    finally:
+        await websocket_manager.disconnect(user_id, project_id)
+
+
+@router.websocket("/ws/agreement/{agreement_id}/{user_id}")
+async def ws(agreement_id: str, user_id: str, websocket: WebSocket):
+    # If you use a token, validate BEFORE or right after accept(), and close explicitly.
+    await websocket.accept()
+    try:
+        user = UserService().get_user(user_id)  # must NOT raise HTTPException
+        print("User fetched for WS:", user_id, user)
+        if not user:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION); return
+
+        # Send history safely (avoid raw ObjectId)
+        for chat in chat_service.get_chat_history(agreement_id, "agreement"):
+            chat.pop("_id", None)
+            await websocket.send_json(chat)
+
+        # Main loop
+        while True:
+            msg = await websocket.receive_json()  # may raise if bad JSON
+            content = (msg.get("content") or "").strip()
+            if not content:
+                await websocket.send_json({"error": "Message cannot be empty"}); continue
+
+            chat_service.log_chat("agreement", agreement_id, user_id, content, user["role"], user.get("first_name", ""), user.get("last_name", ""))
+            await websocket_manager.send_to_group(agreement_id, {
+                "user_id": user_id,
+                "message": content,
+                "role": user["role"],
+                "user_name": user.get("first_name", "") + " " + user.get("last_name", ""),
                 "timestamp": datetime.utcnow().isoformat()
             })
     except WebSocketDisconnect:

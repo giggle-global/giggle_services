@@ -29,5 +29,5 @@ class SkillService:
                 raise HTTPException(400, f"Skill not found: {e.skill_id}")
             if e.level not in SkillLevel:
                 raise HTTPException(400, f"Invalid level for skill {e.skill_id}: {e.level}")
-            result.append({"skill_id": e.skill_id, "level": e.level.value})
+            result.append({"skill_id": e.skill_id, "level": e.level.value, "skill_name": stored[e.skill_id]["name"]})
         return result

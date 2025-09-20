@@ -4,18 +4,24 @@ from pymongo.collection import Collection
 from fastapi import HTTPException
 from app.core.db import database
 from app.models.request import RequestStatus
+from datetime import datetime
+
 
 class RequestRepository:
     def __init__(self):
         self.collection: Collection = database["chat_requests"]
 
-    def create_request(self, client_id: str, freelancer_id: str) -> dict:
+    def create_request(self, client_id: str, freelancer_id: str, client_first_name: str, client_last_name: str, freelancer_first_name: str, freelancer_last_name: str, project_id: str) -> dict:
         request_id = str(uuid.uuid4())
         doc = {
             "request_id": request_id,
             "client_id": client_id,
+            "client_name": f"{client_first_name} {client_last_name}",
+            "freelancer_name": f"{freelancer_first_name} {freelancer_last_name}",
             "freelancer_id": freelancer_id,
+            "project_id": project_id,
             "status": RequestStatus.PENDING.value,
+            "created_at": int(datetime.utcnow().timestamp())  # epoch seconds (UTC)
         }
         # Check for existing pending request
         existing = self.collection.find_one({
@@ -31,7 +37,7 @@ class RequestRepository:
     def update_status(self, request_id: str, status: str, acting_user_id: str) -> Optional[dict]:
         result = self.collection.update_one(
             {"request_id": request_id},
-            {"$set": {"status": status}}
+            {"$set": {"status": status, "updated_at": int(datetime.utcnow().timestamp())}}
         )
         if result.matched_count == 0:
             raise HTTPException(404, "Request not found.")

@@ -6,6 +6,7 @@ from pymongo.errors import PyMongoError
 
 from app.repositories.request import RequestRepository
 from app.repositories.user import UserRepository
+from app.repositories.project import ProjectRepository
 from app.models.request import RequestCreate, RequestUpdate, RequestOut, RequestStatus
 
 logger = logging.getLogger(__name__)
@@ -15,6 +16,7 @@ class RequestService:
     def __init__(self, repo: Optional[RequestRepository] = None, user_repo: Optional[UserRepository] = None):
         self.repo = repo or RequestRepository()
         self.user_repo = user_repo or UserRepository()
+        self.project_repo = ProjectRepository()
 
     # ---------- Helpers ----------
     def _get_user_or_404(self, user_id: str) -> Dict[str, Any]:
@@ -30,7 +32,7 @@ class RequestService:
         return user
 
     # ---------- Create ----------
-    def create_request(self, client_id: str, freelancer_id: str) -> Dict[str, Any]:
+    def create_request(self, client_id: str, freelancer_id: str, project_id: str) -> Dict[str, Any]:
         if not client_id or not freelancer_id:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "client_id and freelancer_id are required")
         if client_id == freelancer_id:
@@ -43,6 +45,12 @@ class RequestService:
         freelancer = self._get_user_or_404(freelancer_id)
         if freelancer.get("role") != "FL":
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid freelancer ID")
+        
+        if not project_id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "project_id is required")
+        
+        if not self.project_repo.find_by_id(project_id=project_id):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Project not found or not associated with client")
 
         try:
             if self.repo.request_exists(client_id, freelancer_id):
@@ -53,7 +61,7 @@ class RequestService:
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to verify request existence")
 
         try:
-            created = self.repo.create_request(client_id, freelancer_id)
+            created = self.repo.create_request(client_id, freelancer_id, client.get("first_name"), client.get("last_name"), freelancer.get("first_name"), freelancer.get("last_name"), project_id)
             logger.info("Request created: id=%s client=%s freelancer=%s", getattr(created, "id", None), client_id, freelancer_id)
             return created
         except PyMongoError:

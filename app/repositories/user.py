@@ -79,6 +79,7 @@ class UserRepository:
             {"user_id": user_id},
             {"$set": {"skill_set": skills_payload}}
         )
+        print("Update result:", result.raw_result)
         if result.matched_count == 0:
             raise HTTPException(404, "User not found")
         return self.get_user_by_id(user_id)

@@ -10,9 +10,9 @@ class ChatRepository:
     def save(self, chat_data: dict):
         self.collection.insert_one(chat_data)
 
-    def get_history(self, project_id: str):
-        chat_history = list(self.collection.find({"project_id": project_id}).sort("timestamp", 1))
-    
+    def get_history(self, project_id: str, type: str):
+        chat_history = list(self.collection.find({"project_id": project_id, "type": type}).sort("timestamp", 1))
+
         for chat in chat_history:
             chat.pop("_id", None)  # remove _id field entirely
         return chat_history

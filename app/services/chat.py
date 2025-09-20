@@ -8,19 +8,20 @@ class ChatService:
     def __init__(self):
         self.repo = ChatRepository()
 
-    def log_chat(self, project_id, user_id, message, role, user_name):
+    def log_chat(self, type, project_id, user_id, message, role, first_name, last_name):
         chat_entry = {
+            "type": type,
             "project_id": project_id,
             "user_id": user_id,
             "message": message,
             "role": role,
-            "user_name": user_name,
+            "user_name": first_name + " " + last_name,
             "timestamp": datetime.utcnow().isoformat()
         }
         self.repo.save(chat_entry)
 
-    def get_chat_history(self, project_id):
-        return self.repo.get_history(project_id)
+    def get_chat_history(self, project_id, type):
+        return self.repo.get_history(project_id, type)
 
 
 class WebSocketManager:

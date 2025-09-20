@@ -26,4 +26,5 @@ class SkillOut(SkillBase):
 
 class UserSkillEntry(BaseModel):
     skill_id: str
+    skill_name: Optional[str] = None
     level: SkillLevel
