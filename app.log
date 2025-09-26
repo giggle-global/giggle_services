@@ -2653,3 +2653,15 @@
 2025-09-26 10:08:40,052 [DEBUG] [app.routes.request] List sent requests by user_id=59a9cc4f-a155-4a7e-bad3-d69522bfeef5 role=CL
 2025-09-26 10:08:40,181 [DEBUG] [app.services.request] Fetched sent requests: client=59a9cc4f-a155-4a7e-bad3-d69522bfeef5 count=2
 2025-09-26 10:08:40,181 [INFO] [app.routes.request] Sent requests fetched: count=2
+2025-09-26 10:23:12,612 [INFO] [app.main] App started
+2025-09-26 10:23:13,754 [INFO] [app.services.user] Root user already exists: email=deepak@keydraft.com
+2025-09-26 10:28:05,149 [INFO] [app.main] App started
+2025-09-26 10:28:06,281 [INFO] [app.services.user] Root user already exists: email=deepak@keydraft.com
+2025-09-26 10:28:48,043 [INFO] [app.main] App started
+2025-09-26 10:28:49,177 [INFO] [app.services.user] Root user already exists: email=deepak@keydraft.com
+2025-09-26 10:29:44,512 [INFO] [app.main] App started
+2025-09-26 10:29:45,642 [INFO] [app.services.user] Root user already exists: email=deepak@keydraft.com
+2025-09-26 10:30:37,672 [INFO] [app.main] App started
+2025-09-26 10:30:38,808 [INFO] [app.services.user] Root user already exists: email=deepak@keydraft.com
+2025-09-26 10:37:02,555 [INFO] [app.main] App started
+2025-09-26 10:37:03,688 [INFO] [app.services.user] Root user already exists: email=deepak@keydraft.com
