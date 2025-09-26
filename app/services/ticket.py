@@ -36,9 +36,9 @@ class TicketService:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Ticket not found")
         return ticket
 
-    def _assert_fl(self, user: Dict[str, Any]):
-        if not user or user.get("role") != "FL":
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Only freelancers are allowed")
+    # def _assert_fl(self, user: Dict[str, Any]):
+    #     if not user or user.get("role") != "FL":
+    #         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only freelancers are allowed")
 
     def _assert_sa(self, user: Dict[str, Any]):
         if not user or user.get("role") != "SA":
@@ -46,7 +46,6 @@ class TicketService:
 
     # ---------- Create ----------
     def create_ticket(self, freelancer_id: str, client_id: str, subject: str, description: str, user: Dict[str, Any]) -> Dict[str, Any]:
-        self._assert_fl(user)
         if not freelancer_id or not client_id:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "freelancer_id and client_id are required")
         if not subject or not description:
