@@ -2774,3 +2774,5 @@
 2025-09-26 11:20:26,705 [DEBUG] [app.routes.ticket] Create ticket by user_id=a7969b5f-76da-46fa-bc07-f7c1900681be role=FL payload={'client_id': '59a9cc4f-a155-4a7e-bad3-d69522bfeef5', 'subject': 'check client to freelancer', 'description': 'check client to freelancer'}
 2025-09-26 11:20:26,810 [INFO] [app.services.ticket] Ticket created: freelancer=a7969b5f-76da-46fa-bc07-f7c1900681be client=59a9cc4f-a155-4a7e-bad3-d69522bfeef5
 2025-09-26 11:20:26,812 [INFO] [app.routes.ticket] Ticket created: id=None by=a7969b5f-76da-46fa-bc07-f7c1900681be against=59a9cc4f-a155-4a7e-bad3-d69522bfeef5
+2025-09-26 11:23:23,135 [INFO] [app.main] App started
+2025-09-26 11:23:24,281 [INFO] [app.services.user] Root user already exists: email=deepak@keydraft.com

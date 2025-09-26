@@ -82,11 +82,10 @@ class TicketService:
 
     # ---------- Update ----------
     def update_ticket(self, ticket_id: str, update: TicketUpdate, user: Dict[str, Any]) -> Dict[str, Any]:
-        self._assert_fl(user)
         ticket = self._get_ticket_or_404(ticket_id)
 
-        if ticket.get("freelancer_id") != user.get("user_id"):
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the freelancer can update their ticket")
+        if ticket.get("freelancer_id") != user.get("user_id") or ticket.get("status") == TicketStatus.CLOSED.value or ticket.get("client_id") != user.get("user_id"):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the freelancer or client can update their ticket or Already closed ticket cannot be updated")
 
         update_dict = update.model_dump(exclude_unset=True)
         if not update_dict:
