@@ -71,6 +71,7 @@ class AgreementCreate(BaseModel):
     description: Optional[str] = None
     client: UserRef
     freelancer: UserRef
+    project_id: str
 
     rate: float = Field(..., ge=0, example=1200)
     rate_unit: Optional[str] = Field("day", example="day")
@@ -87,6 +88,7 @@ class AgreementCreate(BaseModel):
         json_schema_extra = {
             "example": {
                         "additional_terms": "All IP rights remain with the client",
+                        "project_id": "prj-1001",
                         "client": {
                             "email": "alice@example.com",
                             "name": "Alice Johnson",

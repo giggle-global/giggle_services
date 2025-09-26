@@ -51,8 +51,8 @@ class TicketService:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "freelancer_id and client_id are required")
         if not subject or not description:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "subject and description are required")
-        if user.get("user_id") != freelancer_id:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Freelancer mismatch")
+        # if user.get("user_id") != freelancer_id:
+        #     raise HTTPException(status.HTTP_403_FORBIDDEN, "Freelancer mismatch")
 
         timeline = [
             TimelineEntry(

@@ -13,7 +13,6 @@ def get_agreement_service():
 
 @router.post("/", status_code=201)
 def create_agreement(payload: AgreementCreate, current_user: Dict[str, Any] = Depends(get_current_user), svc: AgreementService = Depends(get_agreement_service)):
-    # only client can create with client.user_id == current_user
     if current_user["user_id"] != payload.client.user_id and current_user.get("role") != "admin":
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Not allowed to create agreement for other client")
     created = svc.create_agreement(payload, created_by=current_user["user_id"])
