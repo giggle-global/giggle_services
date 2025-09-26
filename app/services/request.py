@@ -49,7 +49,8 @@ class RequestService:
         if not project_id:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "project_id is required")
         
-        if not self.project_repo.find_by_id(project_id=project_id):
+        project_details = self.project_repo.find_by_id(project_id=project_id)
+        if not project_details:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Project not found or not associated with client")
 
         try:
@@ -61,7 +62,7 @@ class RequestService:
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to verify request existence")
 
         try:
-            created = self.repo.create_request(client_id, freelancer_id, client.get("first_name"), client.get("last_name"), freelancer.get("first_name"), freelancer.get("last_name"), project_id)
+            created = self.repo.create_request(client_id, freelancer_id, client.get("first_name"), client.get("last_name"), freelancer.get("first_name"), freelancer.get("last_name"), project_id, project_name=project_details.get("title"))
             logger.info("Request created: id=%s client=%s freelancer=%s", getattr(created, "id", None), client_id, freelancer_id)
             return created
         except PyMongoError:

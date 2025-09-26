@@ -10,8 +10,9 @@ from datetime import datetime
 class RequestRepository:
     def __init__(self):
         self.collection: Collection = database["chat_requests"]
+        self.user = database["user"]  # add this
 
-    def create_request(self, client_id: str, freelancer_id: str, client_first_name: str, client_last_name: str, freelancer_first_name: str, freelancer_last_name: str, project_id: str) -> dict:
+    def create_request(self, client_id: str, freelancer_id: str, client_first_name: str, client_last_name: str, freelancer_first_name: str, freelancer_last_name: str, project_id: str, project_name: str) -> dict:
         request_id = str(uuid.uuid4())
         doc = {
             "request_id": request_id,
@@ -20,6 +21,7 @@ class RequestRepository:
             "freelancer_name": f"{freelancer_first_name} {freelancer_last_name}",
             "freelancer_id": freelancer_id,
             "project_id": project_id,
+            "project_title": project_name,
             "status": RequestStatus.PENDING.value,
             "created_at": int(datetime.utcnow().timestamp())  # epoch seconds (UTC)
         }
@@ -43,12 +45,94 @@ class RequestRepository:
             raise HTTPException(404, "Request not found.")
         return self.collection.find_one({"request_id": request_id}, {"_id": 0})
 
+    
+
     def get_sent_requests(self, client_id: str) -> list:
-        return list(self.collection.find({"client_id": client_id}, {"_id": 0}))
+        print("Fetching sent requests for client:", client_id)
+        print(self.user.name)
+        pipeline = [
+            {"$match": {"client_id": client_id}},
+            {
+                "$lookup": {
+                    "from": self.user.name,
+                    "localField": "client_id",
+                    "foreignField": "user_id",
+                    "as": "client_info",
+                }
+            },
+            {
+                "$lookup": {
+                    "from": self.user.name,
+                    "localField": "freelancer_id",
+                    "foreignField": "user_id",
+                    "as": "freelancer_info",
+                }
+            },
+            {
+                "$project": {
+                    "_id": 0,
+                    "request_id": 1,
+                    "project_id": 1,
+                    "freelancer_name": 1,
+                    "client_name": 1,
+                    "client_id": 1,
+                    "freelancer_id": 1,
+                    "status": 1,
+                    "created_at": 1,
+                    "subject": 1,
+                    "description": 1,
+                    "project_title": 1,
+                    # include profile pics
+                    "client_profile_pic": {"$arrayElemAt": ["$client_info.profile_pic", 0]},
+                    "freelancer_profile_pic": {"$arrayElemAt": ["$freelancer_info.profile_pic", 0]},
+                }
+            },
+        ]
+        data = list(self.collection.aggregate(pipeline))
+        print("Fetched profile pics for sent requests:", data)
+        return data
+        #        return list(self.collection.aggregate(pipeline))
 
     def get_received_requests(self, freelancer_id: str) -> list:
-        return list(self.collection.find({"freelancer_id": freelancer_id}, {"_id": 0}))
-
+        pipeline = [
+            {"$match": {"freelancer_id": freelancer_id}},
+            {
+                "$lookup": {
+                    "from": self.user.name,
+                    "localField": "client_id",
+                    "foreignField": "user_id",
+                    "as": "client_info",
+                }
+            },
+            {
+                "$lookup": {
+                    "from": self.user.name,
+                    "localField": "freelancer_id",
+                    "foreignField": "user_id",
+                    "as": "freelancer_info",
+                }
+            },
+            {
+                "$project": {
+                    "_id": 0,
+                    "request_id": 1,
+                    "project_id": 1,
+                    "freelancer_name": 1,
+                    "client_name": 1,
+                    "client_id": 1,
+                    "freelancer_id": 1,
+                    "status": 1,
+                    "created_at": 1,
+                    "subject": 1,
+                    "description": 1,
+                    "project_title": 1,
+                    "client_profile_pic": {"$arrayElemAt": ["$client_info.profile_pic", 0]},
+                    "freelancer_profile_pic": {"$arrayElemAt": ["$freelancer_info.profile_pic", 0]},
+                }
+            },
+        ]
+        return list(self.collection.aggregate(pipeline))
+    
     def get_request(self, request_id: str) -> Optional[dict]:
         return self.collection.find_one({"request_id": request_id}, {"_id": 0})
     

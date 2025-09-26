@@ -42,6 +42,10 @@ class RequestOut(BaseModel):
     client_name: str = Field(..., example="John Doe")
     freelancer_name: str = Field(..., example="Jane Smith")
     status: RequestStatus = Field(..., example=RequestStatus.PENDING.value)
+    created_at: Optional[int] = Field(None, example=1633036800)  # epoch seconds
+    project_title: Optional[str] = Field(None, example="Website Development")
+    client_profile_pic: Optional[str] = Field(None, example="http://example.com/profiles/user-001.jpg")
+    freelancer_profile_pic: Optional[str] = Field(None, example="http://example.com/profiles/user-002.jpg")
 
     class Config:
         schema_extra = {

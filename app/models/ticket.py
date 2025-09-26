@@ -2,6 +2,7 @@ from typing import Optional, List
 from pydantic import BaseModel, Field
 from enum import Enum
 import datetime
+from pydantic import model_validator
 
 class TicketStatus(str, Enum):
     OPEN = "open"
@@ -42,15 +43,41 @@ class TimelineEntry(BaseModel):
             }
         }
 
-class TicketCreate(BaseModel):
-    client_id: str = Field(..., example="user-001")
-    subject: str = Field(..., example="Unable to access project dashboard")
-    description: str = Field(..., example="When I log in, the dashboard page shows a 500 error.")
+# class TicketCreate(BaseModel):
+#     client_id: str = Field(..., example="user-001")
+#     subject: str = Field(..., example="Unable to access project dashboard")
+#     description: str = Field(..., example="When I log in, the dashboard page shows a 500 error.")
 
+#     class Config:
+#         schema_extra = {
+#             "example": {
+#                 "client_id": "user-001",
+#                 "subject": "Unable to access project dashboard",
+#                 "description": "When I log in, the dashboard page shows a 500 error."
+#             }
+#         }
+
+class TicketCreate(BaseModel):
+    # Either client_id OR freelancer_id must be provided (exactly one)
+    client_id: Optional[str] = Field(None, description="Target client id (when caller is freelancer)")
+    freelancer_id: Optional[str] = Field(None, description="Target freelancer id (when caller is client)")
+    subject: str
+    description: Optional[str] = None
+
+    @model_validator(mode="after")
+    def check_exactly_one_target(cls, values):
+        # 'values' is an instance of the model; access attributes directly
+        client_id = values.client_id
+        freelancer_id = values.freelancer_id
+        if bool(client_id) == bool(freelancer_id):  # both set or both None
+            raise ValueError("Provide exactly one of 'client_id' or 'freelancer_id'.")
+        return values
+    
     class Config:
         schema_extra = {
             "example": {
                 "client_id": "user-001",
+                "freelancer_id": "user-002",
                 "subject": "Unable to access project dashboard",
                 "description": "When I log in, the dashboard page shows a 500 error."
             }
