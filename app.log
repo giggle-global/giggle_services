@@ -3210,3 +3210,15 @@
 2025-09-29 17:39:39,291 [INFO] [app.routes.request] Request cancelled by parties: project_id=40452a3e-6cfe-42ad-b8cd-9be207abc11b, freelancer_id=3aa3ac07-198a-4289-bbaa-9ecbc710351a, client_id=59a9cc4f-a155-4a7e-bad3-d69522bfeef5
 2025-09-29 17:41:09,469 [INFO] [app.main] App started
 2025-09-29 17:41:10,603 [INFO] [app.services.user] Root user already exists: email=deepak@keydraft.com
+2025-09-29 20:26:39,796 [INFO] [app.main] App started
+2025-09-29 20:26:40,990 [INFO] [app.services.user] Root user already exists: email=deepak@keydraft.com
+2025-09-29 20:27:06,594 [INFO] [app.main] App started
+2025-09-29 20:27:07,910 [INFO] [app.services.user] Root user already exists: email=deepak@keydraft.com
+2025-09-29 20:27:16,030 [INFO] [app.main] App started
+2025-09-29 20:27:18,133 [INFO] [app.services.user] Root user already exists: email=deepak@keydraft.com
+2025-09-29 20:28:33,472 [INFO] [app.main] App started
+2025-09-29 20:28:34,905 [INFO] [app.services.user] Root user already exists: email=deepak@keydraft.com
+2025-09-29 20:31:44,224 [INFO] [app.main] App started
+2025-09-29 20:31:45,419 [INFO] [app.services.user] Root user already exists: email=deepak@keydraft.com
+2025-09-29 20:32:35,738 [INFO] [app.main] App started
+2025-09-29 20:32:36,978 [INFO] [app.services.user] Root user already exists: email=deepak@keydraft.com

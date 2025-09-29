@@ -22,6 +22,7 @@ from app.routes import token
 from app.routes import review
 from app.routes import agreements
 from app.routes import milestones
+from app.routes import portfolio
 import time
 
 import logging
@@ -94,6 +95,7 @@ app.include_router(token.router)
 app.include_router(review.router)
 app.include_router(agreements.router)
 app.include_router(milestones.router)
+app.include_router(portfolio.router)
 
 
 user_service = UserService()
