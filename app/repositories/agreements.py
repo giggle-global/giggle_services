@@ -1,5 +1,5 @@
 # agreements/repository.py
-from typing import Optional, Dict, Any
+from typing import List, Optional, Dict, Any
 from pymongo.database import Database
 from pymongo import ReturnDocument
 from datetime import datetime
@@ -18,6 +18,9 @@ class AgreementRepository:
 
     def get_by_id(self, agreement_id: str) -> Optional[Dict[str, Any]]:
         return self.col.find_one({"agreement_id": agreement_id}, {"_id": 0})
+    
+    def get_filtered(self, filter: Dict[str, Any]) -> List[Dict[str, Any]]:
+        return list(self.col.find(filter, {"_id": 0}))
 
     def update(self, agreement_id: str, update_fields: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         update_fields["updated_at"] = datetime.utcnow()

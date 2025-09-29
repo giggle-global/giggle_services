@@ -117,6 +117,9 @@ def on_startup():
         {"name": "CSS", "category": "frontend"},
         {"name": "SQL", "category": "database"},
         {"name": "NoSQL", "category": "database"},
+        {"name": "Digital Marketing", "category": "marketing"},
+        {"name": "Traditional Marketing", "category": "marketing"},
+
         # add whatever skills you want seeded
     ]
     skill_service.seed_skills_if_missing(SKILLS_TO_SEED)

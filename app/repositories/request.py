@@ -142,6 +142,9 @@ class RequestRepository:
             "freelancer_id": freelancer_id,
             "status": RequestStatus.PENDING.value
         }) > 0
+    
+    def get_request_by_parties(self, project_id: str, freelancer_id: str, client_id: str) -> Optional[dict]:
+        return self.collection.find_one({"project_id": project_id, "freelancer_id": freelancer_id, "client_id": client_id}, {"_id": 0})
 
     def delete_request(self, request_id: str, client_id: str):
         result = self.collection.delete_one({"request_id": request_id, "client_id": client_id})

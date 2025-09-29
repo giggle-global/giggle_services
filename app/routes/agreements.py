@@ -1,37 +1,75 @@
 # agreements/routes.py
 from fastapi import APIRouter, Depends, Body, HTTPException, status
-from typing import Dict, Any
-from app.models.agreements import AgreementCreate, AgreementUpdate
-from app.repositories.agreements import AgreementRepository
+from typing import Dict, Any, Optional
+from app.models.agreements import AgreementCreate, AgreementUpdate, AgreementFilter
 from app.services.agreements import AgreementService
 from app.core.keycloak import get_current_user
+from app.schemas.response import ok, APIResponse
 
 router = APIRouter(prefix="/api/agreements", tags=["agreements"])
 
 def get_agreement_service():
     return AgreementService()
 
-@router.post("/", status_code=201)
-def create_agreement(payload: AgreementCreate, current_user: Dict[str, Any] = Depends(get_current_user), svc: AgreementService = Depends(get_agreement_service)):
+@router.post("/", response_model=APIResponse, status_code=201)
+def create_agreement(
+    payload: AgreementCreate,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    svc: AgreementService = Depends(get_agreement_service),
+):
     if current_user["user_id"] != payload.client.user_id and current_user.get("role") != "admin":
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Not allowed to create agreement for other client")
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="Not allowed to create agreement for other client",
+        )
     created = svc.create_agreement(payload, created_by=current_user["user_id"])
-    return created
+    return ok(created, "Agreement created", status.HTTP_201_CREATED)
 
-@router.get("/{agreement_id}")
-def get_agreement(agreement_id: str, svc: AgreementService = Depends(get_agreement_service)):
-    return svc.get_agreement(agreement_id)
+@router.get("/{agreement_id}", response_model=APIResponse)
+def get_agreement(
+    agreement_id: str,
+    svc: AgreementService = Depends(get_agreement_service),
+):
+    agreement = svc.get_agreement(agreement_id)
+    return ok(agreement, "Agreement fetched", status.HTTP_200_OK)
 
-@router.put("/{agreement_id}")
-def update_agreement(agreement_id: str, payload: AgreementUpdate, current_user: Dict[str, Any] = Depends(get_current_user), svc: AgreementService = Depends(get_agreement_service)):
-    return svc.update_agreement(agreement_id, payload.model_dump(exclude_unset=True), current_user)
+@router.post("/filtered", response_model=APIResponse)
+def get_agreements_filtered(
+    filter: AgreementFilter = Body(...),
+    svc: AgreementService = Depends(get_agreement_service),
+    user: Dict[str, Any] = Depends(get_current_user),
+):
+    result = svc.get_agreement_filtered(filter)
+    return ok(result, "Agreements fetched", status.HTTP_200_OK)
 
-@router.post("/{agreement_id}/sign")
-def sign_agreement(agreement_id: str, signature: Dict[str, Any] = Body(...), current_user: Dict[str, Any] = Depends(get_current_user), svc: AgreementService = Depends(get_agreement_service)):
+@router.put("/{agreement_id}", response_model=APIResponse)
+def update_agreement(
+    agreement_id: str,
+    payload: AgreementUpdate,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    svc: AgreementService = Depends(get_agreement_service),
+):
+    updated = svc.update_agreement(agreement_id, payload.model_dump(exclude_unset=True), current_user)
+    return ok(updated, "Agreement updated", status.HTTP_200_OK)
+
+@router.post("/{agreement_id}/sign", response_model=APIResponse)
+def sign_agreement(
+    agreement_id: str,
+    signature: Dict[str, Any] = Body(...),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    svc: AgreementService = Depends(get_agreement_service),
+):
     # signature: {"name": "John", "signature_type": "text", "signature_value": "John"}
-    return svc.sign_agreement(agreement_id, current_user, signature)
+    signed = svc.sign_agreement(agreement_id, current_user, signature)
+    return ok(signed, "Agreement signed", status.HTTP_200_OK)
 
-@router.post("/{agreement_id}/cancel")
-def cancel_agreement(agreement_id: str, payload: Dict[str, Any] = Body(None), current_user: Dict[str, Any] = Depends(get_current_user), svc: AgreementService = Depends(get_agreement_service)):
+@router.post("/{agreement_id}/cancel", response_model=APIResponse)
+def cancel_agreement(
+    agreement_id: str,
+    payload: Optional[Dict[str, Any]] = Body(None),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    svc: AgreementService = Depends(get_agreement_service),
+):
     reason = payload.get("reason") if payload else None
-    return svc.cancel_agreement(agreement_id, current_user, reason)
+    canceled = svc.cancel_agreement(agreement_id, current_user, reason)
+    return ok(canceled, "Agreement canceled", status.HTTP_200_OK)

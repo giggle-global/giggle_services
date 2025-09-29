@@ -151,8 +151,17 @@ class AgreementUpdate(BaseModel):
             }
         }
 
+class AgreementFilter(BaseModel):
+    status: Optional[str] = Field(None, description="Filter by agreement status")
+    project_id: Optional[str] = Field(None, description="Filter by project ID")
+    client_id: Optional[str] = Field(None, description="Filter by client user_id")
+    freelancer_id: Optional[str] = Field(None, description="Filter by freelancer user_id")
+    draft: Optional[bool] = Field(None, description="Filter by draft flag")
+    active: Optional[bool] = Field(None, description="Filter active agreements only")
+
 class AgreementInDB(BaseModel):
     agreement_id: str = Field(default_factory=gen_id)
+    project_id: str
     title: str
     description: Optional[str] = None
     client: UserRef

@@ -2,7 +2,7 @@
 import logging
 from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Body, status
-from app.models.request import RequestCreate, RequestUpdate, RequestOut
+from app.models.request import RequestCreate, RequestUpdate, RequestOut, CancelRequestByParties
 from app.services.request import RequestService
 from app.core.keycloak import get_current_user
 from app.schemas.response import APIResponse, ok
@@ -29,6 +29,26 @@ def cancel_request(request_id: str, current_user: Dict[str, Any] = Depends(get_c
     cancelled = svc.cancel_request(request_id, current_user["user_id"])
     logger.info(f"Request cancelled: request_id={request_id}")
     return ok(data=cancelled, message="Request cancelled")
+
+@router.post("/cancel/by-parties", response_model=APIResponse[RequestOut])
+def cancel_request_by_parties(
+    payload: CancelRequestByParties,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    svc: RequestService = Depends(get_request_service),
+):
+    logger.debug(
+        f"Cancel request by parties: project_id={payload.project_id}, "
+        f"freelancer_id={payload.freelancer_id}, client_id={payload.client_id}, "
+        f"performed_by={current_user.get('user_id')}"
+    )
+    cancelled = svc.cancel_request_by_parties(
+        payload.project_id, payload.freelancer_id, payload.client_id, current_user["user_id"]
+    )
+    logger.info(
+        f"Request cancelled by parties: project_id={payload.project_id}, "
+        f"freelancer_id={payload.freelancer_id}, client_id={payload.client_id}"
+    )
+    return ok(data=cancelled, message="Request cancelled by project and parties")
 
 @router.get("/sent", response_model=APIResponse[List[RequestOut]])
 def list_sent_requests(current_user: Dict[str, Any] = Depends(get_current_user), svc: RequestService = Depends(get_request_service)):

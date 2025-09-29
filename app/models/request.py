@@ -22,6 +22,20 @@ class RequestCreate(BaseModel):
             }
         }
 
+class CancelRequestByParties(BaseModel):
+    project_id: str = Field(..., example="proj123")
+    freelancer_id: str = Field(..., example="free123")
+    client_id: str = Field(..., example="client123")
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "project_id": "proj123",
+                "freelancer_id": "free123",
+                "client_id": "client123"
+            }
+        }
+
 
 class RequestUpdate(BaseModel):
     status: RequestStatus = Field(..., example=RequestStatus.ACCEPTED.value)

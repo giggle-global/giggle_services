@@ -69,32 +69,6 @@ class RequestService:
             logger.exception("Mongo error creating request: client=%s freelancer=%s", client_id, freelancer_id)
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to create request")
 
-    # ---------- Cancel ----------
-    def cancel_request(self, request_id: str, client_id: str) -> Dict[str, Any]:
-        if not request_id or not client_id:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "request_id and client_id are required")
-
-        try:
-            req = self.repo.get_request(request_id)
-        except PyMongoError:
-            logger.exception("Mongo error fetching request for cancel: id=%s", request_id)
-            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to fetch request")
-
-        if not req:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Request not found")
-        if req.get("client_id") != client_id:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Not allowed to cancel this request")
-        if req.get("status") != RequestStatus.PENDING.value:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Only pending requests can be cancelled")
-
-        try:
-            updated = self.repo.update_status(request_id, RequestStatus.CANCELLED.value, client_id)
-            logger.info("Request cancelled: id=%s by client=%s", request_id, client_id)
-            return updated
-        except PyMongoError:
-            logger.exception("Mongo error cancelling request: id=%s", request_id)
-            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to cancel request")
-
     # ---------- Lists ----------
     def get_sent_requests(self, client_id: str):
         if not client_id:
@@ -144,6 +118,84 @@ class RequestService:
         except PyMongoError:
             logger.exception("Mongo error updating request status: id=%s", request_id)
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to update request status")
+        
+     # ---------- Cancel ----------
+    def cancel_request(self, request_id: str, client_id: str) -> Dict[str, Any]:
+        if not request_id or not client_id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "request_id and client_id are required")
+
+        try:
+            req = self.repo.get_request(request_id)
+        except PyMongoError:
+            logger.exception("Mongo error fetching request for cancel: id=%s", request_id)
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to fetch request")
+
+        if not req:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Request not found")
+        if req.get("client_id") != client_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Not allowed to cancel this request")
+        if req.get("status") != RequestStatus.PENDING.value:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Only pending requests can be cancelled")
+
+        try:
+            updated = self.repo.update_status(request_id, RequestStatus.CANCELLED.value, client_id)
+            logger.info("Request cancelled: id=%s by client=%s", request_id, client_id)
+            return updated
+        except PyMongoError:
+            logger.exception("Mongo error cancelling request: id=%s", request_id)
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to cancel request")
+        
+    def cancel_request_by_parties(self, project_id: str, freelancer_id: str, client_id: str, performed_by: str) -> Dict[str, Any]:
+        """
+        Cancel a request by the combination of project_id, freelancer_id and client_id.
+
+        Expects repo.find_request_by_parties(project_id, freelancer_id, client_id) to return the
+        matching request document or None.
+        """
+        if not project_id or not freelancer_id or not client_id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "project_id, freelancer_id and client_id are required")
+
+        try:
+            req = self.repo.get_request_by_parties(project_id, freelancer_id, client_id)
+        except PyMongoError:
+            logger.exception(
+                "Mongo error fetching request for cancel by parties: project=%s freelancer=%s client=%s",
+                project_id, freelancer_id, client_id
+            )
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to fetch request")
+
+        if not req:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Request not found for given parties")
+
+        # permission check: only client (owner) or admin/system actor should cancel — adapt as needed
+        if req.get("client_id") != performed_by:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Not allowed to cancel this request")
+
+        # only allow cancelling pending requests
+        if req.get("status") != RequestStatus.PENDING.value:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Only pending requests can be cancelled")
+
+        request_id = req.get("request_id")
+        if not request_id:
+            logger.error(
+                "Request found for parties but missing request id: project=%s freelancer=%s client=%s",
+                project_id, freelancer_id, client_id
+            )
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Invalid request data")
+
+        try:
+            updated = self.repo.update_status(request_id, RequestStatus.CANCELLED.value, performed_by)
+            logger.info(
+                "Request cancelled by parties: request_id=%s project=%s freelancer=%s client=%s performed_by=%s",
+                request_id, project_id, freelancer_id, client_id, performed_by
+            )
+            return updated
+        except PyMongoError:
+            logger.exception(
+                "Mongo error cancelling request by parties: request_id=%s project=%s freelancer=%s client=%s",
+                request_id, project_id, freelancer_id, client_id
+            )
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to cancel request")
 
     # ---------- Utilities ----------
     def request_exists(self, client_id: str, freelancer_id: str) -> bool:

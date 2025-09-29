@@ -1,8 +1,9 @@
 # agreements/service.py
 from typing import Dict, Any, List, Optional
-from app.models.agreements import AgreementCreate, AgreementInDB, AgreementStatus, SignatureRecord
+from app.models.agreements import AgreementCreate, AgreementInDB, AgreementStatus, SignatureRecord, AgreementFilter
 from app.repositories.agreements import AgreementRepository
 from app.services.milestones import MilestoneService
+from app.services.project import ProjectService
 from pymongo.errors import PyMongoError
 from fastapi import HTTPException, status
 from datetime import datetime
@@ -15,6 +16,7 @@ class AgreementService:
         self.repo = AgreementRepository()
         # optionally used to create initial milestones
         self.milestone_service = MilestoneService()
+        self.project_service = ProjectService()
 
     def _calc_duration_days(self, start_date: int, end_date: int) -> int:
         """
@@ -37,10 +39,14 @@ class AgreementService:
         try:
             duration_days = self._calc_duration_days(payload.start_date, payload.end_date)
             total_amount = self._calc_total_from_rate(payload.rate, payload.rate_unit or "day", duration_days)
+            project_check = self.project_service.get(payload.project_id)
+            if not project_check:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, "Project not found")
 
             doc = AgreementInDB(
                 title=payload.title,
                 description=payload.description,
+                project_id=payload.project_id,
                 client=payload.client,
                 freelancer=payload.freelancer,
                 rate=payload.rate,
@@ -77,6 +83,25 @@ class AgreementService:
         if not ag:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Agreement not found")
         return ag
+    
+    def get_agreement_filtered(self, filter: AgreementFilter) -> List[Dict[str, Any]]:
+        print("Filtering agreements with:", filter.client_id)
+        # Convert AgreementFilter → Mongo query
+        q = {}
+
+        if filter.status:
+            q["status"] = filter.status
+        if filter.project_id:
+            q["project_id"] = filter.project_id
+        if filter.client_id:
+            q["client.user_id"] = filter.client_id   # ✅ nested
+        if filter.freelancer_id:
+            q["freelancer.user_id"] = filter.freelancer_id  # ✅ nested
+        if filter.draft is not None:
+            q["draft"] = filter.draft
+        if filter.active is not None:
+            q["status"] = "ACTIVE" if filter.active else {"$ne": "ACTIVE"}
+        return self.repo.get_filtered(q)
 
     def sign_agreement(self, agreement_id: str, user: Dict[str, Any], signature_payload: Dict[str, Any]) -> Dict[str, Any]:
         ag = self.repo.get_by_id(agreement_id)
