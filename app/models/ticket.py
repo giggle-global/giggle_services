@@ -32,7 +32,7 @@ class TimelineEntry(BaseModel):
     status: Optional[TicketStatus] = Field(None, example="in_progress")
 
     class Config:
-        schema_extra = {
+       json_schema_extra= {
             "example": {
                 "timestamp": "2025-08-30T12:45:32.000Z",
                 "action": "status_changed",
@@ -49,7 +49,7 @@ class TimelineEntry(BaseModel):
 #     description: str = Field(..., example="When I log in, the dashboard page shows a 500 error.")
 
 #     class Config:
-#         schema_extra = {
+#        json_schema_extra= {
 #             "example": {
 #                 "client_id": "user-001",
 #                 "subject": "Unable to access project dashboard",
@@ -74,7 +74,7 @@ class TicketCreate(BaseModel):
         return values
     
     class Config:
-        schema_extra = {
+       json_schema_extra= {
             "example": {
                 "client_id": "user-001",
                 "freelancer_id": "user-002",
@@ -88,7 +88,7 @@ class TicketUpdate(BaseModel):
     description: Optional[str] = Field(None, example="Getting a 500 Internal Server Error")
 
     class Config:
-        schema_extra = {
+       json_schema_extra= {
             "example": {
                 "subject": "Error when accessing dashboard",
                 "description": "Getting a 500 Internal Server Error"
@@ -99,7 +99,7 @@ class TicketStatusUpdate(BaseModel):
     status: TicketStatus = Field(..., example="resolved")
 
     class Config:
-        schema_extra = {
+       json_schema_extra= {
             "example": {
                 "status": "resolved"
             }
@@ -109,7 +109,7 @@ class TicketAdminResponse(BaseModel):
     comment: str = Field(..., example="Please clear your cache and try again.")
 
     class Config:
-        schema_extra = {
+       json_schema_extra= {
             "example": {
                 "comment": "Please clear your cache and try again."
             }
@@ -146,7 +146,7 @@ class TicketOut(BaseModel):
     )
 
     class Config:
-        schema_extra = {
+       json_schema_extra= {
             "example": {
                 "ticket_id": "tick-12345",
                 "freelancer_id": "user-002",

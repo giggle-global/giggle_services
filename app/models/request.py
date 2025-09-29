@@ -15,7 +15,7 @@ class RequestCreate(BaseModel):
     freelancer_id: str = Field(..., example="user-002")  # user_id of freelancer
 
     class Config:
-        schema_extra = {
+       json_schema_extra= {
             "example": {
                 "project_id": "prj-1001",
                 "freelancer_id": "user-002"
@@ -28,7 +28,7 @@ class CancelRequestByParties(BaseModel):
     client_id: str = Field(..., example="client123")
 
     class Config:
-        schema_extra = {
+       json_schema_extra= {
             "example": {
                 "project_id": "proj123",
                 "freelancer_id": "free123",
@@ -41,7 +41,7 @@ class RequestUpdate(BaseModel):
     status: RequestStatus = Field(..., example=RequestStatus.ACCEPTED.value)
 
     class Config:
-        schema_extra = {
+       json_schema_extra= {
             "example": {
                 "status": "accepted"
             }
@@ -62,7 +62,7 @@ class RequestOut(BaseModel):
     freelancer_profile_pic: Optional[str] = Field(None, example="http://example.com/profiles/user-002.jpg")
 
     class Config:
-        schema_extra = {
+       json_schema_extra= {
             "example": {
                 "request_id": "req-12345",
                 "client_id": "user-001",

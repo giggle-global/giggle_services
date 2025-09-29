@@ -13,7 +13,7 @@ class Message(BaseModel):
     seen_by: List[str] = Field(default_factory=list, example=["user-002"])
 
     class Config:
-        schema_extra = {
+       json_schema_extra= {
             "example": {
                 "_id": "64f7b8d9e138f9b2d7a12345",
                 "project_id": "prj-1001",
@@ -36,7 +36,7 @@ class ChatSession(BaseModel):
     last_updated: datetime = Field(default_factory=datetime.utcnow, example="2025-08-30T12:45:32.000Z")
 
     class Config:
-        schema_extra = {
+       json_schema_extra= {
             "example": {
                 "_id": "chat-2001",
                 "project_id": "prj-1001",
@@ -52,7 +52,7 @@ class MessageIn(BaseModel):
     message: str = Field(..., example="Can you send me the wireframes by tomorrow?")
 
     class Config:
-        schema_extra = {
+       json_schema_extra= {
             "example": {
                 "message": "Can you send me the wireframes by tomorrow?"
             }
@@ -69,7 +69,7 @@ class MessageOut(BaseModel):
     seen_by: List[str] = Field(..., example=["user-001"])
 
     class Config:
-        schema_extra = {
+       json_schema_extra= {
             "example": {
                 "id": "64f7b8d9e138f9b2d7a12346",
                 "project_id": "prj-1001",
@@ -91,7 +91,7 @@ class ChatSessionOut(BaseModel):
     last_updated: datetime = Field(..., example="2025-08-30T14:20:15.000Z")
 
     class Config:
-        schema_extra = {
+       json_schema_extra= {
             "example": {
                 "id": "chat-2001",
                 "project_id": "prj-1001",

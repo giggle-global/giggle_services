@@ -189,7 +189,7 @@ class AgreementInDB(BaseModel):
     draft: bool = True
 
     class Config:
-        orm_mode = True
+        from_attributes = True
         json_schema_extra = {
             "example": {
                 "agreement_id": "7f3d89f47c1a4b21a2f0c0a8e9d4f7bb",

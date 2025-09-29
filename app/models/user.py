@@ -15,7 +15,7 @@ class NotificationService(BaseModel):
     in_app: bool = Field(False, example=True)
 
     class Config:
-        schema_extra = {
+       json_schema_extra= {
             "example": {
                 "email": True,
                 "sms": False,
@@ -34,7 +34,7 @@ class PaymentInformation(BaseModel):
     account_type: Optional[str] = Field(None, example="Savings")
 
     class Config:
-        schema_extra = {
+       json_schema_extra= {
             "example": {
                 "account_holder_name": "John Doe",
                 "account_number": "1234567890",
@@ -64,7 +64,7 @@ class UserCreate(UserBase):
     signup_token: Optional[str] = Field(None, example="eyJhbGciOi...signup_token")  # For FL role
 
     class Config:
-        schema_extra = {
+       json_schema_extra= {
             "example": {
                 "username": "johndoe",
                 "email": "johndoe@example.com",
@@ -122,7 +122,7 @@ class UserUpdate(BaseModel):
     company_info: Optional[CompanyInfo] = None
 
     class Config:
-        schema_extra = {
+       json_schema_extra= {
             "example": {
                 "first_name": "Johnny",
                 "last_name": "Doe",
@@ -161,8 +161,8 @@ class UserOut(BaseModel):
     keycloak_id: Optional[str] = None
 
     class Config:
-        orm_mode = True
-        schema_extra = {
+        from_attributes = True
+        json_schema_extra= {
             "example": {
                 "user_id": "user-001",
                 "username": "johndoe",
@@ -182,9 +182,9 @@ class LoginRequest(BaseModel):
     password: str = Field(..., example="StrongPass@123")
 
     class Config:
-        schema_extra = {
+       json_schema_extra= {
             "example": {
-                "username": "johndoe@example.com",
+                "email": "johndoe@example.com",
                 "password": "StrongPass@123"
             }
         }
@@ -194,7 +194,7 @@ class LogoutRequest(BaseModel):
     refresh_token: str = Field(..., example="eyJhbGciOi...logout_token")
 
     class Config:
-        schema_extra = {
+       json_schema_extra= {
             "example": {
                 "refresh_token": "eyJhbGciOi...logout_token"
             }
@@ -205,7 +205,7 @@ class RefreshRequest(BaseModel):
     refresh_token: str = Field(..., example="eyJhbGciOi...refresh_token")
 
     class Config:
-        schema_extra = {
+       json_schema_extra= {
             "example": {
                 "refresh_token": "eyJhbGciOi...refresh_token"
             }
@@ -220,7 +220,7 @@ class TokenResponse(BaseModel):
     token_type: str = Field(..., example="bearer")
 
     class Config:
-        schema_extra = {
+       json_schema_extra= {
             "example": {
                 "access_token": "eyJhbGciOi...access_token",
                 "refresh_token": "eyJhbGciOi...refresh_token",
@@ -236,7 +236,7 @@ class LoginResponse(BaseModel):
     user: UserOut
 
     class Config:
-        schema_extra = {
+       json_schema_extra= {
             "example": {
                 "tokens": {
                     "access_token": "eyJhbGciOi...access_token",

@@ -17,7 +17,7 @@ class ProjectBase(BaseModel):
     cover_image: Optional[str] = Field(None, example="s3://bucket/key.png")  # store URL or S3 key  
 
     class Config:
-        schema_extra = {
+       json_schema_extra= {
             "example": {
                 "title": "E-commerce Platform",
                 "description": "A full-featured e-commerce platform with shopping cart and payment integration.",
@@ -32,7 +32,7 @@ class ProjectCreate(ProjectBase):
     pass
 
     class config:
-        schema_extra = {
+       json_schema_extra= {
             "example": {
                 "title": "E-commerce Platform",
                 "description": "A full-featured e-commerce platform with shopping cart and payment integration.",
@@ -53,7 +53,7 @@ class ProjectUpdate(BaseModel):
     cover_image: Optional[str]
 
     class config:
-        schema_extra = {
+       json_schema_extra= {
             "example": {
                 "title": "Updated E-commerce Platform",
                 "description": "A full-featured e-commerce platform with updated features.",

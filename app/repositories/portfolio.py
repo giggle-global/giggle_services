@@ -1,26 +1,26 @@
 # app/repositories/portfolio.py
 import logging
+import uuid
 from typing import Dict, Any, List, Optional
 from pymongo.errors import PyMongoError
-from bson import ObjectId
 from datetime import datetime
 
-from app.core.db import database  # adjust this import to your project's DB accessor
+from fastapi.encoders import jsonable_encoder
+from app.core.db import database  # your DB accessor
 
 logger = logging.getLogger(__name__)
-COLLECTION_NAME = "portfolio_projects"
+COLLECTION_NAME = "portfolio"  # using the same name you had
+
 
 class PortfolioRepository:
     def __init__(self, db=None):
-        # get_db should return a pymongo.database.Database instance
-        self.col = database["portfolio"]
+        self.col = (db or database)[COLLECTION_NAME]
 
-    def _to_out(self, doc: Dict[str, Any]) -> Dict[str, Any]:
+    def _to_out(self, doc: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         if not doc:
             return None
-        # normalize mongo doc to API-friendly dict
-        out = {
-            "id": str(doc.get("_id") or doc.get("id")),
+        return {
+            "id": doc.get("id"),  # custom id (UUID string)
             "user_id": doc.get("user_id"),
             "title": doc.get("title"),
             "description": doc.get("description"),
@@ -32,16 +32,21 @@ class PortfolioRepository:
             "created_at": doc.get("created_at"),
             "updated_at": doc.get("updated_at"),
         }
-        return out
 
     def create_project(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         payload = payload.copy()
+        # generate custom UUID id
+        payload["id"] = payload.get("id") or uuid.uuid4().hex
         payload.setdefault("status", "active")
         payload.setdefault("created_at", datetime.utcnow())
         payload.setdefault("updated_at", datetime.utcnow())
+
+        # ensure BSON-safe values
+        payload = jsonable_encoder(payload)
+
         try:
-            result = self.col.insert_one(payload)
-            doc = self.col.find_one({"_id": result.inserted_id})
+            self.col.insert_one(payload)
+            doc = self.col.find_one({"id": payload["id"]})
             return self._to_out(doc)
         except PyMongoError:
             logger.exception("Mongo error creating portfolio project: %s", payload.get("title"))
@@ -49,7 +54,12 @@ class PortfolioRepository:
 
     def find_by_user(self, user_id: str, limit: int = 50, skip: int = 0) -> List[Dict[str, Any]]:
         try:
-            cursor = self.col.find({"user_id": user_id, "status": {"$ne": "deleted"}}).sort("created_at", -1).skip(skip).limit(limit)
+            cursor = (
+                self.col.find({"user_id": user_id, "status": {"$ne": "deleted"}})
+                .sort("created_at", -1)
+                .skip(skip)
+                .limit(limit)
+            )
             return [self._to_out(doc) for doc in cursor]
         except PyMongoError:
             logger.exception("Mongo error listing projects for user: %s", user_id)
@@ -57,8 +67,7 @@ class PortfolioRepository:
 
     def get_by_id(self, project_id: str) -> Optional[Dict[str, Any]]:
         try:
-            oid = ObjectId(project_id) if ObjectId.is_valid(project_id) else project_id
-            doc = self.col.find_one({"_id": oid})
+            doc = self.col.find_one({"id": project_id})
             return self._to_out(doc)
         except PyMongoError:
             logger.exception("Mongo error fetching project id=%s", project_id)
@@ -66,24 +75,31 @@ class PortfolioRepository:
 
     def update_project(self, project_id: str, update_payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         try:
-            oid = ObjectId(project_id) if ObjectId.is_valid(project_id) else project_id
+            update_payload = update_payload.copy()
             update_payload["updated_at"] = datetime.utcnow()
-            result = self.col.find_one_and_update({"_id": oid}, {"$set": update_payload}, return_document=True)
-            return self._to_out(result)
+            update_payload = jsonable_encoder(update_payload)
+
+            res = self.col.update_one({"id": project_id}, {"$set": update_payload})
+            if res.matched_count == 0:
+                return None
+            doc = self.col.find_one({"id": project_id})
+            return self._to_out(doc)
         except PyMongoError:
             logger.exception("Mongo error updating project id=%s", project_id)
             raise
 
     def soft_delete(self, project_id: str, performed_by: str) -> Optional[Dict[str, Any]]:
         try:
-            oid = ObjectId(project_id) if ObjectId.is_valid(project_id) else project_id
             update = {
                 "status": "deleted",
                 "updated_at": datetime.utcnow(),
-                "deleted_by": performed_by
+                "deleted_by": performed_by,
             }
-            result = self.col.find_one_and_update({"_id": oid}, {"$set": update}, return_document=True)
-            return self._to_out(result)
+            res = self.col.update_one({"id": project_id}, {"$set": update})
+            if res.matched_count == 0:
+                return None
+            doc = self.col.find_one({"id": project_id})
+            return self._to_out(doc)
         except PyMongoError:
             logger.exception("Mongo error deleting project id=%s", project_id)
             raise
