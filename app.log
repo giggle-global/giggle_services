@@ -3296,3 +3296,15 @@
 2025-09-29 20:51:00,687 [DEBUG] [urllib3.connectionpool] https://auth.giggle.global:443 "POST /realms/giggle/protocol/openid-connect/token HTTP/1.1" 200 2949
 2025-09-29 20:51:00,689 [DEBUG] [urllib3.connectionpool] Starting new HTTPS connection (1): auth.giggle.global:443
 2025-09-29 20:51:00,792 [DEBUG] [urllib3.connectionpool] https://auth.giggle.global:443 "GET /admin/realms/giggle/users/d9605641-3634-4a6b-a2d5-75f04699d9bc?userProfileMetadata=False HTTP/1.1" 200 412
+2025-09-30 11:23:17,715 [INFO] [app.main] App started
+2025-09-30 11:23:18,848 [INFO] [app.services.user] Root user already exists: email=deepak@keydraft.com
+2025-09-30 11:59:48,926 [INFO] [app.main] App started
+2025-09-30 11:59:50,059 [INFO] [app.services.user] Root user already exists: email=deepak@keydraft.com
+2025-09-30 12:01:33,546 [INFO] [app.main] App started
+2025-09-30 12:01:34,685 [INFO] [app.services.user] Root user already exists: email=deepak@keydraft.com
+2025-09-30 12:01:35,950 [INFO] [app.main] App started
+2025-09-30 12:01:37,081 [INFO] [app.services.user] Root user already exists: email=deepak@keydraft.com
+2025-09-30 12:01:38,251 [INFO] [app.main] App started
+2025-09-30 12:01:39,386 [INFO] [app.services.user] Root user already exists: email=deepak@keydraft.com
+2025-09-30 12:02:23,135 [INFO] [app.main] App started
+2025-09-30 12:02:24,270 [INFO] [app.services.user] Root user already exists: email=deepak@keydraft.com

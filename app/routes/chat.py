@@ -29,11 +29,11 @@ async def ws(project_id: str, user_id: str, websocket: WebSocket):
     await websocket.accept()
     try:
         user = UserService().get_user(user_id)  # must NOT raise HTTPException
-        print("User fetched for WS:", user_id, user)
+        # print("User fetched for WS:", user_id, user)
         if not user:
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION); return
         
-        project_details = project_service.get_project(project_id)
+        project_details = project_service.get(project_id)
         if not project_details:
             await websocket.send_json({"error": "Project not found"})
         user_details = user_service.get_user(user_id)
@@ -79,7 +79,7 @@ async def ws(agreement_id: str, user_id: str, websocket: WebSocket):
     await websocket.accept()
     try:
         user = UserService().get_user(user_id)  # must NOT raise HTTPException
-        print("User fetched for WS:", user_id, user)
+        # print("User fetched for WS:", user_id, user)
         if not user:
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION); return
         
