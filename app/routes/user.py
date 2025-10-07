@@ -51,10 +51,13 @@ def list_all_users(current_user: Dict[str, Any] = Depends(get_current_user), svc
 @router.get("/profile/{user_id}", response_model=APIResponse[Dict [str, Any]])
 def get_profile(user_id: str, current_user: Dict[str, Any] = Depends(get_current_user), svc: UserService = Depends(get_user_service)):
     logger.debug(f"Profile fetch requested by user_id={current_user.get('user_id')} for target={user_id}")
-    if current_user["role"] != "SA":
-        logger.warning("Non-SA attempted to view other user's profile.")
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only super admin can view other users")
+    if current_user["role"] != "SA" and current_user["role"] != "CL":
+        logger.warning("Non-SA or Non-Client attempted to view other user's profile.")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only super admin and clients can view Freelancers users")
     user = svc.get_user(user_id=user_id)
+    if current_user["role"] == "CL" and user["role"] != "FL":
+        logger.warning("Client attempted to view non-Freelancer profile.")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Clients can only view Freelancer profiles")
     logger.info(f"Profile fetched for user_id={user_id}")
     return ok(data=user, message="User profile fetched")
 

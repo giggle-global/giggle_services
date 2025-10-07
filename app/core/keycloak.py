@@ -179,7 +179,7 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
         if token.startswith("Bearer "):
             token = token[len("Bearer ") :]
 
-        print("check")
+        # print("check")
 
         key_der_base64 = keycloak_openid.public_key()
         key_der = b64decode(key_der_base64.encode())
@@ -202,10 +202,10 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
                 if not enabled:
                     raise HTTPException(status_code=401, detail="User is disabled")
                 user["sid"] = sid
-                print("User details check:", user['username'])
+                # print("User details check:", user['username'])
                 user_repo = UserRepository()
                 user = user_repo.get_user_by_id(user_id=user["username"])
-                print("User details:", user.get("user_id"))
+                # print("User details:", user.get("user_id"))
                 return user
 
             else:
@@ -292,7 +292,7 @@ def decode_token(token: str):
                 enabled = user.get("enabled")
                 if not enabled:
                     raise HTTPException(status_code=401, detail="User is disabled")
-                print("User details check:", user)
+                # print("User details check:", user)
                 user_repo = UserRepository()
                 user = user_repo.get_user_by_id(user_id=user["username"])
                 user["sid"] = sid

@@ -48,7 +48,9 @@ class ReviewService:
         # freelancers can see their own reviews; SA can see all
         role = current_user.get("role")
         uid = current_user.get("user_id")
-        if role == RoleEnum.SUPER_ADMIN.value or (role == RoleEnum.FREELANCER.value and uid == freelancer_id):
+        # import pdb; pdb.set_trace()
+        if role == RoleEnum.SUPER_ADMIN.value or (role == RoleEnum.FREELANCER.value and uid == freelancer_id) or (role == RoleEnum.CLIENT.value):
+            print("Fetching reviews for freelancer:", freelancer_id)
             return self.repo.list_reviews_for_freelancer(freelancer_id, limit, skip)
         raise HTTPException(status_code=403, detail="Not authorized")
 

@@ -21,7 +21,7 @@ class UserRepository:
         return self.collection.find_one({"_id": result.inserted_id}, {"_id": 0})
 
     def get_user_by_id(self, user_id: str) -> Optional[dict]:
-        print("Fetching user by ID:", user_id)
+        # print("Fetching user by ID:", user_id)
         user = self.collection.find_one({"user_id": user_id, "status": "ACTIVE"}, {"_id": 0})
         print("Fetched user:", user.get("user_id") if user else None)
         if not user:

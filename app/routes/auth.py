@@ -45,7 +45,7 @@ def login(payload: LoginRequest, svc: UserService = Depends(get_user_service)):
 
     # get_current_user currently returns a dict
     user_details: dict = get_current_user(token=tokens.access_token)
-    logger.debug(f"User details fetched: {user_details}")
+    # logger.debug(f"User details fetched: {user_details}")
 
     login_data = LoginResponse(tokens=tokens, user=UserOut(**user_details))
     return ok(data=login_data, message="Login successful")

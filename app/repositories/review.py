@@ -89,7 +89,8 @@ class ReviewRepository:
                 "created_at": 1,
                 "updated_at": 1,
                 "client_first_name": "$client_info.first_name",
-                "client_last_name": "$client_info.last_name"
+                "client_last_name": "$client_info.last_name",
+                "client_avatar_url": "$client_info.profile_pic"
             }}
         ]
         print("check pipeline: ",pipeline)
@@ -119,7 +120,8 @@ class ReviewRepository:
                 "created_at": 1,
                 "updated_at": 1,
                 "freelancer_first_name": "$freelancer_info.first_name",
-                "freelancer_last_name": "$freelancer_info.last_name"
+                "freelancer_last_name": "$freelancer_info.last_name",
+                "freelancer_avatar_url": "$freelancer_info.profile_pic"
             }}
         ]
         return list(self.collection.aggregate(pipeline))
