@@ -44,6 +44,7 @@ def update_milestone(
     current_user: Dict[str, Any] = Depends(get_current_user),
     svc: MilestoneService = Depends(get_milestone_service),
 ):
+    print("Updating milestone:", milestone_id, payload)
     updated = svc.update_milestone(milestone_id, payload, current_user)
     return ok(updated, "Milestone updated", status.HTTP_200_OK)
 

@@ -15,20 +15,21 @@ class MilestoneService:
         self.milestone_repo = MilestoneRepository()
         self.agreement_repo = AgreementRepository()
 
+    @staticmethod
+    def _to_epoch(ts: datetime) -> int:
+        return int(ts.timestamp())
+
     def add_milestone(self, agreement_id: str, payload: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
-        # payload can be dict matching MilestoneCreate
         ag = self.agreement_repo.get_by_id(agreement_id)
         if not ag:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Agreement not found")
 
-        # only client/freelancer/admin can add (client is typical)
         if user["user_id"] not in [ag["client"]["user_id"], ag["freelancer"]["user_id"]] and user.get("role") != "admin":
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Not authorized to add milestone")
 
         if ag["status"] in ["Cancelled", "Completed"]:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot add milestone to cancelled/completed agreement")
 
-        # validate payload
         m_payload = MilestoneCreate(**payload) if not isinstance(payload, MilestoneCreate) else payload
 
         m_doc = MilestoneInDB(
@@ -42,11 +43,9 @@ class MilestoneService:
         ).model_dump()
 
         created = self.milestone_repo.create(m_doc)
-        print("Created milestone:", created.get("milestone_id"))
         # update agreement's milestone list and recalc totals (num_milestones, total_amount)
         self.agreement_repo.add_milestone(agreement_id, created.get("milestone_id"))
 
-        # recompute agreement summary: sum milestone payments
         milestones = self.milestone_repo.list_for_agreement(agreement_id)
         total = sum(m.get("payment", {}).get("amount", 0) for m in milestones)
         self.agreement_repo.update(agreement_id, {"total_amount": total, "num_milestones": len(milestones)})
@@ -56,48 +55,89 @@ class MilestoneService:
     def list_for_agreement(self, agreement_id: str) -> List[Dict[str, Any]]:
         return self.milestone_repo.list_for_agreement(agreement_id)
 
-    def update_milestone(self, milestone_id: str, update_payload: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+    def update_milestone(self, milestone_id: str, update_payload: MilestoneUpdate, user: Dict[str, Any]) -> Dict[str, Any]:
+        # fetch existing milestone
         ms = self.milestone_repo.get_by_id(milestone_id)
         if not ms:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Milestone not found")
+
+        # fetch agreement to validate roles
         ag = self.agreement_repo.get_by_id(ms["agreement_id"])
-        if user["user_id"] not in [ag["client"]["user_id"], ag["freelancer"]["user_id"]] and user.get("role") != "admin":
+        if not ag:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Agreement not found")
+
+        # authorization: only client, freelancer or admin can touch milestone
+        if user["user_id"] not in [ag["client"]["user_id"], ag["freelancer"]["user_id"]] and user.get("role") != "SA":
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Not authorized")
 
+        # Build update dict from pydantic model — only fields provided by client
+        update_data: Dict[str, Any] = update_payload.dict(exclude_unset=True)
+
         # if updating progress -> only freelancer or admin
-        if "progress" in update_payload and user["user_id"] != ag["freelancer"]["user_id"] and user.get("role") != "admin":
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Only freelancer can update progress")
+        if "progress" in update_data:
+            if user["user_id"] != ag["freelancer"]["user_id"] and user.get("role") != "admin":
+                raise HTTPException(status.HTTP_403_FORBIDDEN, "Only freelancer can update progress")
+
+            try:
+                progress_val = int(update_data.get("progress", 0))
+            except (TypeError, ValueError):
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid progress value")
+        else:
+            progress_val = None
 
         # if setting status to APPROVED -> only client or admin
-        if update_payload.get("status") == MilestoneStatus.APPROVED and user["user_id"] != ag["client"]["user_id"] and user.get("role") != "admin":
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Only client can approve milestone")
+        status_val = update_data.get("status")
+        # handle both enum and string comparison
+        is_approving = status_val == MilestoneStatus.APPROVED or str(status_val) == str(MilestoneStatus.APPROVED)
+        if is_approving:
+            if user["user_id"] != ag["client"]["user_id"] and user.get("role") != "admin":
+                raise HTTPException(status.HTTP_403_FORBIDDEN, "Only client can approve milestone")
 
-        # if approved, set approved_by and approved_at and progress 100
-        if update_payload.get("status") == MilestoneStatus.APPROVED:
-            update_payload["approved_by"] = user["user_id"]
-            update_payload["approved_at"] = datetime.utcnow()
-            update_payload["progress"] = 100
-            # TODO: trigger payment release call / event here
+            update_data["approved_by"] = user["user_id"]
+            update_data["approved_at"] = self._to_epoch(datetime.utcnow())
+            update_data["progress"] = 100
+            progress_val = 100
+            # TODO: trigger payment release/event here
 
-        # if progress == 100 -> mark completed date
-        if "progress" in update_payload and int(update_payload.get("progress", 0)) >= 100:
-            update_payload["status"] = MilestoneStatus.COMPLETED
-            update_payload["completed_date"] = date.today()
+        # if progress == 100 -> mark completed date and set status COMPLETED
+        if progress_val is not None and progress_val >= 100:
+            update_data["status"] = MilestoneStatus.COMPLETED
+            update_data["completed_date"] = self._to_epoch(datetime.utcnow())
 
-        updated = self.milestone_repo.update(milestone_id, update_payload)
+        # defensive: convert datetime to epoch if user inadvertently provided datetimes
+        if "approved_at" in update_data and isinstance(update_data["approved_at"], datetime):
+            update_data["approved_at"] = self._to_epoch(update_data["approved_at"])
+        if "completed_date" in update_data and isinstance(update_data["completed_date"], datetime):
+            update_data["completed_date"] = self._to_epoch(update_data["completed_date"])
 
-        # after update, if milestone payment changed or milestones changed, update agreement summary
-        milestones = self.milestone_repo.list_for_agreement(ms["agreement_id"])
+        # Persist only provided fields. Choose one depending on your repo:
+        # Option A: repo.update expects a $set-style pymongo update document:
+        # updated_ok = self.milestone_repo.update(milestone_id, {"$set": update_data})
+        #
+        # Option B: repo.update expects a plain dict and internally does $set:
+        updated_ok = self.milestone_repo.update(milestone_id, update_data)
+
+        if not updated_ok:
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to update milestone")
+
+        # fetch fresh milestone after update to compute agreement summary
+        updated_ms = self.milestone_repo.get_by_id(milestone_id)
+
+        # recompute agreement summary
+        milestones = self.milestone_repo.list_for_agreement(ms["agreement_id"]) or []
         total = sum(m.get("payment", {}).get("amount", 0) for m in milestones)
         self.agreement_repo.update(ms["agreement_id"], {"total_amount": total, "num_milestones": len(milestones)})
 
         # if all milestones approved -> set agreement Completed
-        ag_after = self.agreement_repo.get_by_id(ms["agreement_id"])
-        all_approved = True if len(milestones) > 0 and all(m.get("status") == MilestoneStatus.APPROVED for m in milestones) else False
+        def _is_approved(m):
+            s = m.get("status")
+            return s == MilestoneStatus.APPROVED or str(s) == str(MilestoneStatus.APPROVED)
+
+        all_approved = True if len(milestones) > 0 and all(_is_approved(m) for m in milestones) else False
         if all_approved:
             self.agreement_repo.update(ms["agreement_id"], {"status": "Completed"})
 
-        return updated
+        return updated_ms
 
     def approve_milestone(self, milestone_id: str, user: Dict[str, Any], approve: bool = True, notes: str = None):
         ms = self.milestone_repo.get_by_id(milestone_id)

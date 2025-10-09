@@ -70,16 +70,16 @@ class MilestoneCreate(BaseModel):
         }
 
 class MilestoneUpdate(BaseModel):
-    title: Optional[str]
-    description: Optional[str]
-    due_date: Optional[int]
-    est_start_date: Optional[int]
-    start_date: Optional[int]
-    completed_date: Optional[int]
-    payment: Optional[PaymentBreakdown]
-    deliverables: Optional[List[Deliverable]]
+    title: Optional[str] = None
+    description: Optional[str] = None
+    due_date: Optional[int] = None
+    est_start_date: Optional[int] = None
+    start_date: Optional[int] = None
+    completed_date: Optional[int] = None
+    payment: Optional[PaymentBreakdown] = None
+    deliverables: Optional[List[Deliverable]] = None
     progress: Optional[int] = Field(None, ge=0, le=100)
-    status: Optional[MilestoneStatus]
+    status: Optional[MilestoneStatus] = None
     approver_comments: Optional[str] = None
 
     class Config:
