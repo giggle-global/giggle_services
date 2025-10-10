@@ -98,6 +98,7 @@ class UserRepository:
             {"user_id": user_id},
             {"$set": {"status": "DELETED"}}
         )
+        print("Delete result:", result.raw_result, result.matched_count)
         if result.matched_count == 0:
             raise HTTPException(404, "User not found.")
         return None

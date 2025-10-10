@@ -309,9 +309,10 @@ class UserService:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "user_id is required")
         try:
             deleted = self.user_repo.delete_user(user_id)
-            if not deleted:
-                raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
-            logger.info("User deleted: user_id=%s", user_id)
+            # if not deleted:
+            #     print("User not found")
+            #     raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+            # logger.info("User deleted: user_id=%s", user_id)
             return {"detail": "User deleted"}
         except HTTPException:
             raise
