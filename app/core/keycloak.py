@@ -194,9 +194,11 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
         # print("Decoded user details:", user_base_detail)
         keycloak_admin = keycloak_instance()
         sid = user_base_detail["sid"]
+        print("SID:", sid)
         # Check if the token is active and user exists
         if "sub" in user_base_detail:
             user = keycloak_admin.get_user(user_base_detail["sub"])
+            print("User from Keycloak:", user)
             if user:
                 enabled = user.get("enabled")
                 if not enabled:

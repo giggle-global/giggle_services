@@ -331,6 +331,7 @@ class UserService:
             logger.debug("Keycloak auth attempt for username=%s", data.email)
             tokens = authenticate_with_keycloak(username=data.email, passcode=data.password)
             logger.info("Login success for username=%s", data.email)
+            print("Tokens obtained:", tokens)
             return tokens
         except HTTPException:
             # your keycloak client can raise 401/403; bubble up

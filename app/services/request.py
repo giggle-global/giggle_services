@@ -206,6 +206,18 @@ class RequestService:
         except PyMongoError:
             logger.exception("Mongo error checking request existence: client=%s freelancer=%s", client_id, freelancer_id)
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to check request existence")
+        
+    def request_get_one(self, request_id: str) -> Dict[str, Any]:
+        if not request_id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "request_id is required")
+        try:
+            req = self.repo.get_request(request_id)
+            if not req:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "Request not found")
+            return req
+        except PyMongoError:
+            logger.exception("Mongo error fetching request: id=%s", request_id)
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to fetch request")
 
     def project_exists(self, project_id: str, user_id: str, role: str) -> bool:
         if not project_id or not user_id or not role:
