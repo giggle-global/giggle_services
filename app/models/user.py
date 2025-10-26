@@ -8,10 +8,14 @@ class RoleEnum(str, Enum):
     CLIENT = "CL"
     FREELANCER = "FL"
 
+class ThemeEnum(str, Enum):
+    LIGHT = "LIGHT"
+    DARK = "DARK"
+
 
 class NotificationService(BaseModel):
     email: bool = Field(False, example=True)
-    sms: bool = Field(False, example=False)
+    # sms: bool = Field(False, example=False)
     in_app: bool = Field(False, example=True)
 
     class Config:
@@ -57,16 +61,18 @@ class UserBase(BaseModel):
     status: Optional[str] = Field("ACTIVE", example="ACTIVE")
     keycloak_id: Optional[str] = Field(None, example="c12d3f45-6789-4abc-def1-23456789abcd")
     user_id: Optional[str] = Field(None, example="user-001")
+    kyc: Optional[bool] = Field(False, example=True)
+    first_intro_done: Optional[bool] = Field(False, example=True)
 
 
 class UserCreate(UserBase):
     passcode: str = Field(..., example="StrongPass@123")
     signup_token: Optional[str] = Field(None, example="eyJhbGciOi...signup_token")  # For FL role
+    update_cool_down_period: Optional[int] = Field(5, example=0)  # in days
 
     class Config:
        json_schema_extra= {
             "example": {
-                "username": "johndoe",
                 "email": "johndoe@example.com",
                 "phone_number": "+919876543210",
                 "role": "CL",
@@ -101,13 +107,20 @@ class CompanyInfo(BaseModel):
     company_description: Optional[str] = Field(None, example="We build web products")
 
 
+
+class UserSettingInfo(BaseModel):
+    theme: Optional[ThemeEnum] = Field("LIGHT", example="LIGHT")
+    timezone: Optional[str] = Field(None, example="UTC+05:30")
+    currency: Optional[str] = Field(None, example="INR")
+
+
 class UserUpdate(BaseModel):
     first_name: Optional[str] = Field(None, example="Johnny")
     last_name: Optional[str] = Field(None, example="Doe")
     username: Optional[str] = Field(None, example="johnnydoe")
     email: Optional[EmailStr] = Field(None, example="johnny@example.com")
     phone_number: Optional[str] = Field(None, example="+919812345678")
-    bio: Optional[str] = Field(None, example="Freelance web developer")
+    bio: Optional[str] = Field(None, example="Freelance web developer", max_length=210)
     designation: Optional[str] = Field(None, example="Web Developer")
     experience_years: Optional[int] = Field(None, example=2)
     experience_months: Optional[int] = Field(None, example=6)
@@ -121,6 +134,8 @@ class UserUpdate(BaseModel):
     contact_info: Optional[ContactInfo] = None
     company_info: Optional[CompanyInfo] = None
 
+    user_settings: Optional[UserSettingInfo] = None
+
     class Config:
        json_schema_extra= {
             "example": {
@@ -132,7 +147,6 @@ class UserUpdate(BaseModel):
                 "bio": "Freelance web developer",
                 "notification_service": {
                     "email": True,
-                    "sms": False,
                     "in_app": True
                 },
                 "language_preference": "en",
@@ -144,10 +158,27 @@ class UserUpdate(BaseModel):
                     "upi_id": "john@upi",
                     "gst": "29ABCDE1234F2Z5",
                     "account_type": "Savings"
+                },
+                "user_settings": {
+                    "theme": "LIGHT",
+                    "timezone": "UTC+05:30",
+                    "currency": "INR"
                 }
             }
         }
 
+class KycUpdate(BaseModel):
+    kyc: Optional[bool] = Field(False, example=True)
+    first_intro_done: Optional[bool] = Field(False, example=True)
+
+    class Config:
+       json_schema_extra= {
+            "example": {
+                "kyc": True,
+                "first_intro_done": True
+            }
+        }
+       
 
 class UserOut(BaseModel):
     user_id: str
@@ -159,6 +190,9 @@ class UserOut(BaseModel):
     last_name: Optional[str]
     status: Optional[str] = "ACTIVE"
     keycloak_id: Optional[str] = None
+    kyc: Optional[bool] = Field(False, example=True)
+    first_intro_done: Optional[bool] = Field(False, example=True)
+    user_settings: Optional[UserSettingInfo] = None
 
     class Config:
         from_attributes = True

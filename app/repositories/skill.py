@@ -20,20 +20,30 @@ class SkillRepository:
         """Insert skills that do not already exist (idempotent)."""
         for s in skills:
             try:
-                # use upsert to avoid duplicate insert races
-                doc = {
+                now = datetime.utcnow()
+                update_fields = {
+                    "category": s.category or "general",
+                    "industry": s.industry or "general",
+                    "updated_at": now,
+                }
+
+                insert_fields = {
                     "skill_id": str(uuid4()),
                     "name": s.name,
-                    "category": s.category or "general",
-                    "created_at": datetime.utcnow(),
+                    "created_at": now,
                 }
+
                 self.collection.update_one(
                     {"name": s.name},
-                    {"$setOnInsert": doc},
+                    {
+                        "$set": update_fields,          # always update these
+                        "$setOnInsert": insert_fields,  # only on first insert
+                    },
                     upsert=True,
                 )
-            except PyMongoError:
-                # ignore / log in real app
+
+            except PyMongoError as e:
+                # log or handle in real app
                 continue
 
     def list_skills(self, category: Optional[str] = None) -> List[dict]:

@@ -15,11 +15,13 @@ class SkillBase(BaseModel):
     skill_id: str = Field(default_factory=lambda: str(uuid4()))
     name: str
     category: Optional[str] = "general"
+    industry: Optional[str] = "general"
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class SkillCreate(BaseModel):
     name: str
     category: Optional[str] = "general"
+    industry: Optional[str] = "general"
 
 class SkillOut(SkillBase):
     pass

@@ -30,6 +30,10 @@ if not config:
     config["user_name"] = os.environ["USER_NAME"]
     config["passcode"] = os.environ["PASSCODE"]
 
+    config["aws_access_key"] = os.environ["AWS_ACCESS_KEY"]
+    config["aws_secret_key"] = os.environ["AWS_SECRET_KEY"]
+    config["aws_region"] = os.environ["AWS_REGION"]
+
     config = dotdict(config)
 
 print(config)

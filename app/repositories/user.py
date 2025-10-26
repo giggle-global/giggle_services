@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from app.models.user import UserBase, UserCreate, UserUpdate, UserOut
 from app.core.db import database
 import uuid
+from datetime import datetime
 
 class UserRepository:
     def __init__(self):
@@ -16,6 +17,14 @@ class UserRepository:
         user_data.username = user_data.first_name.lower() + "_" + user_data.last_name.lower()
         user_dict = user_data.model_dump()
         user_dict.pop("passcode", None)
+
+        audit_log = {
+            "created_at":  datetime.utcnow(),
+            "created_by": "self",
+            "updated_at":  datetime.utcnow(),
+            "updated_by": "self",
+        }
+        user_dict["audit_log"] = audit_log
         
         result = self.collection.insert_one(user_dict)
         return self.collection.find_one({"_id": result.inserted_id}, {"_id": 0})
@@ -44,6 +53,11 @@ class UserRepository:
     #     return self.get_user_by_id(user_id)
     
     def update_user(self, user_id: str, update_payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+
+
+        update_payload["audit_log.updated_at"] = datetime.utcnow()
+        update_payload["audit_log.updated_by"] = user_id
+
         # build $set and $unset based on presence of keys and explicit None values
         set_ops = {}
         unset_ops = {}
@@ -75,6 +89,7 @@ class UserRepository:
         """
         skills_payload: list of {"skill_id": "...", "level": "basic"}
         """
+        
         result = self.collection.update_one(
             {"user_id": user_id},
             {"$set": {"skill_set": skills_payload}}
@@ -87,7 +102,8 @@ class UserRepository:
     def ban_user(self, user_id: str) -> dict:
         result = self.collection.update_one(
             {"user_id": user_id},
-            {"$set": {"status": "BANNED"}}
+            {"$set": {"status": "BANNED", "audit_log.updated_at": datetime.utcnow(), "audit_log.updated_by": "system"}}
+
         )
         if result.matched_count == 0:
             raise HTTPException(404, "User not found.")

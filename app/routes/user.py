@@ -2,7 +2,7 @@
 import logging
 from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
-from app.models.user import UserUpdate, UserOut
+from app.models.user import UserUpdate, UserOut, KycUpdate
 from app.services.user import UserService
 from app.services.skill import SkillService
 from app.core.keycloak import get_current_user
@@ -68,6 +68,16 @@ def update_user(update: UserUpdate, current_user: Dict[str, Any] = Depends(get_c
     updated = svc.update_user(user_id=user_id, user_data=update.model_dump(exclude_unset=True), current_user=current_user)
     logger.info(f"User updated: user_id={user_id}")
     return ok(data=updated, message="User updated")
+
+
+@router.put("/kyc", response_model=APIResponse[Dict [str, Any]])
+def update_user_kyc(update: KycUpdate, current_user: Dict[str, Any] = Depends(get_current_user), svc: UserService = Depends(get_user_service)):
+    user_id = current_user.get("user_id")
+    logger.debug(f"Update requested for user_id={user_id} payload={update.model_dump(exclude_unset=True)}")
+    updated = svc.update_user(user_id=user_id, user_data=update.model_dump(exclude_unset=True), current_user=current_user)
+    logger.info(f"User updated: user_id={user_id}")
+    return ok(data=updated, message="User updated")
+
 
 @router.patch("/{user_id}/skills")
 def update_user_skills(

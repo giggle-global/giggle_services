@@ -1,4 +1,6 @@
 # app/services/user.py
+from datetime import timedelta
+import random
 import uuid
 import logging
 from typing import Dict, Any, Optional, List
@@ -19,6 +21,9 @@ from app.core.config import config
 
 from app.services.skill import SkillService
 from app.models.skill import UserSkillEntry
+from app.core.general import random_names
+
+import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -40,72 +45,6 @@ class UserService:
         if existing:
             logger.warning("Email already exists: %s", email)
             raise HTTPException(status.HTTP_409_CONFLICT, "Email already in use")
-
-    # ---------- CRUD ----------
-    # def create_user(self, user: UserCreate) -> Dict[str, Any]:
-    #     if not user.email or not user.passcode:
-    #         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Email and password are required")
-    #     if user.role == "SA":
-    #         raise HTTPException(status.HTTP_403_FORBIDDEN, "Cannot create super admin users")
-
-    #     # Ensure email unique in our DB first
-    #     self._ensure_unique_email(user.email)
-
-    #     if user.role in ("FL"):
-    #         signup_token = getattr(user, "signup_token", None)
-    #         if signup_token:
-    #             logger.debug("Validating signup token: %s", signup_token)
-    #             token_validity_check = self.token_service.validate_token_for_signup(token=signup_token)
-    #             if not token_validity_check:
-    #                 logger.warning("Invalid signup token: %s", signup_token)
-    #                 raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid signup token")
-    #         else:
-    #             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Missing signup token")
-
-    #     user.user_id = user.user_id or str(uuid.uuid4())
-    #     keycloak_payload = {
-    #         "username": user.user_id,
-    #         "email": user.email,
-    #         "firstName": user.first_name,
-    #         "lastName": user.last_name,
-    #         "enabled": True,
-    #         "emailVerified": True,
-    #         "credentials": [{"type": "password", "value": user.passcode, "temporary": False}],
-    #         "attributes": {"role": user.role},
-    #     }
-
-    #     keycloak_id = None
-    #     try:
-    #         logger.debug("Creating user in Keycloak: %s", {"username": user.user_id, "email": user.email})
-    #         keycloak_id = create_user_in_keycloak(keycloak_payload)
-    #         user.keycloak_id = keycloak_id
-    #     except HTTPException:
-    #         # If your keycloak client already raises HTTPException, just bubble it.
-    #         logger.exception("Keycloak creation failed for email=%s", user.email)
-    #         raise
-    #     except Exception as e:
-    #         logger.exception("Keycloak creation failed (unexpected) for email=%s", user.email)
-    #         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Identity provider error: {e}")
-
-    #     # Save to Mongo; roll back Keycloak if DB fails
-    #     try:
-    #         logger.debug("Persisting user to Mongo: user_id=%s email=%s", user.user_id, user.email)
-    #         created = self.user_repo.create_user(user)
-    #         logger.info("User created: user_id=%s email=%s", user.user_id, user.email)
-    #         return created
-    #     except PyMongoError as e:
-    #         logger.exception("Mongo error on user create; attempting Keycloak rollback. user_id=%s", user.user_id)
-    #         # Best effort rollback in Keycloak
-    #         try:
-    #             if keycloak_id:
-    #                 delete_user_in_keycloak(keycloak_id)
-    #                 logger.info("Rolled back Keycloak user: keycloak_id=%s", keycloak_id)
-    #         except Exception:
-    #             logger.error("Failed to roll back Keycloak user keycloak_id=%s", keycloak_id)
-    #         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to save user")
-    #     except Exception as e:
-    #         logger.exception("Unexpected error on user create: %s", e)
-    #         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to create user")
         
     def create_user(self, user: UserCreate) -> Dict[str, Any]:
         # Basic validation
@@ -153,7 +92,11 @@ class UserService:
             logger.debug("Creating user in Keycloak: %s", {"username": user.user_id, "email": user.email})
             # Note: create_user_in_keycloak(token, payload) expected signature
             keycloak_id = create_user_in_keycloak(keycloak_payload)
+            user.username = random.choice(random_names) + "_" + random.randint(1000,9999).__str__()
             user.keycloak_id = keycloak_id
+            user.kyc = False  # default KYC to False on creation
+            user.first_intro_done = False
+            user.update_cool_down_period = 5
         except HTTPException:
             logger.exception("Keycloak creation failed for email=%s", user.email)
             raise
@@ -236,24 +179,6 @@ class UserService:
         except Exception as e:
             logger.exception("Error listing freelancers: %s", e)
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to fetch freelancers")
-
-    # def update_user(self, user_id: str, user: UserUpdate) -> Dict[str, Any]:
-    #     if not user_id:
-    #         raise HTTPException(status.HTTP_400_BAD_REQUEST, "user_id is required")
-    #     try:
-    #         updated = self.user_repo.update_user(user_id, user)
-    #         if not updated:
-    #             raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
-    #         logger.info("User updated: user_id=%s", user_id)
-    #         return updated
-    #     except HTTPException:
-    #         raise
-    #     except PyMongoError:
-    #         logger.exception("Mongo error updating user_id=%s", user_id)
-    #         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to update user")
-    #     except Exception:
-    #         logger.exception("Unexpected error updating user_id=%s", user_id)
-    #         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to update user")
         
     def update_user(self, user_id: str, user_data: Dict[str, Any], current_user: Dict[str, Any]) -> Dict[str, Any]:
         if not user_id:
@@ -272,9 +197,23 @@ class UserService:
         allowed_fields = {
             "first_name", "last_name", "username", "email", "phone_number", "bio",
             "designation", "experience_years", "experience_months", "profile_pic",
-            "language_preference", "skill_set", "contact_info", "company_info", "payment_information", "notification_service"
+            "language_preference", "skill_set", "contact_info", "company_info", "payment_information", "notification_service", "kyc", "first_intro_done",
+            "user_settings"
         }
         update_payload = {k: v for k, v in user_data.items() if k in allowed_fields}
+
+        protected = ["first_name", "last_name", "username", "email", "phone_number"]
+
+        # update_payload is a dict
+        if any(k in update_payload for k in protected): 
+            user_details = self.user_repo.get_user_by_id(user_id)
+            if user_details:
+                days_to_wait = user_details.get("update_cool_down_period", 5)
+                created_at = user_details.get("audit_log", {}).get("created_at")
+                if created_at:
+                    next_allowed_update = created_at + timedelta(days=days_to_wait)
+                    if datetime.datetime.utcnow() < next_allowed_update:
+                        raise HTTPException(status_code=403, detail=f"User details can be updated only after {user_details['update_cool_down_period']} days from created date.")
 
         try:
             updated = self.user_repo.update_user(user_id=user_id, update_payload=update_payload)
