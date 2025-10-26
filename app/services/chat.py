@@ -163,11 +163,11 @@ class ChatService:
         next_before = docs[0]["created_at"] if docs else None
         return docs, has_more, next_before
 
-    def get_chat_history(self, group_type: str, request_id: str, limit: int = 100, before_iso: str = None):
-        return self.repo.get_history(group_type, request_id, limit=limit, before_iso=before_iso)
+    def get_chat_history(self, group_type: str, group_id: str, limit: int = 100, before_iso: str = None):
+        return self.repo.get_history(group_type, group_id, limit=limit, before_iso=before_iso)
 
-    def mark_seen(self, group_type: str, request_id: str, user_id: str) -> int:
-        return self.repo.mark_seen(group_type, request_id, user_id)
+    def mark_seen(self, group_type: str, group_id: str, user_id: str) -> int:
+        return self.repo.mark_seen(group_type, group_id, user_id)
 
-    def get_unseen_count(self, group_type: str, request_id: str, user_id: str) -> int:
-        return self.repo.get_unseen_count(group_type, request_id, user_id)
+    def get_unseen_count(self, group_type: str, group_id: str, user_id: str) -> int:
+        return self.repo.get_unseen_count(group_type, group_id, user_id)
