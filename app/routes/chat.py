@@ -236,7 +236,7 @@ async def ws_project(request_id: str, websocket: WebSocket, token: Optional[str]
         chat_service = ChatService()
 
         # Send last N messages
-        history = chat_service.get_chat_history("project", request_id, limit=100)
+        history = chat_service.get_chat_history("project", project_id, limit=100)
         for h in history:
             await websocket.send_json({"type": "history", "payload": h})
 
