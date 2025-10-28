@@ -13,6 +13,7 @@ router = APIRouter(prefix="/requests", tags=["REQUESTS"])
 def get_request_service() -> RequestService:
     return RequestService()
 
+
 @router.post("/", response_model=APIResponse[RequestOut], status_code=status.HTTP_201_CREATED)
 def send_request(data: RequestCreate, current_user: Dict[str, Any] = Depends(get_current_user), svc: RequestService = Depends(get_request_service)):
     logger.debug(f"Send request by user_id={current_user.get('user_id')} role={current_user.get('role')} to freelancer_id={data.freelancer_id}")
@@ -53,6 +54,7 @@ def cancel_request_by_parties(
 @router.get("/sent", response_model=APIResponse[List[RequestOut]])
 def list_sent_requests(current_user: Dict[str, Any] = Depends(get_current_user), svc: RequestService = Depends(get_request_service)):
     logger.debug(f"List sent requests by user_id={current_user.get('user_id')} role={current_user.get('role')}")
+    
     if current_user["role"] != "CL":
         logger.warning("Non-client attempted to view sent requests.")
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only clients can view sent requests")

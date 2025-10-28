@@ -1,6 +1,8 @@
 from typing import Optional, List
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field, EmailStr, validator
 from enum import Enum
+import re
+from fastapi import HTTPException, status
 
 # 1. Define the Role Enum
 class RoleEnum(str, Enum):
@@ -70,6 +72,22 @@ class UserCreate(UserBase):
     signup_token: Optional[str] = Field(None, example="eyJhbGciOi...signup_token")  # For FL role
     update_cool_down_period: Optional[int] = Field(5, example=0)  # in days
 
+
+    @validator("passcode")
+    def validate_passcode_strength(cls, v: str) -> str:
+        pattern = r"(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':\",.<>\/?\\|`~])"
+        if len(v) < 8:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Passcode must be at least 8 characters long."
+            )
+        if not re.search(pattern, v):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Passcode must contain at least one uppercase letter, one lowercase letter, one number, and one special character."
+            )
+        return v
+
     class Config:
        json_schema_extra= {
             "example": {
@@ -117,7 +135,7 @@ class UserSettingInfo(BaseModel):
 class UserUpdate(BaseModel):
     first_name: Optional[str] = Field(None, example="Johnny")
     last_name: Optional[str] = Field(None, example="Doe")
-    username: Optional[str] = Field(None, example="johnnydoe")
+    # username: Optional[str] = Field(None, example="johnnydoe")
     email: Optional[EmailStr] = Field(None, example="johnny@example.com")
     phone_number: Optional[str] = Field(None, example="+919812345678")
     bio: Optional[str] = Field(None, example="Freelance web developer", max_length=210)

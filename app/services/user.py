@@ -21,7 +21,7 @@ from app.core.config import config
 
 from app.services.skill import SkillService
 from app.models.skill import UserSkillEntry
-from app.core.general import random_names
+from app.core.general import generate_random_name
 
 import datetime
 
@@ -92,11 +92,12 @@ class UserService:
             logger.debug("Creating user in Keycloak: %s", {"username": user.user_id, "email": user.email})
             # Note: create_user_in_keycloak(token, payload) expected signature
             keycloak_id = create_user_in_keycloak(keycloak_payload)
-            user.username = random.choice(random_names) + "_" + random.randint(1000,9999).__str__()
+            user.username = generate_random_name()
             user.keycloak_id = keycloak_id
             user.kyc = False  # default KYC to False on creation
             user.first_intro_done = False
             user.update_cool_down_period = 5
+
         except HTTPException:
             logger.exception("Keycloak creation failed for email=%s", user.email)
             raise
@@ -108,6 +109,7 @@ class UserService:
         created = None
         try:
             logger.debug("Persisting user to Mongo: user_id=%s email=%s", user.user_id, user.email)
+            print("User data to be created:", user.model_dump())
             created = self.user_repo.create_user(user)
             logger.info("User created in DB: user_id=%s email=%s", user.user_id, user.email)
         except PyMongoError as e:
@@ -195,7 +197,7 @@ class UserService:
 
         # Optional: whitelist allowed fields to avoid accidental writes
         allowed_fields = {
-            "first_name", "last_name", "username", "email", "phone_number", "bio",
+            "first_name", "last_name", "email", "phone_number", "bio",
             "designation", "experience_years", "experience_months", "profile_pic",
             "language_preference", "skill_set", "contact_info", "company_info", "payment_information", "notification_service", "kyc", "first_intro_done",
             "user_settings"
@@ -295,7 +297,7 @@ class UserService:
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Identity provider error: {e}")
 
     # ---------- Admin ----------
-    def ban_user(self, user_id: str):
+    def ban_user(self, user_id: str, reason: str) -> Dict[str, Any]:
         if not user_id:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "user_id is required")
         try:
@@ -304,7 +306,7 @@ class UserService:
                 raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found.")
             if user.get("status") == "BANNED":
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, "User already banned.")
-            result = self.user_repo.ban_user(user_id)
+            result = self.user_repo.ban_user(user_id, reason)
             logger.info("User banned: user_id=%s", user_id)
             return result
         except HTTPException:

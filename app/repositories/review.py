@@ -127,11 +127,17 @@ class ReviewRepository:
         return list(self.collection.aggregate(pipeline))
 
 
-    def average_rating_for_freelancer(self, freelancer_id: str) -> float:
-        pipeline = [
-            {"$match": {"freelancer_id": freelancer_id}},
-            {"$group": {"_id": "$freelancer_id", "avg": {"$avg": "$stars"}, "count": {"$sum": 1}}}
-        ]
+    def average_rating_for_freelancer(self, type: str, user_id: str) -> float:
+        if type == "client":
+            pipeline = [
+                {"$match": {"client_id": user_id}},
+                {"$group": {"_id": "$client_id", "avg": {"$avg": "$stars"}, "count": {"$sum": 1}}}
+            ]
+        else:
+            pipeline = [
+                {"$match": {"freelancer_id": user_id}},
+                {"$group": {"_id": "$freelancer_id", "avg": {"$avg": "$stars"}, "count": {"$sum": 1}}}
+            ]
         res = list(self.collection.aggregate(pipeline))
         if not res:
             return 0.0

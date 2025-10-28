@@ -58,9 +58,9 @@ def refresh_token(payload: RefreshRequest, svc: UserService = Depends(get_user_s
     logger.info("Token refreshed successfully")
     return ok(data=tokens, message="Token refreshed")
 
-@router.put("/me", response_model=APIResponse[UserOut], status_code=status.HTTP_200_OK)
-def update_me(update: UserUpdate, svc: UserService = Depends(get_user_service)):
-    logger.debug(f"Update profile request: {update.model_dump(exclude_unset=True)}")
-    updated: UserOut = svc.update_current_user(update)
-    logger.info(f"Profile updated for user: {updated.id}")
-    return ok(data=updated, message="Profile updated")
+# @router.put("/me", response_model=APIResponse[UserOut], status_code=status.HTTP_200_OK)
+# def update_me(update: UserUpdate, svc: UserService = Depends(get_user_service)):
+#     logger.debug(f"Update profile request: {update.model_dump(exclude_unset=True)}")
+#     updated: UserOut = svc.update_current_user(update)
+#     logger.info(f"Profile updated for user: {updated.id}")
+#     return ok(data=updated, message="Profile updated")

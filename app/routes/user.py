@@ -103,15 +103,19 @@ def delete_user(user_id: str, current_user: Dict[str, Any] = Depends(get_current
     logger.info(f"User deleted: user_id={user_id}")
     return ok(message="User deleted", data=None, status_code=status.HTTP_200_OK)
 
-@router.patch("/ban/{user_id}", response_model=APIResponse[None])
-def ban_user(user_id: str, current_user: Dict[str, Any] = Depends(get_current_user), svc: UserService = Depends(get_user_service)):
+@router.patch("/ban/{user_id}/{reason}", response_model=APIResponse[None])
+def ban_user(user_id: str, reason: str, current_user: Dict[str, Any] = Depends(get_current_user), svc: UserService = Depends(get_user_service)):
     logger.debug(f"Ban requested by user_id={current_user.get('user_id')} target={user_id}")
     if current_user["role"] != "SA":
         logger.warning("Non-SA attempted to ban user.")
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only super admin can ban users")
     if not user_id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "User ID is required to ban a user")
-    svc.ban_user(user_id)
+    if reason == "" or reason is None or reason.strip() == ""  or reason.lower() == "null" :
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Reason is required to ban a user")
+    if len(reason) > 50:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Reason length should be less than 50 characters")
+    svc.ban_user(user_id, reason)
     logger.info(f"User banned: user_id={user_id}")
     return ok(message="User has been banned", data=None, status_code=status.HTTP_200_OK)
 

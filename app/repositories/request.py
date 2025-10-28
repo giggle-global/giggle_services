@@ -4,7 +4,7 @@ from pymongo.collection import Collection
 from fastapi import HTTPException
 from app.core.db import database
 from app.models.request import RequestStatus
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 
 class RequestRepository:
@@ -44,14 +44,29 @@ class RequestRepository:
         if result.matched_count == 0:
             raise HTTPException(404, "Request not found.")
         return self.collection.find_one({"request_id": request_id}, {"_id": 0})
+    
+    def cancel_expired_requests(self) -> int:
+        """
+        Mark all pending requests older than 24 hours as 'cancelled'.
+        Returns count of modified docs.
+        Call this before listing or in endpoints that need up-to-date states.
+        """
+        cutoff = datetime.now(timezone.utc) - timedelta(days=1)
+        result = self.collection.update_many(
+            {"status": "pending", "created_at": {"$lte": cutoff}},
+            {"$set": {"status": "cancelled", "cancelled_at": datetime.now(timezone.utc)}}
+        )
+        return result.modified_count
 
     
 
     def get_sent_requests(self, client_id: str) -> list:
         print("Fetching sent requests for client:", client_id)
+        cancelled_count = self.cancel_expired_requests()
+        print(f"Cancelled {cancelled_count} expired requests.")
         print(self.user.name)
         pipeline = [
-            {"$match": {"client_id": client_id}},
+            {"$match": {"client_id": client_id, "status": {"$in": [RequestStatus.PENDING.value, RequestStatus.ACCEPTED.value]}}},
             {
                 "$lookup": {
                     "from": self.user.name,

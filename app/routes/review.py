@@ -76,10 +76,11 @@ def list_by_client(
 
 
 # ➤ Average Rating for Freelancer
-@router.get("/freelancer/{freelancer_id}/average", response_model=APIResponse)
+@router.get("/average/review/{type}/{user_id}", response_model=APIResponse)
 def avg_rating(
-    freelancer_id: str,
+    type: str,
+    user_id: str,
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    avg = service.average_rating(freelancer_id, current_user)
-    return ok({"freelancer_id": freelancer_id, "average": avg}, "Average rating fetched", status.HTTP_200_OK)
+    avg = service.average_rating(type, user_id, current_user)
+    return ok({"user_id": user_id, "average": avg}, "Average rating fetched", status.HTTP_200_OK)

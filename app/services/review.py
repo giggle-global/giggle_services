@@ -62,9 +62,11 @@ class ReviewService:
             return self.repo.list_reviews_by_client(client_id, limit, skip)
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    def average_rating(self, freelancer_id: str, current_user: dict) -> float:
+    def average_rating(self, type: str, user_id: str, current_user: dict) -> float:
         role = current_user.get("role")
         uid = current_user.get("user_id")
-        if role == RoleEnum.SUPER_ADMIN.value or (role == RoleEnum.FREELANCER.value and uid == freelancer_id):
-            return self.repo.average_rating_for_freelancer(freelancer_id)
-        raise HTTPException(status_code=403, detail="Not authorized")
+        return self.repo.average_rating_for_freelancer(type, user_id)
+
+        # if role == RoleEnum.SUPER_ADMIN.value or (role == RoleEnum.FREELANCER.value and uid == user_id):
+        #     return self.repo.average_rating_for_freelancer(user_id)
+        # raise HTTPException(status_code=403, detail="Not authorized")

@@ -19,12 +19,11 @@ from app.core.db import database
 from app.core.audit_log import define_logger
 from app.core.constant import error_messages
 from app.core.models.audit_log import OperationType, AuditLogInfoType
-from app.core.constant import ROLE_ACCESS
 from pymongo.collection import Collection
 from cryptography.fernet import Fernet
 from app.core.config import config
 
-KEY = config["secret_key"].encode("utf-8")
+KEY = config["client_secret"].encode("utf-8")
 
 
 def generate_id(length: int) -> str:
@@ -132,56 +131,7 @@ def validate_alphabets(value):
     return value
 
 
-def check_user_access(
-    function_name: str,
-    role: list,
-    request: Request = None,
-    user: dict = None,
-):
-    """
-    Function to check the authorization of the user.
-    """
-    loggername = inspect.stack()[0]
-    pid = os.getpid()
-    if role:
-        # Check if the roles are not empty
-        if not ROLE_ACCESS:
-            error_response = error_response_model(code=403, error_code=7000)
-            define_logger(
-                level=30,
-                request=request,
-                user=user,
-                loggName=loggername,
-                pid=pid,
-                message=error_messages[7000],
-            )
-            raise HTTPException(status_code=403, detail=error_response)
 
-        data = ROLE_ACCESS[function_name]
-        common_item = set(role) & set(data)
-        if not common_item:
-            error_response = error_response_model(code=401, error_code=4001)
-            define_logger(
-                level=30,
-                request=request,
-                user=user,
-                loggName=loggername,
-                pid=pid,
-                message=error_messages[4001],
-            )
-            raise HTTPException(status_code=401, detail=error_response)
-        return True
-
-    define_logger(
-        level=40,
-        request=request,
-        user=user,
-        loggName=loggername,
-        pid=pid,
-        message=error_messages[7000],
-    )
-    error_response = error_response_model(code=422, error_code=7000)
-    raise HTTPException(status_code=422, detail=error_response)
 
 
 def auditloginfo(uid: str, name: str, ops: OperationType, prefix: str = None):
@@ -342,6 +292,12 @@ def generate_epoch_with_string(append_str):
     result = f"{epoch_time}_{append_str}"
 
     return result
+
+def generate_random_name() -> str:
+    """Generate a random name from a predefined set of names."""
+    name = random.choice(list(random_names))
+    name_with_suffix = f"{name}_{random.randint(1000, 9999)}"
+    return name_with_suffix
 
 
 random_names = {'vexmier', 'marsaas', 'aricour', 'beldiox', 'jasas', 'darriel', 'jasrees', 'finsais', 'zenzean', 'orataes', 
