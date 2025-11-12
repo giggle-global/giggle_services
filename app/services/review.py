@@ -2,11 +2,15 @@
 from typing import List, Optional
 from fastapi import HTTPException
 from app.repositories.review import ReviewRepository
+from app.repositories.user import UserRepository
+from app.repositories.agreements import AgreementRepository
 from app.models.review import ReviewCreate, ReviewUpdate, ReviewOut, RoleEnum
 
 class ReviewService:
     def __init__(self, repo: Optional[ReviewRepository] = None):
         self.repo = repo or ReviewRepository()
+        self.user_repo = UserRepository()
+        self.agreement_repo = AgreementRepository()
 
     def create_review(self, review_in: ReviewCreate, current_user: dict) -> dict:
         # Only clients can create reviews
@@ -16,6 +20,15 @@ class ReviewService:
         if current_user.get("user_id") != review_in.client_id:
             raise HTTPException(status_code=403, detail="client_id mismatch")
         # Optionally: validate freelancer exists (repo or user service)
+        full_client = self.user_repo.get_user_by_id(review_in.client_id)
+        if not full_client:
+            raise HTTPException(status_code=404, detail="Client not found")
+        full_client_company_name = full_client.get("company_info", {}).get("company_name", "")
+        review_in.client_company_name = full_client_company_name
+        gig_data = self.agreement_repo.get_by_id(review_in.gig_id)
+        if not gig_data:
+            raise HTTPException(status_code=404, detail="Gig not found")
+        review_in.gig_title = gig_data.get("title", "")
         return self.repo.create_review(review_in)
 
     def update_review(self, review_id: str, update: ReviewUpdate, current_user: dict) -> dict:

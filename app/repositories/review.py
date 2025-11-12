@@ -119,6 +119,8 @@ class ReviewRepository:
                 "comment": 1,
                 "created_at": 1,
                 "updated_at": 1,
+                "client_company_name": 1,
+                "gig_title": 1,
                 "freelancer_first_name": "$freelancer_info.first_name",
                 "freelancer_last_name": "$freelancer_info.last_name",
                 "freelancer_avatar_url": "$freelancer_info.profile_pic"

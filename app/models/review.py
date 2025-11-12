@@ -11,8 +11,11 @@ class RoleEnum(str, Enum):
 class ReviewBase(BaseModel):
     client_id: str
     freelancer_id: str
+    gig_id: str
     stars: conint(ge=1, le=5)  # integer 1..5
     comment: Optional[str] = None
+    client_company_name: Optional[str] = None
+    gig_title: Optional[str] = None
 
 class ReviewCreate(ReviewBase):
     # created_at will be set by repository/service as epoch int
