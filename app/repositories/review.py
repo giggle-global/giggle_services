@@ -88,6 +88,8 @@ class ReviewRepository:
                 "comment": 1,
                 "created_at": 1,
                 "updated_at": 1,
+                "client_company_name": 1,
+                "gig_title": 1,
                 "client_first_name": "$client_info.first_name",
                 "client_last_name": "$client_info.last_name",
                 "client_avatar_url": "$client_info.profile_pic"
