@@ -218,6 +218,17 @@ class RequestService:
         except PyMongoError:
             logger.exception("Mongo error fetching request: id=%s", request_id)
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to fetch request")
+    
+    def get_request_by_parties(self, project_id: str, freelancer_id: str, client_id: str) -> Optional[Dict[str, Any]]:
+        """Get request by project_id, client_id, and freelancer_id"""
+        if not project_id or not freelancer_id or not client_id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "project_id, freelancer_id, and client_id are required")
+        try:
+            request = self.repo.get_request_by_parties(project_id, freelancer_id, client_id)
+            return request
+        except PyMongoError:
+            logger.exception("Mongo error fetching request by parties: project_id=%s client_id=%s freelancer_id=%s", project_id, client_id, freelancer_id)
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to fetch request")
 
     def project_exists(self, project_id: str, user_id: str, role: str) -> bool:
         if not project_id or not user_id or not role:

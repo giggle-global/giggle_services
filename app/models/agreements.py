@@ -28,6 +28,7 @@ class UserRef(BaseModel):
     user_id: str
     name: Optional[str] = None
     email: Optional[EmailStr] = None
+    username: Optional[str] = None
     avatar_url: Optional[str] = None
 
     class Config:
@@ -36,6 +37,7 @@ class UserRef(BaseModel):
                 "user_id": "client123",
                 "name": "Alice Johnson",
                 "email": "alice@example.com",
+                "username": "alice_johnson",
                 "avatar_url": "https://example.com/avatars/alice.png"
             }
         }

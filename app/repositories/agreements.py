@@ -17,7 +17,38 @@ class AgreementRepository:
         return self.get_by_id(doc["agreement_id"])
 
     def get_by_id(self, agreement_id: str) -> Optional[Dict[str, Any]]:
-        return self.col.find_one({"agreement_id": agreement_id}, {"_id": 0})
+        pipeline = [
+            {"$match": {"agreement_id": agreement_id}},
+            # lookup client user doc
+            {"$lookup": {
+                "from": "user",
+                "localField": "client.user_id",
+                "foreignField": "user_id",
+                "as": "client_user"
+            }},
+            {"$unwind": {"path": "$client_user", "preserveNullAndEmptyArrays": True}},
+            # lookup freelancer user doc
+            {"$lookup": {
+                "from": "user",
+                "localField": "freelancer.user_id",
+                "foreignField": "user_id",
+                "as": "freelancer_user"
+            }},
+            {"$unwind": {"path": "$freelancer_user", "preserveNullAndEmptyArrays": True}},
+            # pull profile pic and username into top-level fields
+            {"$addFields": {
+                "client_profile_pic": "$client_user.profile_pic",
+                "freelancer_profile_pic": "$freelancer_user.profile_pic",
+                # populate username in client UserRef
+                "client.username": "$client_user.username",
+                # populate username in freelancer UserRef
+                "freelancer.username": "$freelancer_user.username"
+            }},
+            # remove helper nested docs and _id
+            {"$project": {"client_user": 0, "freelancer_user": 0, "_id": 0}}
+        ]
+        results = list(self.col.aggregate(pipeline))
+        return results[0] if results else None
     
     def get_filtered(self, filter: Dict[str, Any]) -> List[Dict[str, Any]]:
         pipeline = [
@@ -38,10 +69,14 @@ class AgreementRepository:
                 "as": "freelancer_user"
             }},
             {"$unwind": {"path": "$freelancer_user", "preserveNullAndEmptyArrays": True}},
-            # pull only the profile pic into top-level fields
+            # pull profile pic and username into top-level fields
             {"$addFields": {
                 "client_profile_pic": "$client_user.profile_pic",
-                "freelancer_profile_pic": "$freelancer_user.profile_pic"
+                "freelancer_profile_pic": "$freelancer_user.profile_pic",
+                # populate username in client UserRef
+                "client.username": "$client_user.username",
+                # populate username in freelancer UserRef
+                "freelancer.username": "$freelancer_user.username"
             }},
             # remove helper nested docs and _id if you don't want it returned
             {"$project": {"client_user": 0, "freelancer_user": 0, "_id": 0}}

@@ -63,6 +63,8 @@ class TicketCreate(BaseModel):
     freelancer_id: Optional[str] = Field(None, description="Target freelancer id (when caller is client)")
     subject: str
     description: Optional[str] = None
+    project_id: Optional[str] = Field(None, description="Optional project ID associated with this ticket")
+    agreement_id: Optional[str] = Field(None, description="Optional agreement ID associated with this ticket")
 
     @model_validator(mode="after")
     def check_exactly_one_target(cls, values):
@@ -123,6 +125,8 @@ class TicketOut(BaseModel):
     description: str = Field(..., example="When I log in, the dashboard page shows a 500 error.")
     status: TicketStatus = Field(..., example="open")
     solution: Optional[str] = Field(None, example="Issue resolved by updating API gateway.")
+    project_id: Optional[str] = Field(None, example="prj-12345")
+    agreement_id: Optional[str] = Field(None, example="agr-12345")
     timeline: Optional[List[TimelineEntry]] = Field(
         None,
         example=[

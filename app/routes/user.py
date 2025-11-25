@@ -48,17 +48,54 @@ def list_all_users(current_user: Dict[str, Any] = Depends(get_current_user), svc
     logger.info(f"All users list fetched: count={len(users) if users else 0}")
     return ok(data=users, message="All users fetched")  
 
-@router.get("/profile/{user_id}", response_model=APIResponse[Dict [str, Any]])
-def get_profile(user_id: str, current_user: Dict[str, Any] = Depends(get_current_user), svc: UserService = Depends(get_user_service)):
-    logger.debug(f"Profile fetch requested by user_id={current_user.get('user_id')} for target={user_id}")
-    if current_user["role"] != "SA" and current_user["role"] != "CL":
-        logger.warning("Non-SA or Non-Client attempted to view other user's profile.")
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only super admin and clients can view Freelancers users")
+@router.get("/profile/{user_id}", response_model=APIResponse[Dict[str, Any]])
+def get_profile(
+    user_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    svc: UserService = Depends(get_user_service)
+):
+    logger.debug(
+        "Profile fetch requested by user_id=%s (role=%s) for target=%s",
+        current_user.get("user_id"),
+        current_user.get("role"),
+        user_id
+    )
+
+    requester_role = current_user.get("role")
+
+    # Only allow SA, clients, and freelancers to fetch profiles
+    if requester_role not in ("SA", "CL", "FL"):
+        logger.warning(
+            "Unauthorized role attempted to view profile. role=%s requester=%s",
+            requester_role,
+            current_user.get("user_id")
+        )
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Not authorized to view profiles")
+
     user = svc.get_user(user_id=user_id)
-    if current_user["role"] == "CL" and user["role"] != "FL" and user["status"] != "ACTIVE":
-        logger.warning("Client attempted to view non-Freelancer profile.")
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Clients can only view Active Freelancer profiles")
-    logger.info(f"Profile fetched for user_id={user_id}")
+
+    if requester_role == "CL":
+        # Clients can only view active freelancers
+        if user.get("role") != "FL" or user.get("status") != "ACTIVE":
+            logger.warning(
+                "Client attempted to view unauthorized profile. requester=%s target_role=%s target_status=%s",
+                current_user.get("user_id"),
+                user.get("role"),
+                user.get("status")
+            )
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Clients can only view active freelancer profiles")
+
+    elif requester_role == "FL":
+        # Freelancers can only view client profiles
+        if user.get("role") != "CL":
+            logger.warning(
+                "Freelancer attempted to view unauthorized profile. requester=%s target_role=%s",
+                current_user.get("user_id"),
+                user.get("role")
+            )
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Freelancers can only view client profiles")
+
+    logger.info("Profile fetched for user_id=%s by requester=%s", user_id, current_user.get("user_id"))
     return ok(data=user, message="User profile fetched")
 
 @router.put("/", response_model=APIResponse[Dict [str, Any]])
@@ -129,3 +166,54 @@ def get_skills(
     """
     updated = ssc.list_skills(category=None)
     return {"data": updated, "message": "Skills fetched", "code": 200}
+
+@router.get("/admin/dashboard", response_model=APIResponse[Dict[str, Any]])
+def get_admin_dashboard(
+    current_user: Dict[str, Any] = Depends(get_current_user), 
+    svc: UserService = Depends(get_user_service)
+):
+    """
+    Get admin dashboard statistics including KPIs, charts data
+    Only super admin can access this endpoint
+    """
+    logger.debug(f"Dashboard stats requested by user_id={current_user.get('user_id')} role={current_user.get('role')}")
+    if current_user.get("role") != "SA":
+        logger.warning("Non-SA attempted to fetch dashboard stats (forbidden).")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only super admin can access dashboard statistics")
+    
+    try:
+        stats = svc.get_dashboard_stats()
+        logger.info(f"Dashboard stats fetched successfully")
+        return ok(data=stats, message="Dashboard statistics fetched")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error fetching dashboard stats")
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to fetch dashboard statistics")
+
+@router.get("/freelancer/dashboard", response_model=APIResponse[Dict[str, Any]])
+def get_freelancer_dashboard(
+    current_user: Dict[str, Any] = Depends(get_current_user), 
+    svc: UserService = Depends(get_user_service)
+):
+    """
+    Get freelancer dashboard statistics including KPIs
+    Only freelancers can access this endpoint
+    """
+    logger.debug(f"Freelancer dashboard stats requested by user_id={current_user.get('user_id')} role={current_user.get('role')}")
+    if current_user.get("role") != "FL":
+        logger.warning("Non-freelancer attempted to fetch freelancer dashboard stats (forbidden).")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only freelancers can access freelancer dashboard statistics")
+    
+    try:
+        freelancer_id = current_user.get("user_id")
+        if not freelancer_id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "User ID not found")
+        stats = svc.get_freelancer_dashboard_stats(freelancer_id)
+        logger.info(f"Freelancer dashboard stats fetched successfully for user_id={freelancer_id}")
+        return ok(data=stats, message="Freelancer dashboard statistics fetched")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error fetching freelancer dashboard stats")
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to fetch freelancer dashboard statistics")

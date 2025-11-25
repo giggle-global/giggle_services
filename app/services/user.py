@@ -1,5 +1,5 @@
 # app/services/user.py
-from datetime import timedelta
+from datetime import timedelta, datetime
 import random
 import uuid
 import logging
@@ -23,7 +23,7 @@ from app.services.skill import SkillService
 from app.models.skill import UserSkillEntry
 from app.core.general import generate_random_name
 
-import datetime
+from app.core.db import database
 
 logger = logging.getLogger(__name__)
 
@@ -371,3 +371,256 @@ class UserService:
         except Exception as e:
             logger.exception("Unexpected error creating root user")
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to create root user")
+
+    def get_dashboard_stats(self) -> Dict[str, Any]:
+        """Get admin dashboard statistics"""
+        try:
+            user_collection = database["user"]
+            agreement_collection = database["agreements"]
+            ticket_collection = database["tickets"]
+            
+            # KPI Cards
+            total_users = user_collection.count_documents({})
+            banned_accounts = user_collection.count_documents({"status": "BANNED"})
+            active_projects = agreement_collection.count_documents({"status": "Active"})
+            resolved_disputes = ticket_collection.count_documents({"status": {"$in": ["resolved", "closed"]}})
+            
+            # Dispute Resolution Chart
+            ongoing_disputes = ticket_collection.count_documents({"status": {"$in": ["open", "in_progress", "reopened"]}})
+            total_disputes = resolved_disputes + ongoing_disputes
+            dispute_resolution_data = {
+                "ongoing": ongoing_disputes,
+                "resolved": resolved_disputes,
+                "total_users": total_disputes
+            }
+            
+            # Project Activity Chart (Monthly data for last 12 months)
+            now = datetime.utcnow()
+            project_activity_data = {"freelancer": [], "clients": []}
+            months = []
+            
+            # Helper function to get month start N months ago
+            def get_month_start(months_ago: int) -> datetime:
+                """Get the start of the month N months ago"""
+                target_date = now.replace(day=1)  # Start of current month
+                for _ in range(months_ago):
+                    # Go back one month
+                    if target_date.month == 1:
+                        target_date = target_date.replace(year=target_date.year - 1, month=12)
+                    else:
+                        target_date = target_date.replace(month=target_date.month - 1)
+                return target_date
+            
+            for i in range(11, -1, -1):  # Last 12 months (11 months ago to current month)
+                month_start = get_month_start(i)
+                
+                # Calculate month end (start of next month)
+                if month_start.month == 12:
+                    month_end = datetime(month_start.year + 1, 1, 1)
+                else:
+                    month_end = datetime(month_start.year, month_start.month + 1, 1)
+                
+                month_name = month_start.strftime("%b").upper()
+                months.append(month_name)
+                
+                # Count agreements created in this month
+                # Both client and freelancer activity represent agreements created in that month
+                # Client activity: Agreements created (clients initiate agreements)
+                # Freelancer activity: Agreements involving freelancers (all agreements have freelancers)
+                total_agreements = agreement_collection.count_documents({
+                    "created_at": {"$gte": month_start, "$lt": month_end}
+                })
+                
+                # For now, both show the same count (total agreements created)
+                # This represents project activity from both perspectives:
+                # - Clients: How many agreements they created
+                # - Freelancers: How many agreements they're involved in
+                client_count = total_agreements
+                freelancer_count = total_agreements
+                
+                project_activity_data["freelancer"].append(freelancer_count)
+                project_activity_data["clients"].append(client_count)
+            
+            # Dispute Frequency Chart
+            dispute_frequency_weekly = []
+            dispute_frequency_monthly = []
+            dispute_frequency_yearly = []
+            
+            # Weekly (last 7 days) - use timeline first entry timestamp
+            for i in range(6, -1, -1):
+                target_date = now - timedelta(days=i)
+                day_start = datetime(target_date.year, target_date.month, target_date.day, 0, 0, 0)
+                day_end = datetime(target_date.year, target_date.month, target_date.day, 23, 59, 59)
+                # Tickets use timeline[0].timestamp for creation date
+                count = ticket_collection.count_documents({
+                    "timeline.0.timestamp": {"$gte": day_start, "$lte": day_end}
+                })
+                dispute_frequency_weekly.append(count)
+            
+            # Monthly (last 4 weeks)
+            for i in range(3, -1, -1):
+                week_start_date = now - timedelta(days=(i * 7))
+                week_start = datetime(week_start_date.year, week_start_date.month, week_start_date.day, 0, 0, 0)
+                week_end_date = week_start_date + timedelta(days=7)
+                week_end = datetime(week_end_date.year, week_end_date.month, week_end_date.day, 23, 59, 59)
+                count = ticket_collection.count_documents({
+                    "timeline.0.timestamp": {"$gte": week_start, "$lte": week_end}
+                })
+                dispute_frequency_monthly.append(count)
+            
+            # Yearly (last 12 months)
+            for i in range(11, -1, -1):
+                month_start = get_month_start(i)
+                
+                # Calculate month end (start of next month)
+                if month_start.month == 12:
+                    month_end = datetime(month_start.year + 1, 1, 1)
+                else:
+                    month_end = datetime(month_start.year, month_start.month + 1, 1)
+                
+                count = ticket_collection.count_documents({
+                    "timeline.0.timestamp": {"$gte": month_start, "$lt": month_end}
+                })
+                dispute_frequency_yearly.append(count)
+            
+            return {
+                "kpis": {
+                    "total_users": total_users,
+                    "active_projects": active_projects,
+                    "resolved_disputes": resolved_disputes,
+                    "banned_accounts": banned_accounts
+                },
+                "project_activity": {
+                    "months": months,
+                    "freelancer": project_activity_data["freelancer"],
+                    "clients": project_activity_data["clients"]
+                },
+                "dispute_resolution": dispute_resolution_data,
+                "dispute_frequency": {
+                    "weekly": dispute_frequency_weekly,
+                    "monthly": dispute_frequency_monthly,
+                    "yearly": dispute_frequency_yearly
+                }
+            }
+        except Exception as e:
+            logger.exception("Error fetching dashboard stats")
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to fetch dashboard statistics")
+
+    def get_freelancer_dashboard_stats(self, freelancer_id: str) -> Dict[str, Any]:
+        """Get freelancer dashboard statistics"""
+        try:
+            agreement_collection = database["agreements"]
+            request_collection = database["chat_requests"]
+            now = datetime.utcnow()
+            
+            # Current month range
+            current_month_start = datetime(now.year, now.month, 1)
+            if now.month == 12:
+                current_month_end = datetime(now.year + 1, 1, 1)
+            else:
+                current_month_end = datetime(now.year, now.month + 1, 1)
+            
+            # Previous month range
+            if now.month == 1:
+                previous_month_start = datetime(now.year - 1, 12, 1)
+                previous_month_end = datetime(now.year, 1, 1)
+            else:
+                previous_month_start = datetime(now.year, now.month - 1, 1)
+                previous_month_end = datetime(now.year, now.month, 1)
+            
+            # Active Projects - agreements where freelancer is involved and status is Active
+            active_projects = agreement_collection.count_documents({
+                "freelancer.user_id": freelancer_id,
+                "status": "Active"
+            })
+            
+            # Completed Projects - agreements where freelancer is involved and status is Completed
+            completed_projects = agreement_collection.count_documents({
+                "freelancer.user_id": freelancer_id,
+                "status": "Completed"
+            })
+            
+            # Project Requests - requests where freelancer is the recipient
+            project_requests = request_collection.count_documents({
+                "freelancer_id": freelancer_id,
+                "status": {"$in": ["pending", "accepted"]}
+            })
+            
+            # Calculate trends (current month vs previous month)
+            # Active Projects trend
+            active_current_month = agreement_collection.count_documents({
+                "freelancer.user_id": freelancer_id,
+                "status": "Active",
+                "created_at": {"$gte": current_month_start, "$lt": current_month_end}
+            })
+            active_previous_month = agreement_collection.count_documents({
+                "freelancer.user_id": freelancer_id,
+                "status": "Active",
+                "created_at": {"$gte": previous_month_start, "$lt": previous_month_end}
+            })
+            active_trend = self._calculate_percentage_change(active_previous_month, active_current_month)
+            
+            # Project Requests trend
+            requests_current_month = request_collection.count_documents({
+                "freelancer_id": freelancer_id,
+                "created_at": {"$gte": int(current_month_start.timestamp()), "$lt": int(current_month_end.timestamp())}
+            })
+            requests_previous_month = request_collection.count_documents({
+                "freelancer_id": freelancer_id,
+                "created_at": {"$gte": int(previous_month_start.timestamp()), "$lt": int(previous_month_end.timestamp())}
+            })
+            requests_trend = self._calculate_percentage_change(requests_previous_month, requests_current_month)
+            
+            # Earning - sum of total_amount from completed agreements
+            completed_agreements = agreement_collection.find({
+                "freelancer.user_id": freelancer_id,
+                "status": "Completed"
+            })
+            total_earning = sum(agreement.get("total_amount", 0) for agreement in completed_agreements)
+            
+            # Earning trend - compare current month vs previous month earnings
+            earning_current_month = sum(
+                agreement.get("total_amount", 0)
+                for agreement in agreement_collection.find({
+                    "freelancer.user_id": freelancer_id,
+                    "status": "Completed",
+                    "updated_at": {"$gte": current_month_start, "$lt": current_month_end}
+                })
+            )
+            earning_previous_month = sum(
+                agreement.get("total_amount", 0)
+                for agreement in agreement_collection.find({
+                    "freelancer.user_id": freelancer_id,
+                    "status": "Completed",
+                    "updated_at": {"$gte": previous_month_start, "$lt": previous_month_end}
+                })
+            )
+            earning_trend = self._calculate_percentage_change(earning_previous_month, earning_current_month)
+            
+            return {
+                "active_projects": {
+                    "count": active_projects,
+                    "trend": active_trend
+                },
+                "completed_projects": {
+                    "count": completed_projects,
+                    "trend": None  # No trend for completed projects
+                },
+                "project_requests": {
+                    "count": project_requests,
+                    "trend": requests_trend
+                },
+                "earning": {
+                    "amount": total_earning,
+                    "trend": earning_trend
+                }
+            }
+        except Exception as e:
+            logger.exception("Error fetching freelancer dashboard stats")
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to fetch freelancer dashboard statistics")
+    
+    def _calculate_percentage_change(self, previous: float, current: float) -> Optional[float]:
+        """Calculate percentage change between previous and current values"""
+        if previous == 0:
+            return 100.0 if current > 0 else 0.0
+        return round(((current - previous) / previous) * 100, 1)

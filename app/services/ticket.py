@@ -45,7 +45,7 @@ class TicketService:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Only super admin is allowed")
 
     # ---------- Create ----------
-    def create_ticket(self, freelancer_id: str, client_id: str, subject: str, description: str, user: Dict[str, Any]) -> Dict[str, Any]:
+    def create_ticket(self, freelancer_id: str, client_id: str, subject: str, description: str, user: Dict[str, Any], project_id: Optional[str] = None, agreement_id: Optional[str] = None) -> Dict[str, Any]:
         if not freelancer_id or not client_id:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "freelancer_id and client_id are required")
         if not subject or not description:
@@ -71,6 +71,12 @@ class TicketService:
             "solution": None,
             "timeline": timeline,
         }
+        
+        # Add optional project_id and agreement_id if provided
+        if project_id:
+            data["project_id"] = project_id
+        if agreement_id:
+            data["agreement_id"] = agreement_id
 
         try:
             created = self.repo.create_ticket(data)
