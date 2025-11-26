@@ -119,6 +119,24 @@ def get_client_access_token():
             time.sleep(RETRY_INTERVAL)
 
 
+def find_user_in_keycloak_by_email(email: str) -> Optional[str]:
+    """Find a user in Keycloak by email and return their Keycloak user ID."""
+    token = get_client_access_token()
+    url = f"{KEYCLOAK_URL}/admin/realms/{REALM_NAME}/users"
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    
+    # Search for user by email
+    params = {"email": email, "exact": "true"}
+    response = requests.get(url, headers=headers, params=params)
+    
+    if response.status_code == 200:
+        users = response.json()
+        if users and len(users) > 0:
+            # Return the first matching user's ID
+            return users[0].get("id")
+    return None
+
+
 def create_user_in_keycloak(user_data):
     print("Creating user in Keycloak with data:", json.dumps(user_data, indent=2))
     token = get_client_access_token()
@@ -153,6 +171,33 @@ def create_user_in_keycloak(user_data):
                 status_code=500,
                 detail=f"User {user_data['username']} created but Keycloak ID not found",
             )
+    elif response.status_code == 409:
+        # User already exists - try to find and return existing user ID
+        error_message = response.content.decode('utf-8') if response.content else ""
+        if "email" in error_message.lower() or "exists" in error_message.lower():
+            email = user_data.get("email")
+            if email:
+                existing_user_id = find_user_in_keycloak_by_email(email)
+                if existing_user_id:
+                    define_logger(
+                        level=20,
+                        message=f"User {user_data['username']} already exists in Keycloak with ID {existing_user_id}",
+                        pid=os.getpid(),
+                        loggName=inspect.stack()[0],
+                    )
+                    return existing_user_id
+        
+        # If we can't find the user, log and raise
+        define_logger(
+            level=30,
+            message=f"User {user_data['username']} already exists in Keycloak but could not retrieve ID: {error_message}",
+            pid=os.getpid(),
+            loggName=inspect.stack()[0],
+        )
+        raise HTTPException(
+            status_code=409,
+            detail=f"User already exists: {error_message}",
+        )
     else:
         define_logger(
             level=40,
