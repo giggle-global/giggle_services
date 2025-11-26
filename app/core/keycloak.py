@@ -15,6 +15,7 @@ from functools import lru_cache
 from typing import Optional
 
 from fastapi import HTTPException, Depends
+from starlette import status
 from fastapi.security import APIKeyHeader
 
 # Keycloak Configuration
@@ -290,8 +291,33 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
         
         # Fetch from MongoDB (much faster than Keycloak API call)
         user_repo = UserRepository()
-        user = user_repo.get_user_by_id(user_id=username)
-        
+        user = None
+
+        if username:
+            try:
+                user = user_repo.get_user_by_id(user_id=username)
+            except HTTPException as exc:
+                if exc.status_code != status.HTTP_404_NOT_FOUND:
+                    raise
+
+        if not user:
+            keycloak_user_id = user_base_detail.get("sub")
+            if keycloak_user_id:
+                try:
+                    user = user_repo.get_user_by_keycloak_id(keycloak_user_id)
+                except HTTPException as exc:
+                    if exc.status_code != status.HTTP_404_NOT_FOUND:
+                        raise
+
+        if not user:
+            email = user_base_detail.get("email")
+            if email:
+                try:
+                    user = user_repo.get_user_by_email(email)
+                except HTTPException as exc:
+                    if exc.status_code != status.HTTP_404_NOT_FOUND:
+                        raise
+
         if not user:
             define_logger(
                 level=40,
@@ -382,11 +408,39 @@ def decode_token(token: str):
                 enabled = user.get("enabled")
                 if not enabled:
                     raise HTTPException(status_code=401, detail="User is disabled")
-                # print("User details check:", user)
+
                 user_repo = UserRepository()
-                user = user_repo.get_user_by_id(user_id=user["username"])
-                user["sid"] = sid
-                return user
+                mongo_user = None
+
+                kc_username = user.get("username")
+                if kc_username:
+                    try:
+                        mongo_user = user_repo.get_user_by_id(user_id=kc_username)
+                    except HTTPException as exc:
+                        if exc.status_code != status.HTTP_404_NOT_FOUND:
+                            raise
+
+                if not mongo_user:
+                    keycloak_user_id = user.get("id") or user_base_detail.get("sub")
+                    if keycloak_user_id:
+                        try:
+                            mongo_user = user_repo.get_user_by_keycloak_id(keycloak_user_id)
+                        except HTTPException as exc:
+                            if exc.status_code != status.HTTP_404_NOT_FOUND:
+                                raise
+
+                if not mongo_user and user.get("email"):
+                    try:
+                        mongo_user = user_repo.get_user_by_email(user["email"])
+                    except HTTPException as exc:
+                        if exc.status_code != status.HTTP_404_NOT_FOUND:
+                            raise
+
+                if not mongo_user:
+                    raise HTTPException(status_code=404, detail="User not found")
+
+                mongo_user["sid"] = sid
+                return mongo_user
 
             else:
                 define_logger(

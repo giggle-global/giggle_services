@@ -43,6 +43,13 @@ class UserRepository:
         if not user:
             raise HTTPException(404, "User not found")
         return user
+
+    def get_user_by_keycloak_id(self, keycloak_id: str) -> Optional[dict]:
+        """Get user by Keycloak user id"""
+        user = self.collection.find_one({"keycloak_id": keycloak_id, "status": {"$in": ["ACTIVE", "BANNED"]}}, {"_id": 0})
+        if not user:
+            raise HTTPException(404, "User not found")
+        return user
     
     def get_freelancers(self) -> list[dict]:
         freelancers = self.collection.find({"role": "FL", "status": "ACTIVE"}, {"_id": 0})
