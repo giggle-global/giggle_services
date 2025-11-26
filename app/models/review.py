@@ -12,6 +12,7 @@ class ReviewBase(BaseModel):
     client_id: str
     freelancer_id: str
     gig_id: str
+    project_id: str  # Required: Link review to project
     stars: conint(ge=1, le=5)  # integer 1..5
     comment: Optional[str] = None
     client_company_name: Optional[str] = None

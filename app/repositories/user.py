@@ -37,6 +37,13 @@ class UserRepository:
             raise HTTPException(404, "User not found")
         return user
     
+    def get_user_by_email(self, email: str) -> Optional[dict]:
+        """Get user by email address"""
+        user = self.collection.find_one({"email": email, "status": {"$in": ["ACTIVE", "BANNED"]}}, {"_id": 0})
+        if not user:
+            raise HTTPException(404, "User not found")
+        return user
+    
     def get_freelancers(self) -> list[dict]:
         freelancers = self.collection.find({"role": "FL", "status": "ACTIVE"}, {"_id": 0})
         return list(freelancers)

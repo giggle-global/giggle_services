@@ -1,7 +1,7 @@
 # app/routes/request.py
 import logging
 from typing import List, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, Body, status
+from fastapi import APIRouter, Depends, HTTPException, Body, status, Query
 from app.models.request import RequestCreate, RequestUpdate, RequestOut, CancelRequestByParties
 from app.services.request import RequestService
 from app.core.keycloak import get_current_user
@@ -81,3 +81,33 @@ def respond_request(request_id: str, accept: bool = Body(..., embed=True), curre
     updated = svc.respond_request(request_id, current_user["user_id"], accept)
     logger.info(f"Request response saved: request_id={request_id} accept={accept}")
     return ok(data=updated, message="Request accepted" if accept else "Request rejected")
+
+@router.get("/by-parties", response_model=APIResponse[RequestOut])
+def get_request_by_parties(
+    project_id: str,
+    client_id: str,
+    freelancer_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    svc: RequestService = Depends(get_request_service)
+):
+    """
+    Get request by project_id, client_id, and freelancer_id.
+    Only accessible by super admin or the parties involved.
+    """
+    logger.debug(f"Get request by parties: project_id={project_id} client_id={client_id} freelancer_id={freelancer_id} by user_id={current_user.get('user_id')} role={current_user.get('role')}")
+    
+    # Allow super admin or the parties involved
+    user_id = current_user.get("user_id")
+    user_role = current_user.get("role")
+    
+    if user_role != "SA" and user_id not in [client_id, freelancer_id]:
+        logger.warning(f"Unauthorized attempt to get request by parties. user_id={user_id} role={user_role}")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Not authorized to view this request")
+    
+    request = svc.get_request_by_parties(project_id, freelancer_id, client_id)
+    if not request:
+        logger.warning(f"Request not found: project_id={project_id} client_id={client_id} freelancer_id={freelancer_id}")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Request not found")
+    
+    logger.info(f"Request found by parties: request_id={request.get('request_id')}")
+    return ok(data=request, message="Request fetched")

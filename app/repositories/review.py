@@ -15,6 +15,7 @@ class ReviewRepository:
             self.collection.create_index("review_id", unique=True)
             self.collection.create_index([("freelancer_id", 1), ("created_at", -1)])
             self.collection.create_index("client_id")
+            self.collection.create_index("project_id")
         except Exception:
             pass
 
@@ -88,6 +89,8 @@ class ReviewRepository:
                 "review_id": 1,
                 "freelancer_id": 1,
                 "client_id": 1,
+                "project_id": 1,
+                "gig_id": 1,
                 "stars": 1,
                 "comment": 1,
                 "created_at": 1,
@@ -121,6 +124,8 @@ class ReviewRepository:
                 "review_id": 1,
                 "freelancer_id": 1,
                 "client_id": 1,
+                "project_id": 1,
+                "gig_id": 1,
                 "stars": 1,
                 "comment": 1,
                 "created_at": 1,
@@ -150,3 +155,7 @@ class ReviewRepository:
         if not res:
             return 0.0
         return float(res[0]["avg"])
+    
+    def count_reviews_for_project(self, project_id: str) -> int:
+        """Count the number of reviews for a specific project"""
+        return self.collection.count_documents({"project_id": project_id})

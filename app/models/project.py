@@ -55,3 +55,4 @@ class ProjectUpdate(ProjectBase):
 class ProjectOut(ProjectBase):
     id: str
     status: ProjectStatus = ProjectStatus.enabled
+    has_review: Optional[bool] = Field(None, description="Flag indicating if project has received a review")

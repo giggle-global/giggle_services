@@ -57,6 +57,8 @@ def create_ticket(
             subject=data.subject,
             description=data.description,
             user=user,
+            project_id=data.project_id,
+            agreement_id=data.agreement_id,
         )
 
     elif caller_role == "CL":
@@ -83,6 +85,8 @@ def create_ticket(
             subject=data.subject,
             description=data.description,
             user=user,
+            project_id=data.project_id,
+            agreement_id=data.agreement_id,
         )
 
     else:

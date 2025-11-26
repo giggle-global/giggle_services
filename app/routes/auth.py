@@ -6,7 +6,7 @@ from app.models.user import UserCreate, UserUpdate, UserOut, TokenResponse, Logi
 from app.services.user import UserService
 from app.schemas.response import APIResponse, ok
 from app.core.exceptions import Forbidden
-from app.core.keycloak import get_current_user
+from app.repositories.user import UserRepository
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +43,10 @@ def login(payload: LoginRequest, svc: UserService = Depends(get_user_service)):
 
     logger.info(f"Login successful for email: {payload.email}")
 
-    # get_current_user currently returns a dict
-    user_details: dict = get_current_user(token=tokens.access_token)
+    # Get user details from database using email instead of decoding token
+    # This avoids token validation issues and is more reliable
+    user_repo = UserRepository()
+    user_details: dict = user_repo.get_user_by_email(payload.email)
     # logger.debug(f"User details fetched: {user_details}")
 
     login_data = LoginResponse(tokens=tokens, user=UserOut(**user_details))

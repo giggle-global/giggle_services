@@ -30,7 +30,7 @@ import time
 import logging
 
 logging.basicConfig(
-    level=logging.DEBUG,   # DEBUG, INFO, WARNING, ERROR, CRITICAL
+    level=logging.INFO,   # INFO, WARNING, ERROR, CRITICAL (changed from DEBUG for performance)
     format="%(asctime)s [%(levelname)s] [%(name)s] %(message)s",
     handlers=[
         logging.StreamHandler(),                    # console

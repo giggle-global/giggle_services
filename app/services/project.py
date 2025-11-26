@@ -27,6 +27,9 @@ class ProjectService:
         project = self.repo.find_by_id(project_id)
         if not project:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
+        # Ensure has_review defaults to False if not present
+        if "has_review" not in project:
+            project["has_review"] = False
         return ProjectOut(**project)
 
     def list(self) -> List[ProjectOut]:

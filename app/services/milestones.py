@@ -43,12 +43,13 @@ class MilestoneService:
         ).model_dump()
 
         created = self.milestone_repo.create(m_doc)
-        # update agreement's milestone list and recalc totals (num_milestones, total_amount)
+        # update agreement's milestone list and recalc num_milestones
+        # Note: total_amount should remain calculated from rate × duration_days, not from milestone sums
         self.agreement_repo.add_milestone(agreement_id, created.get("milestone_id"))
 
         milestones = self.milestone_repo.list_for_agreement(agreement_id)
-        total = sum(m.get("payment", {}).get("amount", 0) for m in milestones)
-        self.agreement_repo.update(agreement_id, {"total_amount": total, "num_milestones": len(milestones)})
+        # Only update num_milestones, not total_amount (total_amount is calculated from rate × duration)
+        self.agreement_repo.update(agreement_id, {"num_milestones": len(milestones)})
 
         return created
 
@@ -125,16 +126,17 @@ class MilestoneService:
 
         # recompute agreement summary
         milestones = self.milestone_repo.list_for_agreement(ms["agreement_id"]) or []
-        total = sum(m.get("payment", {}).get("amount", 0) for m in milestones)
-        self.agreement_repo.update(ms["agreement_id"], {"total_amount": total, "num_milestones": len(milestones)})
+        # Only update num_milestones, not total_amount (total_amount is calculated from rate × duration)
+        self.agreement_repo.update(ms["agreement_id"], {"num_milestones": len(milestones)})
 
-        # if all milestones approved -> set agreement Completed
-        def _is_approved(m):
+        # if all milestones completed/approved -> set agreement Completed
+        def _is_completed_or_approved(m):
             s = m.get("status")
-            return s == MilestoneStatus.APPROVED or str(s) == str(MilestoneStatus.APPROVED)
+            return (s == MilestoneStatus.COMPLETED or str(s) == str(MilestoneStatus.COMPLETED) or
+                    s == MilestoneStatus.APPROVED or str(s) == str(MilestoneStatus.APPROVED))
 
-        all_approved = True if len(milestones) > 0 and all(_is_approved(m) for m in milestones) else False
-        if all_approved:
+        all_completed = True if len(milestones) > 0 and all(_is_completed_or_approved(m) for m in milestones) else False
+        if all_completed:
             self.agreement_repo.update(ms["agreement_id"], {"status": "Completed"})
 
         return updated_ms
@@ -165,6 +167,6 @@ class MilestoneService:
             # use $pull and recompute
             self.agreement_repo.col.update_one({"agreement_id": ag["agreement_id"]}, {"$pull": {"milestones": milestone_id}})
             milestones = self.milestone_repo.list_for_agreement(ag["agreement_id"])
-            total = sum(m.get("payment", {}).get("amount", 0) for m in milestones)
-            self.agreement_repo.update(ag["agreement_id"], {"total_amount": total, "num_milestones": len(milestones)})
+            # Only update num_milestones, not total_amount (total_amount is calculated from rate × duration)
+            self.agreement_repo.update(ag["agreement_id"], {"num_milestones": len(milestones)})
         return {"deleted": deleted}
