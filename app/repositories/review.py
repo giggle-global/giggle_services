@@ -58,6 +58,10 @@ class ReviewRepository:
 
     def get_review(self, review_id: str) -> Optional[dict]:
         return self.collection.find_one({"review_id": review_id}, {"_id": 0})
+    
+    def find_by_freelancer_id(self, freelancer_id: str) -> List[dict]:
+        """Find all reviews for a freelancer (for matching algorithm)"""
+        return list(self.collection.find({"freelancer_id": freelancer_id}, {"_id": 0}))
 
     # def list_reviews_for_freelancer(self, freelancer_id: str, limit: int = 50, skip: int = 0) -> List[dict]:
     #     return list(self.collection.find({"freelancer_id": freelancer_id}, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit))

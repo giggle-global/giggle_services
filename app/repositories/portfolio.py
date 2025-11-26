@@ -64,6 +64,10 @@ class PortfolioRepository:
         except PyMongoError:
             logger.exception("Mongo error listing projects for user: %s", user_id)
             raise
+    
+    def find_by_user_id(self, user_id: str) -> List[Dict[str, Any]]:
+        """Alias for find_by_user (for matching algorithm compatibility)"""
+        return self.find_by_user(user_id)
 
     def get_by_id(self, project_id: str) -> Optional[Dict[str, Any]]:
         try:

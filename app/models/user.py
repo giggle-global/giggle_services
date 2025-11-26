@@ -103,6 +103,21 @@ class UserCreate(UserBase):
         }
 
 
+class LocationInfo(BaseModel):
+    """Geographic location information for matching algorithm"""
+    city: Optional[str] = Field(None, example="Mumbai")
+    region: Optional[str] = Field(None, example="Maharashtra")
+    country: Optional[str] = Field(None, example="India")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "city": "Mumbai",
+                "region": "Maharashtra",
+                "country": "India"
+            }
+        }
+
 class ContactInfo(BaseModel):
     linkedin: Optional[str] = Field(None, example="https://linkedin.com/in/johndoe")
     timezone: Optional[str] = Field(None, example="UTC+05:30")
@@ -148,6 +163,11 @@ class UserUpdate(BaseModel):
     payment_information: Optional[PaymentInformation] = None
     skill_set: Optional[List[str]] = Field(None, example=["Python", "FastAPI", "MongoDB"])
 
+    # Freelancer-specific fields for matching algorithm
+    location_info: Optional[LocationInfo] = None
+    interested_industries: Optional[List[str]] = Field(None, example=["F&B", "Healthcare", "E-commerce"])
+    ongoing_gigs_count: Optional[int] = Field(0, example=2, description="Number of active gigs")
+    
     #client-specific fields
     contact_info: Optional[ContactInfo] = None
     company_info: Optional[CompanyInfo] = None

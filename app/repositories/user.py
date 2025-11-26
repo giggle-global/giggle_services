@@ -41,6 +41,15 @@ class UserRepository:
         freelancers = self.collection.find({"role": "FL", "status": "ACTIVE"}, {"_id": 0})
         return list(freelancers)
     
+    def find_by_role(self, role: str) -> list[dict]:
+        """Find all users by role (for matching algorithm)"""
+        users = self.collection.find({"role": role}, {"_id": 0})
+        return list(users)
+    
+    def find_by_user_id(self, user_id: str) -> Optional[dict]:
+        """Alias for get_user_by_id (for matching algorithm compatibility)"""
+        return self.collection.find_one({"user_id": user_id}, {"_id": 0})
+    
     def get_all_users(self) -> list[dict]:
         # users = self.collection.find({"status": "ACTIVE"}, {"_id": 0})
         users = self.collection.find({}, {"_id": 0})
