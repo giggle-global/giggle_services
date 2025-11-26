@@ -1,6 +1,6 @@
 # app/routes/user.py
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.models.user import UserUpdate, UserOut, KycUpdate
 from app.services.user import UserService
@@ -194,11 +194,17 @@ def get_admin_dashboard(
 @router.get("/freelancer/dashboard", response_model=APIResponse[Dict[str, Any]])
 def get_freelancer_dashboard(
     current_user: Dict[str, Any] = Depends(get_current_user), 
-    svc: UserService = Depends(get_user_service)
+    svc: UserService = Depends(get_user_service),
+    metric_type: Optional[str] = None,
+    quarter: Optional[str] = None
 ):
     """
-    Get freelancer dashboard statistics including KPIs
+    Get freelancer dashboard statistics including KPIs and optional chart data
     Only freelancers can access this endpoint
+    
+    Query parameters:
+    - metric_type: Optional. One of: "active-projects", "completed-projects", "project-requests", "earnings"
+    - quarter: Optional. One of: "Q1", "Q2", "Q3", "Q4"
     """
     logger.debug(f"Freelancer dashboard stats requested by user_id={current_user.get('user_id')} role={current_user.get('role')}")
     if current_user.get("role") != "FL":
@@ -209,7 +215,7 @@ def get_freelancer_dashboard(
         freelancer_id = current_user.get("user_id")
         if not freelancer_id:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "User ID not found")
-        stats = svc.get_freelancer_dashboard_stats(freelancer_id)
+        stats = svc.get_freelancer_dashboard_stats(freelancer_id, metric_type, quarter)
         logger.info(f"Freelancer dashboard stats fetched successfully for user_id={freelancer_id}")
         return ok(data=stats, message="Freelancer dashboard statistics fetched")
     except HTTPException:

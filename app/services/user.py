@@ -506,7 +506,7 @@ class UserService:
             logger.exception("Error fetching dashboard stats")
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to fetch dashboard statistics")
 
-    def get_freelancer_dashboard_stats(self, freelancer_id: str) -> Dict[str, Any]:
+    def get_freelancer_dashboard_stats(self, freelancer_id: str, metric_type: Optional[str] = None, quarter: Optional[str] = None) -> Dict[str, Any]:
         """Get freelancer dashboard statistics"""
         try:
             agreement_collection = database["agreements"]
@@ -571,33 +571,11 @@ class UserService:
             })
             requests_trend = self._calculate_percentage_change(requests_previous_month, requests_current_month)
             
-            # Earning - sum of total_amount from completed agreements
-            completed_agreements = agreement_collection.find({
-                "freelancer.user_id": freelancer_id,
-                "status": "Completed"
-            })
-            total_earning = sum(agreement.get("total_amount", 0) for agreement in completed_agreements)
+            # Earning - set to 0 for now (logic will be updated later)
+            total_earning = 0
+            earning_trend = None
             
-            # Earning trend - compare current month vs previous month earnings
-            earning_current_month = sum(
-                agreement.get("total_amount", 0)
-                for agreement in agreement_collection.find({
-                    "freelancer.user_id": freelancer_id,
-                    "status": "Completed",
-                    "updated_at": {"$gte": current_month_start, "$lt": current_month_end}
-                })
-            )
-            earning_previous_month = sum(
-                agreement.get("total_amount", 0)
-                for agreement in agreement_collection.find({
-                    "freelancer.user_id": freelancer_id,
-                    "status": "Completed",
-                    "updated_at": {"$gte": previous_month_start, "$lt": previous_month_end}
-                })
-            )
-            earning_trend = self._calculate_percentage_change(earning_previous_month, earning_current_month)
-            
-            return {
+            result = {
                 "active_projects": {
                     "count": active_projects,
                     "trend": active_trend
@@ -615,9 +593,130 @@ class UserService:
                     "trend": earning_trend
                 }
             }
+            
+            # Add chart data if metric_type and quarter are provided
+            if metric_type and quarter:
+                chart_data = self._get_chart_data(freelancer_id, metric_type, quarter, agreement_collection, request_collection)
+                result["chart_data"] = chart_data
+            
+            return result
         except Exception as e:
             logger.exception("Error fetching freelancer dashboard stats")
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to fetch freelancer dashboard statistics")
+    
+    def _get_chart_data(self, freelancer_id: str, metric_type: str, quarter: str, agreement_collection, request_collection) -> Dict[str, Any]:
+        """Get chart data for a specific metric and quarter"""
+        try:
+            # Determine year (use current year)
+            now = datetime.utcnow()
+            year = now.year
+            
+            # Map quarter to months
+            quarter_months = {
+                "Q1": [(year, 1), (year, 2), (year, 3)],  # Jan-Mar
+                "Q2": [(year, 4), (year, 5), (year, 6)],  # Apr-Jun
+                "Q3": [(year, 7), (year, 8), (year, 9)],  # Jul-Sep
+                "Q4": [(year, 10), (year, 11), (year, 12)]  # Oct-Dec
+            }
+            
+            # Map quarter to previous quarter's last month
+            previous_quarter_last_month = {
+                "Q1": (year - 1, 12),  # Dec of previous year
+                "Q2": (year, 3),      # Mar
+                "Q3": (year, 6),      # Jun
+                "Q4": (year, 9)       # Sep
+            }
+            
+            if quarter not in quarter_months:
+                return {"months": [], "values": []}
+            
+            # All 12 months for x-axis
+            month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+            
+            # Initialize values array with zeros for all 12 months
+            values = [0] * 12
+            
+            # Get previous quarter's last month data point
+            prev_year, prev_month = previous_quarter_last_month[quarter]
+            prev_month_start = datetime(prev_year, prev_month, 1)
+            if prev_month == 12:
+                prev_month_end = datetime(prev_year + 1, 1, 1)
+            else:
+                prev_month_end = datetime(prev_year, prev_month + 1, 1)
+            
+            # Calculate value for previous quarter's last month
+            prev_month_value = 0
+            if metric_type == "active-projects":
+                prev_month_value = agreement_collection.count_documents({
+                    "freelancer.user_id": freelancer_id,
+                    "status": "Active",
+                    "created_at": {"$gte": prev_month_start, "$lt": prev_month_end}
+                })
+            elif metric_type == "completed-projects":
+                prev_month_value = agreement_collection.count_documents({
+                    "freelancer.user_id": freelancer_id,
+                    "status": "Completed",
+                    "created_at": {"$gte": prev_month_start, "$lt": prev_month_end}
+                })
+            elif metric_type == "project-requests":
+                prev_month_value = request_collection.count_documents({
+                    "freelancer_id": freelancer_id,
+                    "created_at": {"$gte": int(prev_month_start.timestamp()), "$lt": int(prev_month_end.timestamp())}
+                })
+            elif metric_type == "earnings":
+                # Set to 0 for now (logic will be updated later)
+                prev_month_value = 0
+            
+            # Get selected quarter months
+            months = quarter_months[quarter]
+            
+            # Populate values for selected quarter months
+            for year_num, month_num in months:
+                month_start = datetime(year_num, month_num, 1)
+                if month_num == 12:
+                    month_end = datetime(year_num + 1, 1, 1)
+                else:
+                    month_end = datetime(year_num, month_num + 1, 1)
+                
+                month_index = month_num - 1  # 0-based index for array
+                
+                if metric_type == "active-projects":
+                    count = agreement_collection.count_documents({
+                        "freelancer.user_id": freelancer_id,
+                        "status": "Active",
+                        "created_at": {"$gte": month_start, "$lt": month_end}
+                    })
+                    values[month_index] = count
+                elif metric_type == "completed-projects":
+                    count = agreement_collection.count_documents({
+                        "freelancer.user_id": freelancer_id,
+                        "status": "Completed",
+                        "created_at": {"$gte": month_start, "$lt": month_end}
+                    })
+                    values[month_index] = count
+                elif metric_type == "project-requests":
+                    count = request_collection.count_documents({
+                        "freelancer_id": freelancer_id,
+                        "created_at": {"$gte": int(month_start.timestamp()), "$lt": int(month_end.timestamp())}
+                    })
+                    values[month_index] = count
+                elif metric_type == "earnings":
+                    # Set to 0 for now (logic will be updated later)
+                    values[month_index] = 0
+            
+            # Insert previous month value at the correct position
+            prev_month_index = prev_month - 1  # 0-based index
+            values[prev_month_index] = prev_month_value
+            
+            return {
+                "months": month_names,
+                "values": values,
+                "previous_month_index": prev_month_index,
+                "quarter_start_index": months[0][1] - 1  # First month of quarter (0-based)
+            }
+        except Exception as e:
+            logger.exception("Error fetching chart data")
+            return {"months": [], "values": []}
     
     def _calculate_percentage_change(self, previous: float, current: float) -> Optional[float]:
         """Calculate percentage change between previous and current values"""
