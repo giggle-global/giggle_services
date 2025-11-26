@@ -38,9 +38,13 @@ class UserService:
     def _ensure_unique_email(self, email: str) -> None:
         """Raise 409 if email already exists."""
         try:
-            existing = self.user_repo.get_user_by_email(email)  # implement in repo
+            existing = self.user_repo.get_user_by_email(email)
+        except HTTPException as exc:
+            if exc.status_code == status.HTTP_404_NOT_FOUND:
+                existing = None
+            else:
+                raise
         except AttributeError:
-            # Fallback if repo doesn’t have it yet
             existing = self.user_repo.collection.find_one({"email": email})
         if existing:
             logger.warning("Email already exists: %s", email)
