@@ -141,3 +141,26 @@ def on_startup():
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+@app.get("/health/config")
+def health_check_config():
+    """Diagnostic endpoint to check email configuration (without sensitive data)"""
+    from app.core.config import config
+    return {
+        "status": "ok",
+        "email_provider": config.get("email_provider", "not set"),
+        "smtp_server": config.get("smtp_server", "not set") or "not set",
+        "smtp_port": config.get("smtp_port", "not set"),
+        "smtp_username": config.get("smtp_username", "not set") or "not set",
+        "smtp_from_email": config.get("smtp_from_email", "not set") or "not set",
+        "smtp_configured": bool(
+            config.get("smtp_server") and 
+            config.get("smtp_username") and 
+            config.get("smtp_password")
+        ),
+        "ses_configured": bool(
+            config.get("ses_from_email") and 
+            config.get("aws_access_key") and 
+            config.get("aws_secret_key")
+        )
+    }

@@ -1,9 +1,18 @@
 """ Configurations Module"""
 
 import os
+import logging
 from dotenv import load_dotenv, find_dotenv
 
-load_dotenv(dotenv_path=find_dotenv())
+logger = logging.getLogger(__name__)
+
+# Try to load .env file, but don't fail if it doesn't exist (for production)
+env_path = find_dotenv()
+if env_path:
+    load_dotenv(dotenv_path=env_path)
+    logger.info(f"Loaded .env file from: {env_path}")
+else:
+    logger.info("No .env file found, using environment variables directly")
 
 
 class dotdict(dict):
@@ -49,4 +58,9 @@ if not config:
 
     config = dotdict(config)
 
-print(config)
+# Log email configuration status (without sensitive data)
+logger.info("Email configuration loaded - Provider: %s, SMTP Server: %s, SMTP Username: %s, SMTP From: %s",
+           config.get("email_provider", "not set"),
+           config.get("smtp_server", "not set") or "not set",
+           config.get("smtp_username", "not set") or "not set",
+           config.get("smtp_from_email", "not set") or "not set")
