@@ -79,7 +79,8 @@ async def validation_exception_handler(_: Request, exc: RequestValidationError):
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(_: Request, exc: Exception):
-    # Tip: log exc with traceback here
+    # Log the exception with full traceback for debugging
+    logger.exception("Unhandled exception occurred: %s", str(exc))
     body = APIResponse(status_code=HTTP_500_INTERNAL_SERVER_ERROR,
                        message="Something went wrong",
                        data=None)
@@ -112,6 +113,30 @@ def on_startup():
     user_service.create_root_user()
     skill_service = SkillService()
     skill_service.seed_skills_if_missing()
+    
+    # Validate email configuration on startup
+    from app.core.config import config
+    from app.core.email_service import EmailService
+    email_provider = config.get("email_provider", "smtp").lower()
+    logger.info("Email provider configured: %s", email_provider)
+    
+    if email_provider == "smtp":
+        smtp_server = config.get("smtp_server")
+        smtp_username = config.get("smtp_username")
+        if not smtp_server or not smtp_username:
+            logger.warning("SMTP configuration incomplete. SMTP_SERVER=%s, SMTP_USERNAME=%s", 
+                         smtp_server, smtp_username)
+        else:
+            logger.info("SMTP configuration validated: server=%s, username=%s", 
+                       smtp_server, smtp_username)
+    elif email_provider == "ses":
+        ses_from = config.get("ses_from_email")
+        aws_key = config.get("aws_access_key")
+        if not ses_from or not aws_key:
+            logger.warning("SES configuration incomplete. SES_FROM_EMAIL=%s, AWS_ACCESS_KEY=%s", 
+                         ses_from, "***" if aws_key else None)
+        else:
+            logger.info("SES configuration validated")
 
 @app.get("/health")
 def health_check():

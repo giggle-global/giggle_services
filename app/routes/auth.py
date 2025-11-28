@@ -98,8 +98,15 @@ def forgot_password(
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Invalid email address")
         raise
 
-    otp_svc.send_otp(email=payload.email, purpose=OTPPurpose.PASSWORD_RESET)
-    return ok(message="OTP sent to email.", data={"email": payload.email})
+    try:
+        otp_svc.send_otp(email=payload.email, purpose=OTPPurpose.PASSWORD_RESET)
+        return ok(message="OTP sent to email.", data={"email": payload.email})
+    except ValueError as exc:
+        logger.error("Email configuration error: %s", str(exc))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+    except Exception as exc:
+        logger.exception("Failed to send password reset OTP to email=%s", payload.email)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to send OTP. Please check server configuration.")
 
 
 @router.post("/password/verify", response_model=APIResponse[dict])

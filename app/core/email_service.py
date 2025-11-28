@@ -19,6 +19,8 @@ class EmailService:
 
     def __init__(self, provider: Optional[str] = None):
         self.provider = (provider or config.get("email_provider") or "smtp").lower()
+        # Log email provider configuration on initialization for debugging
+        logger.debug("EmailService initialized with provider: %s", self.provider)
 
     def send_email(
         self,
@@ -62,9 +64,28 @@ class EmailService:
         smtp_username = config.get("smtp_username")
         smtp_password = config.get("smtp_password")
         sender = from_email or config.get("smtp_from_email") or smtp_username
+        
+        # Debug logging (without sensitive data)
+        logger.debug("SMTP config - server: %s, port: %s, username: %s, sender: %s", 
+                    smtp_server, smtp_port, smtp_username, sender)
 
-        if not all([smtp_server, smtp_port, smtp_username, smtp_password, sender]):
-            raise ValueError("SMTP configuration is incomplete. Please check environment variables.")
+        # Check which configuration values are missing
+        missing_config = []
+        if not smtp_server:
+            missing_config.append("SMTP_SERVER")
+        if not smtp_port:
+            missing_config.append("SMTP_PORT")
+        if not smtp_username:
+            missing_config.append("SMTP_USERNAME")
+        if not smtp_password:
+            missing_config.append("SMTP_PASSWORD")
+        if not sender:
+            missing_config.append("SMTP_FROM_EMAIL or sender email")
+        
+        if missing_config:
+            error_msg = f"SMTP configuration is incomplete. Missing environment variables: {', '.join(missing_config)}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
 
         message = MIMEMultipart("alternative")
         message["Subject"] = subject
@@ -81,9 +102,15 @@ class EmailService:
                 server.login(smtp_username, smtp_password)
                 server.sendmail(sender, list(to_addresses), message.as_string())
                 logger.info("SMTP email sent to %s", to_addresses)
+        except smtplib.SMTPAuthenticationError as exc:
+            logger.exception("SMTP authentication failed. Check SMTP_USERNAME and SMTP_PASSWORD")
+            raise RuntimeError("Failed to send email via SMTP: Authentication failed") from exc
+        except smtplib.SMTPConnectError as exc:
+            logger.exception("SMTP connection failed. Check SMTP_SERVER and SMTP_PORT")
+            raise RuntimeError(f"Failed to send email via SMTP: Cannot connect to {smtp_server}:{smtp_port}") from exc
         except Exception as exc:
-            logger.exception("Failed to send email via SMTP")
-            raise RuntimeError("Failed to send email via SMTP") from exc
+            logger.exception("Failed to send email via SMTP: %s", str(exc))
+            raise RuntimeError(f"Failed to send email via SMTP: {str(exc)}") from exc
 
     def _send_via_ses(
         self,
@@ -95,7 +122,27 @@ class EmailService:
     ) -> None:
         sender = from_email or config.get("ses_from_email")
         if not sender:
-            raise ValueError("SES sender email is not configured.")
+            error_msg = "SES sender email is not configured. Please set SES_FROM_EMAIL or SMTP_FROM_EMAIL environment variable."
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
+        # Check AWS credentials
+        aws_access_key = config.get("aws_access_key")
+        aws_secret_key = config.get("aws_secret_key")
+        aws_region = config.get("aws_region")
+        
+        missing_aws = []
+        if not aws_access_key:
+            missing_aws.append("AWS_ACCESS_KEY")
+        if not aws_secret_key:
+            missing_aws.append("AWS_SECRET_KEY")
+        if not aws_region:
+            missing_aws.append("AWS_REGION")
+        
+        if missing_aws:
+            error_msg = f"AWS SES configuration is incomplete. Missing environment variables: {', '.join(missing_aws)}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
 
         try:
             send_email_via_ses(
@@ -107,6 +154,6 @@ class EmailService:
             )
             logger.info("SES email sent to %s", to_addresses)
         except Exception as exc:
-            logger.exception("Failed to send email via SES")
-            raise RuntimeError("Failed to send email via SES") from exc
+            logger.exception("Failed to send email via SES: %s", str(exc))
+            raise RuntimeError(f"Failed to send email via SES: {str(exc)}") from exc
 
