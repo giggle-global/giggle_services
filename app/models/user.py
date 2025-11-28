@@ -56,7 +56,7 @@ class PaymentInformation(BaseModel):
 class UserBase(BaseModel):
     username: Optional[str] = Field(None, example="johndoe")
     email: EmailStr = Field(..., example="johndoe@example.com")
-    phone_number: str = Field(..., example="+919876543210")
+    phone_number: Optional[str] = Field(None, example="+919876543210")
     role: RoleEnum = Field(..., example=RoleEnum.CLIENT.value)
     first_name: Optional[str] = Field(None, example="John")
     last_name: Optional[str] = Field(None, example="Doe")
@@ -65,6 +65,7 @@ class UserBase(BaseModel):
     user_id: Optional[str] = Field(None, example="user-001")
     kyc: Optional[bool] = Field(False, example=True)
     first_intro_done: Optional[bool] = Field(False, example=True)
+    email_verified: bool = Field(False, example=True)
 
 
 class UserCreate(UserBase):
@@ -122,6 +123,8 @@ class ContactInfo(BaseModel):
     linkedin: Optional[str] = Field(None, example="https://linkedin.com/in/johndoe")
     timezone: Optional[str] = Field(None, example="UTC+05:30")
     available_time: Optional[str] = Field(None, example="10:00am - 06:30pm")
+    secondary_phone: Optional[str] = Field(None, example="+919812345678")
+    secondary_email: Optional[EmailStr] = Field(None, example="alt@example.com")
 
 class CompanyContactInfo(BaseModel):
     contact_person: Optional[str] = Field(None, example="Jane Doe")
@@ -328,5 +331,16 @@ class LoginResponse(BaseModel):
                     "status": "ACTIVE",
                     "keycloak_id": "c12d3f45-6789-4abc-def1-23456789abcd"
                 }
+            }
+        }
+
+
+class BanUserRequest(BaseModel):
+    reason: str = Field(..., min_length=1, max_length=50, example="Violation of terms of service")
+
+    class Config:
+       json_schema_extra= {
+            "example": {
+                "reason": "Violation of terms of service"
             }
         }

@@ -25,6 +25,7 @@ from app.routes import agreements
 from app.routes import milestones
 from app.routes import portfolio
 from app.routes import matching
+from app.routes import otp
 import time
 
 import logging
@@ -98,6 +99,7 @@ app.include_router(agreements.router)
 app.include_router(milestones.router)
 app.include_router(portfolio.router)
 app.include_router(matching.router)
+app.include_router(otp.router)
 
 
 user_service = UserService()

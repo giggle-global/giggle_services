@@ -34,6 +34,19 @@ if not config:
     config["aws_secret_key"] = os.environ["AWS_SECRET_KEY"]
     config["aws_region"] = os.environ["AWS_REGION"]
 
+    # Email / OTP configuration (optional, defaults keep existing behaviour)
+    config["email_provider"] = os.environ.get("EMAIL_PROVIDER", "smtp").lower()
+
+    # SMTP settings
+    config["smtp_server"] = os.environ.get("SMTP_SERVER", "")
+    config["smtp_port"] = int(os.environ.get("SMTP_PORT", "587"))
+    config["smtp_username"] = os.environ.get("SMTP_USERNAME", "")
+    config["smtp_password"] = os.environ.get("SMTP_PASSWORD", "")
+    config["smtp_from_email"] = os.environ.get("SMTP_FROM_EMAIL", "")
+
+    # AWS SES fallback (kept for future use)
+    config["ses_from_email"] = os.environ.get("SES_FROM_EMAIL", os.environ.get("SMTP_FROM_EMAIL", "no-reply@yourdomain.com"))
+
     config = dotdict(config)
 
 print(config)

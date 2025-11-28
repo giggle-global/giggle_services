@@ -1,5 +1,7 @@
 # app/services/user.py
-from datetime import timedelta, datetime
+from datetime import timedelta, datetime, timezone
+# IST is UTC+5:30
+IST = timezone(timedelta(hours=5, minutes=30))
 import random
 import uuid
 import logging
@@ -16,6 +18,8 @@ from app.core.keycloak import (
     authenticate_with_keycloak,
     refresh_access_token,
     delete_user_in_keycloak,  # <-- implement this in your keycloak module
+    get_client_access_token,
+    set_user_password,
 )
 from app.core.config import config
 
@@ -101,6 +105,11 @@ class UserService:
             user.kyc = False  # default KYC to False on creation
             user.first_intro_done = False
             user.update_cool_down_period = 5
+            try:
+                token = get_client_access_token()
+                set_user_password(token, keycloak_id, user.passcode, temporary=False)
+            except Exception:
+                logger.exception("Failed to ensure Keycloak password for email=%s", user.email)
 
         except HTTPException:
             logger.exception("Keycloak creation failed for email=%s", user.email)
@@ -157,6 +166,32 @@ class UserService:
             created.pop("passcode", None)
 
         return created
+
+    def reset_password(self, email: str, new_password: str) -> None:
+        if not email or not new_password:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Email and new password are required")
+
+        try:
+            user = self.user_repo.get_user_by_email(email)
+        except HTTPException as exc:
+            if exc.status_code == status.HTTP_404_NOT_FOUND:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+            raise
+
+        keycloak_id = user.get("keycloak_id")
+        if not keycloak_id:
+            logger.error("Unable to reset password, keycloak_id missing for email=%s", email)
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "User identity is not configured correctly")
+
+        try:
+            token = get_client_access_token()
+            set_user_password(token, keycloak_id, new_password, temporary=False)
+            logger.info("Password reset successful for email=%s", email)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.exception("Password reset failed for email=%s", email)
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, f"Failed to reset password: {exc}")
 
     def get_user(self, user_id: str) -> Dict[str, Any]:
         if not user_id:
@@ -215,11 +250,39 @@ class UserService:
             user_details = self.user_repo.get_user_by_id(user_id)
             if user_details:
                 days_to_wait = user_details.get("update_cool_down_period", 5)
-                created_at = user_details.get("audit_log", {}).get("created_at")
-                if created_at:
-                    next_allowed_update = created_at + timedelta(days=days_to_wait)
-                    if datetime.datetime.utcnow() < next_allowed_update:
-                        raise HTTPException(status_code=403, detail=f"User details can be updated only after {user_details['update_cool_down_period']} days from created date.")
+                last_edit_date = user_details.get("first_edit_date")  # Using first_edit_date to track last edit
+                
+                # If last_edit_date exists, check cooldown from last edit
+                if last_edit_date:
+                    # Convert to timezone-aware IST datetime
+                    # Handle string, datetime, or MongoDB datetime
+                    if isinstance(last_edit_date, str):
+                        # Handle both 'Z' and '+00:00' ISO 8601 formats
+                        iso_string = last_edit_date.replace('Z', '+00:00') if last_edit_date.endswith('Z') else last_edit_date
+                        last_edit_date = datetime.fromisoformat(iso_string)
+                    
+                    # Convert to IST (handle both UTC and IST stored values)
+                    if last_edit_date.tzinfo is None:
+                        # Assume UTC if naive, then convert to IST
+                        last_edit_date = last_edit_date.replace(tzinfo=timezone.utc).astimezone(IST)
+                    elif last_edit_date.tzinfo == timezone.utc:
+                        # Convert from UTC to IST
+                        last_edit_date = last_edit_date.astimezone(IST)
+                    # If already in IST, use as is
+                    
+                    next_allowed_update = last_edit_date + timedelta(days=days_to_wait)
+                    now = datetime.now(timezone.utc).astimezone(IST)  # Current time in IST
+                    
+                    if now < next_allowed_update:
+                        days_remaining = (next_allowed_update - now).days + 1
+                        raise HTTPException(status_code=403, detail=f"User details can be updated only after {days_to_wait} days from the last edit. Please wait {days_remaining} more day(s).")
+                
+                # Set/update first_edit_date in the update payload after successful cooldown check
+                # This will be the new "last edit date" after this update completes
+                # Store in IST (UTC+5:30) - convert from UTC
+                utc_now = datetime.now(timezone.utc)
+                ist_now = utc_now.astimezone(IST)
+                update_payload["first_edit_date"] = ist_now
 
         try:
             updated = self.user_repo.update_user(user_id=user_id, update_payload=update_payload)
