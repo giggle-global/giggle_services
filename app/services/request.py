@@ -80,6 +80,23 @@ class RequestService:
         try:
             created = self.repo.create_request(client_id, freelancer_id, client.get("first_name"), client.get("last_name"), freelancer.get("first_name"), freelancer.get("last_name"), project_id, project_name=project_details.get("title"))
             logger.info("Request created: id=%s client=%s freelancer=%s", getattr(created, "id", None), client_id, freelancer_id)
+            
+            # Send notification to freelancer
+            try:
+                from app.services.notification import NotificationService
+                notification_service = NotificationService()
+                notification_service.notify_request_received(
+                    freelancer_id=freelancer_id,
+                    client_name=f"{client.get('first_name', '')} {client.get('last_name', '')}".strip(),
+                    project_title=project_details.get("title", "Project"),
+                    request_id=created.get("request_id"),
+                    project_id=project_id
+                )
+                logger.info("Notification sent to freelancer: %s", freelancer_id)
+            except Exception as e:
+                logger.warning("Failed to send notification (request still created): %s", e)
+                # Don't fail the request creation if notification fails
+            
             return created
         except PyMongoError:
             logger.exception("Mongo error creating request: client=%s freelancer=%s", client_id, freelancer_id)

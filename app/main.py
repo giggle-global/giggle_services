@@ -26,6 +26,8 @@ from app.routes import milestones
 from app.routes import portfolio
 from app.routes import matching
 from app.routes import otp
+from app.routes import notification
+from app.core.scheduler import milestone_scheduler
 import time
 
 import logging
@@ -101,6 +103,7 @@ app.include_router(milestones.router)
 app.include_router(portfolio.router)
 app.include_router(matching.router)
 app.include_router(otp.router)
+app.include_router(notification.router)
 
 
 user_service = UserService()
@@ -137,6 +140,24 @@ def on_startup():
                          ses_from, "***" if aws_key else None)
         else:
             logger.info("SES configuration validated")
+    
+    # Start milestone reminder scheduler
+    try:
+        milestone_scheduler.start()
+        logger.info("Milestone reminder scheduler started")
+    except Exception as e:
+        logger.error("Failed to start milestone scheduler: %s", e)
+
+@app.on_event("shutdown")
+def on_shutdown():
+    """Cleanup on server shutdown"""
+    try:
+        milestone_scheduler.stop()
+        from app.core.rabbitmq import RabbitMQConnection
+        RabbitMQConnection.close()
+        logger.info("Scheduler and RabbitMQ connections closed")
+    except Exception as e:
+        logger.error("Error during shutdown: %s", e)
 
 @app.get("/health")
 def health_check():

@@ -157,3 +157,47 @@ class EmailService:
             logger.exception("Failed to send email via SES: %s", str(exc))
             raise RuntimeError(f"Failed to send email via SES: {str(exc)}") from exc
 
+    def send_notification_email(
+        self,
+        to_email: str,
+        subject: str,
+        message: str,
+        notification_data: Optional[dict] = None
+    ) -> None:
+        """Send a notification email with HTML template"""
+        html_body = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px 8px 0 0; }}
+                .content {{ background: #f9f9f9; padding: 20px; border-radius: 0 0 8px 8px; }}
+                .button {{ display: inline-block; padding: 12px 24px; background: #667eea; color: white; text-decoration: none; border-radius: 5px; margin-top: 20px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h2>Giggle Notification</h2>
+                </div>
+                <div class="content">
+                    <p>{message}</p>
+                    {f'<a href="{notification_data.get("link", "#")}" class="button">View Details</a>' if notification_data and notification_data.get("link") else ""}
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        text_body = message
+        
+        self.send_email(
+            to_addresses=[to_email],
+            subject=subject,
+            body_html=html_body,
+            body_text=text_body
+        )
+

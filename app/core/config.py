@@ -56,6 +56,13 @@ if not config:
     # AWS SES fallback (kept for future use)
     config["ses_from_email"] = os.environ.get("SES_FROM_EMAIL", os.environ.get("SMTP_FROM_EMAIL", "no-reply@yourdomain.com"))
 
+    # RabbitMQ configuration (optional, defaults for local development)
+    config["rabbitmq_host"] = os.environ.get("RABBITMQ_HOST", "localhost")
+    config["rabbitmq_port"] = int(os.environ.get("RABBITMQ_PORT", "5672"))
+    config["rabbitmq_user"] = os.environ.get("RABBITMQ_USER", "guest")
+    config["rabbitmq_password"] = os.environ.get("RABBITMQ_PASSWORD", "guest")
+    config["rabbitmq_vhost"] = os.environ.get("RABBITMQ_VHOST", "/")
+
     config = dotdict(config)
 
 # Log email configuration status (without sensitive data)
