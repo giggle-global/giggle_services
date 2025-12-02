@@ -27,6 +27,7 @@ from app.routes import portfolio
 from app.routes import matching
 from app.routes import otp
 from app.routes import notification
+from app.routes import meeting
 from app.core.scheduler import milestone_scheduler
 import time
 
@@ -104,6 +105,7 @@ app.include_router(portfolio.router)
 app.include_router(matching.router)
 app.include_router(otp.router)
 app.include_router(notification.router)
+app.include_router(meeting.router)
 
 
 user_service = UserService()
