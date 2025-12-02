@@ -17,10 +17,15 @@ def create_agreement(
     current_user: Dict[str, Any] = Depends(get_current_user),
     svc: AgreementService = Depends(get_agreement_service),
 ):
-    if current_user["user_id"] != payload.client.user_id and current_user.get("role") != "admin":
+    # Allow both client and freelancer to create agreements, or admin
+    is_client = current_user["user_id"] == payload.client.user_id
+    is_freelancer = current_user["user_id"] == payload.freelancer.user_id
+    is_admin = current_user.get("role") == "admin"
+    
+    if not (is_client or is_freelancer or is_admin):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
-            detail="Not allowed to create agreement for other client",
+            detail="Not allowed to create agreement. Only the client, freelancer, or admin can create agreements.",
         )
     created = svc.create_agreement(payload, created_by=current_user["user_id"])
     return ok(created, "Agreement created", status.HTTP_201_CREATED)
@@ -73,3 +78,21 @@ def cancel_agreement(
     reason = payload.get("reason") if payload else None
     canceled = svc.cancel_agreement(agreement_id, current_user, reason)
     return ok(canceled, "Agreement canceled", status.HTTP_200_OK)
+
+@router.post("/{agreement_id}/pause", response_model=APIResponse)
+def pause_agreement(
+    agreement_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    svc: AgreementService = Depends(get_agreement_service),
+):
+    paused = svc.pause_agreement(agreement_id, current_user)
+    return ok(paused, "Agreement paused", status.HTTP_200_OK)
+
+@router.post("/{agreement_id}/unpause", response_model=APIResponse)
+def unpause_agreement(
+    agreement_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    svc: AgreementService = Depends(get_agreement_service),
+):
+    unpaused = svc.unpause_agreement(agreement_id, current_user)
+    return ok(unpaused, "Agreement unpaused", status.HTTP_200_OK)

@@ -3,7 +3,7 @@ from pymongo.collection import Collection
 from pymongo.errors import PyMongoError
 from app.core.db import database
 from app.models.notification import NotificationStatus
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4
 import logging
 
@@ -18,7 +18,8 @@ class NotificationRepository:
         try:
             notification_data["notification_id"] = uuid4().hex
             notification_data["status"] = NotificationStatus.UNREAD.value
-            notification_data["created_at"] = int(datetime.utcnow().timestamp())
+            # Use timezone-aware UTC datetime to ensure correct timestamp
+            notification_data["created_at"] = int(datetime.now(timezone.utc).timestamp())
             notification_data["read_at"] = None
             self.collection.insert_one(notification_data)
             return notification_data
@@ -72,7 +73,7 @@ class NotificationRepository:
                 {
                     "$set": {
                         "status": NotificationStatus.READ.value,
-                        "read_at": int(datetime.utcnow().timestamp())
+                        "read_at": int(datetime.now(timezone.utc).timestamp())
                     }
                 }
             )
@@ -92,7 +93,7 @@ class NotificationRepository:
                 {
                     "$set": {
                         "status": NotificationStatus.READ.value,
-                        "read_at": int(datetime.utcnow().timestamp())
+                        "read_at": int(datetime.now(timezone.utc).timestamp())
                     }
                 }
             )

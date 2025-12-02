@@ -52,9 +52,12 @@ class NotificationService:
                     NotificationType.REQUEST_RECEIVED: "request",
                     NotificationType.REQUEST_ACCEPTED: "request",
                     NotificationType.REQUEST_REJECTED: "request",
+                    NotificationType.CLIENT_REQUEST_LIMIT_REACHED: "request",
                     NotificationType.MILESTONE_REMINDER: "milestone",
                     NotificationType.MILESTONE_COMPLETED: "milestone",
                     NotificationType.MILESTONE_APPROVED: "milestone",
+                    NotificationType.AGREEMENT_CREATED: "general",
+                    NotificationType.AGREEMENT_SIGN_REMINDER: "general",
                 }
                 routing_key = routing_key_map.get(notification_type, "general")
                 
@@ -140,6 +143,121 @@ class NotificationService:
                 "milestone_title": milestone_title
             },
             link=f"/milestone?agreement_id={agreement_id}",
+            send_email=True
+        )
+
+    def notify_request_accepted(
+        self,
+        client_id: str,
+        freelancer_name: str,
+        project_title: str,
+        request_id: str,
+        project_id: str
+    ):
+        """Notify client when freelancer accepts their request"""
+        return self.create_notification(
+            user_id=client_id,
+            notification_type=NotificationType.REQUEST_ACCEPTED,
+            title="Request Accepted",
+            message=f"{freelancer_name} has accepted your request for the project: {project_title}",
+            data={
+                "request_id": request_id,
+                "project_id": project_id,
+                "freelancer_name": freelancer_name,
+                "project_title": project_title
+            },
+            link=f"/client/projects?request_id={request_id}",
+            send_email=True
+        )
+
+    def notify_request_rejected(
+        self,
+        client_id: str,
+        freelancer_name: str,
+        project_title: str,
+        request_id: str,
+        project_id: str
+    ):
+        """Notify client when freelancer rejects their request"""
+        return self.create_notification(
+            user_id=client_id,
+            notification_type=NotificationType.REQUEST_REJECTED,
+            title="Request Rejected",
+            message=f"{freelancer_name} has rejected your request for the project: {project_title}",
+            data={
+                "request_id": request_id,
+                "project_id": project_id,
+                "freelancer_name": freelancer_name,
+                "project_title": project_title
+            },
+            link=f"/client/projects?request_id={request_id}",
+            send_email=True
+        )
+
+    def notify_client_request_limit_reached(
+        self,
+        client_id: str,
+        max_requests: int
+    ):
+        """Notify client when they reach their request limit"""
+        return self.create_notification(
+            user_id=client_id,
+            notification_type=NotificationType.CLIENT_REQUEST_LIMIT_REACHED,
+            title="Request Limit Reached",
+            message=f"You have reached your request limit of {max_requests} requests. You cannot send more requests until some are completed or cancelled.",
+            data={
+                "max_requests": max_requests,
+                "current_count": max_requests
+            },
+            link="/client/projects",
+            send_email=True
+        )
+
+    def notify_agreement_sign_reminder(
+        self,
+        recipient_id: str,
+        agreement_title: str,
+        agreement_id: str,
+        project_id: str,
+        other_party_name: str
+    ):
+        """Notify recipient to sign the agreement after the other party has signed"""
+        return self.create_notification(
+            user_id=recipient_id,
+            notification_type=NotificationType.AGREEMENT_SIGN_REMINDER,
+            title="Reminder to Sign Agreement",
+            message=f"{other_party_name} has signed the agreement '{agreement_title}'. Please sign the agreement to proceed.",
+            data={
+                "agreement_id": agreement_id,
+                "project_id": project_id,
+                "agreement_title": agreement_title,
+                "other_party_name": other_party_name
+            },
+            link=f"/agreement?agreement_id={agreement_id}",
+            send_email=True
+        )
+
+    def notify_agreement_created(
+        self,
+        recipient_id: str,
+        creator_name: str,
+        agreement_title: str,
+        agreement_id: str,
+        project_id: str
+    ):
+        """Notify recipient when an agreement is created"""
+        return self.create_notification(
+            user_id=recipient_id,
+            notification_type=NotificationType.AGREEMENT_CREATED,
+            title="New Agreement Created",
+            message=f"{creator_name} has created a new agreement: {agreement_title}",
+            data={
+                "agreement_id": agreement_id,
+                "project_id": project_id,
+                "creator_name": creator_name,
+                "agreement_title": agreement_title
+            },
+            link=f"/agreement?agreement_id={agreement_id}",
             send_email=True
         )
 

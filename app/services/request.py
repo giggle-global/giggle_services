@@ -81,7 +81,27 @@ class RequestService:
             created = self.repo.create_request(client_id, freelancer_id, client.get("first_name"), client.get("last_name"), freelancer.get("first_name"), freelancer.get("last_name"), project_id, project_name=project_details.get("title"))
             logger.info("Request created: id=%s client=%s freelancer=%s", getattr(created, "id", None), client_id, freelancer_id)
             
-            # Send notification to freelancer
+            # Check if this request reached the limit (10/10) and send notification to client
+            try:
+                new_total_requests = self.repo.count_total_requests_by_client(client_id)
+                if new_total_requests == MAX_REQUESTS_PER_CLIENT:
+                    # Client just reached the limit (10/10), notify the client
+                    try:
+                        from app.services.notification import NotificationService
+                        notification_service = NotificationService()
+                        notification_service.notify_client_request_limit_reached(
+                            client_id=client_id,
+                            max_requests=MAX_REQUESTS_PER_CLIENT
+                        )
+                        logger.info("Limit reached notification sent to client: %s (reached %d/%d)", client_id, new_total_requests, MAX_REQUESTS_PER_CLIENT)
+                    except Exception as e:
+                        logger.warning("Failed to send limit reached notification: %s", e)
+                        # Don't fail the request creation if notification fails
+            except Exception as e:
+                logger.warning("Failed to check total requests after creation: %s", e)
+                # Continue even if check fails
+            
+            # Send notification to freelancer about new request received
             try:
                 from app.services.notification import NotificationService
                 notification_service = NotificationService()
@@ -159,6 +179,39 @@ class RequestService:
         try:
             updated = self.repo.update_status(request_id, new_status, freelancer_id)
             logger.info("Request responded: id=%s freelancer=%s status=%s", request_id, freelancer_id, new_status)
+            
+            # Send notification to client about acceptance/rejection
+            try:
+                from app.services.notification import NotificationService
+                notification_service = NotificationService()
+                
+                client_id = req.get("client_id")
+                freelancer_name = req.get("freelancer_name", "Freelancer")
+                project_title = req.get("project_title", "Project")
+                project_id = req.get("project_id")
+                
+                if accept:
+                    notification_service.notify_request_accepted(
+                        client_id=client_id,
+                        freelancer_name=freelancer_name,
+                        project_title=project_title,
+                        request_id=request_id,
+                        project_id=project_id
+                    )
+                    logger.info("Notification sent to client: %s for accepted request: %s", client_id, request_id)
+                else:
+                    notification_service.notify_request_rejected(
+                        client_id=client_id,
+                        freelancer_name=freelancer_name,
+                        project_title=project_title,
+                        request_id=request_id,
+                        project_id=project_id
+                    )
+                    logger.info("Notification sent to client: %s for rejected request: %s", client_id, request_id)
+            except Exception as e:
+                logger.warning("Failed to send request response notification (request still updated): %s", e)
+                # Don't fail the request update if notification fails
+            
             return updated
         except PyMongoError:
             logger.exception("Mongo error updating request status: id=%s", request_id)

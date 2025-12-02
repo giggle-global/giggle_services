@@ -294,6 +294,10 @@ async def ws_agreement(agreement_id: str, websocket: WebSocket, token: Optional[
             await websocket.send_json({"error": "Agreement not found"})
             await websocket.close()
             return
+        
+        # Check if agreement is paused - block sending messages but allow viewing
+        agreement_status = agreement_details.get("status", "")
+        is_paused = agreement_status == "Paused"
 
         # build participant set and normalize IDs
         participants = set()
@@ -334,6 +338,14 @@ async def ws_agreement(agreement_id: str, websocket: WebSocket, token: Optional[
             content = (data.get("content") or "").strip()
             if not content:
                 await websocket.send_json({"error": "Message cannot be empty"})
+                continue
+
+            # Check if agreement is paused - refresh status on each message attempt
+            current_agreement = agreement_service.get_agreement(agreement_id)
+            if current_agreement and current_agreement.get("status") == "Paused":
+                await websocket.send_json({
+                    "error": "This agreement is currently paused. You cannot send messages until it is unpaused by the administrator."
+                })
                 continue
 
             # log chat: request_id is None here

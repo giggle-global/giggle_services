@@ -5,6 +5,8 @@ from fastapi import HTTPException, status
 from pymongo.errors import PyMongoError
 
 from app.repositories.ticket import TicketRepository
+from app.services.chat import ChatService
+from app.services.request import RequestService
 from app.models.ticket import (
     TicketCreate,
     TicketUpdate,
@@ -22,6 +24,8 @@ logger = logging.getLogger(__name__)
 class TicketService:
     def __init__(self, repo: Optional[TicketRepository] = None):
         self.repo = repo or TicketRepository()
+        self.chat_service = ChatService()
+        self.request_service = RequestService()
 
     # ---------- Helpers ----------
     def _get_ticket_or_404(self, ticket_id: str) -> Dict[str, Any]:
@@ -81,6 +85,44 @@ class TicketService:
         try:
             created = self.repo.create_ticket(data)
             logger.info("Ticket created: freelancer=%s client=%s", freelancer_id, client_id)
+            
+            # Send chat message when dispute is created
+            if project_id:
+                try:
+                    # Get request_id from project_id, client_id, and freelancer_id
+                    request = self.request_service.get_request_by_parties(project_id, freelancer_id, client_id)
+                    if request and request.get("request_id"):
+                        request_id = request.get("request_id")
+                        # Build sender name
+                        sender_name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
+                        if not sender_name:
+                            sender_name = user.get("username", "User")
+                        
+                        # Create dispute message
+                        dispute_message = f"Dispute has been created by {sender_name}"
+                        
+                        # Send message to project chat
+                        saved_message = self.chat_service.log_chat(
+                            group_type="project",
+                            request_id=request_id,
+                            group_id=project_id,
+                            sender_user=user,
+                            content=dispute_message,
+                            meta={"type": "system", "dispute_created": True}
+                        )
+                        logger.info("Dispute chat message sent: project_id=%s request_id=%s", project_id, request_id)
+                        
+                        # Store saved_message and request_id in created ticket dict for broadcasting
+                        created["_dispute_chat_message"] = saved_message
+                        created["_dispute_request_id"] = request_id
+                        created["_dispute_project_id"] = project_id
+                    else:
+                        logger.warning("Could not find request for dispute chat message: project_id=%s client_id=%s freelancer_id=%s", 
+                                     project_id, client_id, freelancer_id)
+                except Exception as e:
+                    # Don't fail ticket creation if chat message fails
+                    logger.exception("Error sending dispute chat message: %s", str(e))
+            
             return created
         except PyMongoError:
             logger.exception("Mongo error creating ticket: freelancer=%s client=%s", freelancer_id, client_id)
@@ -208,15 +250,83 @@ class TicketService:
 
     def list_tickets(self, user: Dict[str, Any]) -> List[Dict[str, Any]]:
         role = user.get("role")
+        user_id = user.get("user_id")
         try:
             if role == "SA":
                 items = self.repo.get_all_tickets()
             elif role == "FL":
-                items = self.repo.get_tickets_by_freelancer(user.get("user_id"))
+                if not user_id:
+                    raise HTTPException(status.HTTP_400_BAD_REQUEST, "user_id is required")
+                items = self.repo.get_tickets_by_freelancer(user_id)
+            elif role == "CL":
+                if not user_id:
+                    raise HTTPException(status.HTTP_400_BAD_REQUEST, "user_id is required")
+                items = self.repo.get_tickets_by_client(user_id)
             else:
                 raise HTTPException(status.HTTP_403_FORBIDDEN, "Not allowed")
+            
+            # Ensure all items are properly formatted (no None values, proper types)
+            if items:
+                # Filter out any None items and ensure dict format
+                items = [item for item in items if item is not None and isinstance(item, dict)]
+                # Ensure all required fields are present for TicketOut model
+                for item in items:
+                    # Ensure required fields have default values if missing
+                    if "subject" not in item or item["subject"] is None:
+                        item["subject"] = ""
+                    if "description" not in item:
+                        item["description"] = None
+                    if "solution" not in item:
+                        item["solution"] = None
+                    if "project_id" not in item:
+                        item["project_id"] = None
+                    if "agreement_id" not in item:
+                        item["agreement_id"] = None
+                    # Handle timeline - convert datetime objects to ISO strings or None
+                    if "timeline" not in item:
+                        item["timeline"] = None
+                    elif item["timeline"] is not None:
+                        # Convert timeline entries to serializable format
+                        timeline_list = []
+                        for entry in item["timeline"]:
+                            if isinstance(entry, dict):
+                                timeline_entry = dict(entry)
+                                # Convert datetime objects to ISO strings
+                                if "timestamp" in timeline_entry and hasattr(timeline_entry["timestamp"], "isoformat"):
+                                    timeline_entry["timestamp"] = timeline_entry["timestamp"].isoformat()
+                                timeline_list.append(timeline_entry)
+                        item["timeline"] = timeline_list if timeline_list else None
+                    # Ensure status is a valid string
+                    if "status" not in item or not item["status"]:
+                        item["status"] = "open"
+                    # Remove any MongoDB ObjectId or other non-serializable fields
+                    item.pop("_id", None)
+            
             logger.debug("Tickets listed: role=%s count=%s", role, len(items) if items else 0)
+            return items or []
+        except HTTPException:
+            raise  # Re-raise HTTP exceptions
+        except PyMongoError as e:
+            logger.exception("Mongo error listing tickets: role=%s user=%s error=%s", role, user_id, str(e))
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to list tickets")
+        except Exception as e:
+            logger.exception("Unexpected error listing tickets: role=%s user=%s error=%s", role, user_id, str(e))
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, f"Failed to list tickets: {str(e)}")
+    
+    def get_tickets_by_project_id(self, project_id: str, user: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Get all tickets for a specific project_id"""
+        try:
+            items = self.repo.get_tickets_by_project_id(project_id)
+            logger.debug("Tickets by project_id: project_id=%s count=%s", project_id, len(items) if items else 0)
             return items
         except PyMongoError:
-            logger.exception("Mongo error listing tickets: role=%s user=%s", role, user.get("user_id"))
-            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to list tickets")
+            logger.exception("Mongo error fetching tickets by project_id: project_id=%s", project_id)
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to fetch tickets by project_id")
+    
+    def has_active_dispute(self, project_id: str) -> bool:
+        """Check if there's an active dispute for a project"""
+        try:
+            return self.repo.has_active_dispute(project_id)
+        except PyMongoError:
+            logger.exception("Mongo error checking active dispute: project_id=%s", project_id)
+            return False

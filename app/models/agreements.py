@@ -15,6 +15,7 @@ class AgreementStatus(str, Enum):
     DRAFT = "Draft"
     PENDING_SIGNATURE = "PendingSignature"
     ACTIVE = "Active"
+    PAUSED = "Paused"
     CANCELLED = "Cancelled"
     COMPLETED = "Completed"
 
@@ -189,6 +190,7 @@ class AgreementInDB(BaseModel):
     cancelled_reason: Optional[str] = None
     exported_pdf_url: Optional[str] = None
     draft: bool = True
+    paused_from_status: Optional[str] = None  # Store the status before pausing
 
     class Config:
         from_attributes = True

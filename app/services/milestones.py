@@ -67,6 +67,10 @@ class MilestoneService:
         if not ag:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Agreement not found")
 
+        # Check if agreement is paused - block milestone updates
+        if ag.get("status") == "Paused":
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot update milestone. This agreement is currently paused.")
+
         # authorization: only client, freelancer or admin can touch milestone
         if user["user_id"] not in [ag["client"]["user_id"], ag["freelancer"]["user_id"]] and user.get("role") != "SA":
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Not authorized")

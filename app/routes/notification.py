@@ -4,6 +4,7 @@ from app.services.notification import NotificationService
 from app.models.notification import NotificationOut
 from app.schemas.response import APIResponse, ok
 from app.core.keycloak import get_current_user
+from app.core.scheduler import milestone_scheduler
 import logging
 
 logger = logging.getLogger(__name__)
@@ -77,4 +78,24 @@ def mark_all_as_read(
     except Exception as e:
         logger.exception("Error marking all notifications as read: %s", e)
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to mark all notifications as read")
+
+@router.get("/scheduler/status", response_model=APIResponse[Dict[str, Any]])
+def get_scheduler_status(
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Check if milestone scheduler is running"""
+    try:
+        is_running = milestone_scheduler.scheduler.running
+        jobs = milestone_scheduler.scheduler.get_jobs()
+        
+        status_info = {
+            "running": is_running,
+            "jobs_count": len(jobs),
+            "next_run_time": str(jobs[0].next_run_time) if jobs and jobs[0].next_run_time else None
+        }
+        
+        return ok(data=status_info, message="Scheduler status retrieved")
+    except Exception as e:
+        logger.exception("Error getting scheduler status: %s", e)
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to get scheduler status")
 

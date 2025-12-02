@@ -73,6 +73,60 @@ class AgreementService:
                 # refresh computed fields
                 created = self.repo.get_by_id(created["agreement_id"])
 
+            # Send notification to the recipient (if client created, notify freelancer; if freelancer created, notify client)
+            try:
+                from app.services.notification import NotificationService
+                from app.repositories.user import UserRepository
+                notification_service = NotificationService()
+                user_repo = UserRepository()
+                
+                # Determine recipient and creator info
+                client_id = payload.client.user_id
+                freelancer_id = payload.freelancer.user_id
+                
+                # Determine who created the agreement and who should receive notification
+                if created_by == client_id:
+                    # Client created, notify freelancer
+                    recipient_id = freelancer_id
+                    creator_ref = payload.client
+                elif created_by == freelancer_id:
+                    # Freelancer created, notify client
+                    recipient_id = client_id
+                    creator_ref = payload.freelancer
+                else:
+                    # Admin or other role created - notify freelancer by default
+                    recipient_id = freelancer_id
+                    creator_ref = None  # Will fetch from user repo
+                
+                # Get creator name from UserRef or fetch from user repo
+                if creator_ref:
+                    creator_name = creator_ref.name
+                    if not creator_name:
+                        creator_user = user_repo.get_user_by_id(created_by)
+                        if creator_user:
+                            creator_name = f"{creator_user.get('first_name', '')} {creator_user.get('last_name', '')}".strip() or creator_user.get('username', 'User')
+                        else:
+                            creator_name = creator_ref.email or "User"
+                else:
+                    # Admin case - fetch from user repo
+                    creator_user = user_repo.get_user_by_id(created_by)
+                    if creator_user:
+                        creator_name = f"{creator_user.get('first_name', '')} {creator_user.get('last_name', '')}".strip() or creator_user.get('username', 'Admin')
+                    else:
+                        creator_name = "Admin"
+                
+                notification_service.notify_agreement_created(
+                    recipient_id=recipient_id,
+                    creator_name=creator_name,
+                    agreement_title=payload.title,
+                    agreement_id=created["agreement_id"],
+                    project_id=payload.project_id
+                )
+                logger.info("Notification sent to recipient: %s for agreement: %s", recipient_id, created["agreement_id"])
+            except Exception as e:
+                logger.warning("Failed to send agreement creation notification (agreement still created): %s", e)
+                # Don't fail the agreement creation if notification fails
+
             return created
         except PyMongoError:
             logger.exception("DB error creating agreement")
@@ -111,6 +165,10 @@ class AgreementService:
         if user["user_id"] not in [ag["client"]["user_id"], ag["freelancer"]["user_id"]]:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Not authorized to sign")
 
+        # Store previous signing state to detect if this is a new signature
+        old_client_signed = ag.get("client_signed", False)
+        old_freelancer_signed = ag.get("freelancer_signed", False)
+
         sig = SignatureRecord(
             user_id=user["user_id"],
             name=signature_payload.get("name") or user.get("name"),
@@ -133,6 +191,45 @@ class AgreementService:
             update["draft"] = False
 
         updated = self.repo.update(agreement_id, update)
+        
+        # Send notification to the other party if they haven't signed yet
+        # Only send if this is a new signature (wasn't signed before)
+        try:
+            from app.services.notification import NotificationService
+            notification_service = NotificationService()
+            
+            client_id = ag["client"]["user_id"]
+            freelancer_id = ag["freelancer"]["user_id"]
+            agreement_title = ag.get("title", "Agreement")
+            project_id = ag.get("project_id")
+            
+            # Check if freelancer just signed (was false, now true) and client hasn't signed
+            if not old_freelancer_signed and update["freelancer_signed"] and not update["client_signed"]:
+                freelancer_name = ag["freelancer"].get("name", "Freelancer")
+                notification_service.notify_agreement_sign_reminder(
+                    recipient_id=client_id,
+                    agreement_title=agreement_title,
+                    agreement_id=agreement_id,
+                    project_id=project_id,
+                    other_party_name=freelancer_name
+                )
+                logger.info("Sign reminder notification sent to client: %s for agreement: %s", client_id, agreement_id)
+            
+            # Check if client just signed (was false, now true) and freelancer hasn't signed
+            elif not old_client_signed and update["client_signed"] and not update["freelancer_signed"]:
+                client_name = ag["client"].get("name", "Client")
+                notification_service.notify_agreement_sign_reminder(
+                    recipient_id=freelancer_id,
+                    agreement_title=agreement_title,
+                    agreement_id=agreement_id,
+                    project_id=project_id,
+                    other_party_name=client_name
+                )
+                logger.info("Sign reminder notification sent to freelancer: %s for agreement: %s", freelancer_id, agreement_id)
+        except Exception as e:
+            logger.warning("Failed to send agreement sign reminder notification (agreement still signed): %s", e)
+            # Continue even if notification fails - agreement is already signed
+        
         return updated
 
     def update_agreement(self, agreement_id: str, update_payload: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
@@ -169,3 +266,72 @@ class AgreementService:
         if user["user_id"] not in [ag["client"]["user_id"], ag["freelancer"]["user_id"]] and user.get("role") != "admin":
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Not authorized")
         return self.repo.update(agreement_id, {"status": AgreementStatus.CANCELLED, "cancelled_reason": reason})
+
+    def pause_agreement(self, agreement_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Pause an agreement. Only super admin can pause, and only non-completed agreements can be paused.
+        Stores the previous status so it can be restored when unpausing.
+        """
+        ag = self.repo.get_by_id(agreement_id)
+        if not ag:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Agreement not found")
+        
+        # Only super admin (SA) can pause
+        if user.get("role") != "SA":
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Only super admin can pause agreements")
+        
+        # Cannot pause completed agreements
+        if ag["status"] == AgreementStatus.COMPLETED:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot pause completed agreement")
+        
+        # Cannot pause already paused agreements
+        if ag["status"] == AgreementStatus.PAUSED:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Agreement is already paused")
+        
+        # Store the current status before pausing, so we can restore it later
+        current_status = ag["status"]
+        update_data = {
+            "status": AgreementStatus.PAUSED,
+            "paused_from_status": current_status
+        }
+        
+        updated = self.repo.update(agreement_id, update_data)
+        logger.info(f"Agreement {agreement_id} paused from {current_status} by super admin {user.get('user_id')}")
+        return updated
+
+    def unpause_agreement(self, agreement_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Unpause an agreement. Only super admin can unpause, and only paused agreements can be unpaused.
+        Restores the previous status that was stored when pausing.
+        """
+        ag = self.repo.get_by_id(agreement_id)
+        if not ag:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Agreement not found")
+        
+        # Only super admin (SA) can unpause
+        if user.get("role") != "SA":
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Only super admin can unpause agreements")
+        
+        # Cannot unpause completed agreements
+        if ag["status"] == AgreementStatus.COMPLETED:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot unpause completed agreement")
+        
+        # Can only unpause paused agreements
+        if ag["status"] != AgreementStatus.PAUSED:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Cannot unpause agreement with status {ag['status']}. Only paused agreements can be unpaused.")
+        
+        # Restore the previous status, or default to ACTIVE if not stored (backward compatibility)
+        previous_status = ag.get("paused_from_status")
+        if not previous_status:
+            # For backward compatibility, if paused_from_status is not set, default to ACTIVE
+            previous_status = AgreementStatus.ACTIVE.value
+            logger.warning(f"Agreement {agreement_id} does not have paused_from_status, defaulting to ACTIVE")
+        
+        update_data = {
+            "status": previous_status,
+            "paused_from_status": None  # Clear the stored status
+        }
+        
+        updated = self.repo.update(agreement_id, update_data)
+        logger.info(f"Agreement {agreement_id} unpaused to {previous_status} by super admin {user.get('user_id')}")
+        return updated
