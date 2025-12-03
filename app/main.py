@@ -65,10 +65,24 @@ app = FastAPI()
 # For production, set ALLOWED_ORIGINS environment variable
 import os
 ALLOWED_ORIGINS_ENV = os.getenv("ALLOWED_ORIGINS", "")
+env = os.getenv("ENVIRONMENT", "development")
+
 if ALLOWED_ORIGINS_ENV:
     # Parse comma-separated origins from environment variable
     allowed_origins = [origin.strip() for origin in ALLOWED_ORIGINS_ENV.split(",") if origin.strip()]
-    logger.info(f"CORS: Using ALLOWED_ORIGINS from environment: {allowed_origins}")
+    
+    # CRITICAL: Always add localhost origins for local development
+    dev_origins = [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+    ]
+    for dev_origin in dev_origins:
+        if dev_origin not in allowed_origins:
+            allowed_origins.append(dev_origin)
+    
+    logger.info(f"CORS: Using ALLOWED_ORIGINS from environment + localhost: {allowed_origins}")
 else:
     # Default origins for development and production
     # In production, set ALLOWED_ORIGINS="https://begiggle.keydraft.com,https://www.begiggle.keydraft.com"
@@ -105,14 +119,44 @@ app.add_middleware(
     allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allow_headers=["*"],
+    allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With", "Origin"],
     expose_headers=["*"],
     max_age=3600,  # Cache preflight requests for 1 hour
 )
 
-# Add middleware to log CORS-related requests for debugging
-class CORSDebugMiddleware(BaseHTTPMiddleware):
+# CRITICAL: Middleware to handle OPTIONS BEFORE FastAPI validation
+# This MUST be added AFTER CORSMiddleware but handles OPTIONS immediately
+class OPTIONSHandlerMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
+        # Handle OPTIONS requests immediately - before FastAPI tries to validate them
+        if request.method == "OPTIONS":
+            origin = request.headers.get("origin")
+            requested_method = request.headers.get("Access-Control-Request-Method", "POST")
+            requested_headers = request.headers.get("Access-Control-Request-Headers", "")
+            
+            logger.info(f"OPTIONS Preflight - Origin: {origin}, Path: {request.url.path}, Method: {requested_method}")
+            
+            if origin and origin in allowed_origins:
+                headers = {
+                    "Access-Control-Allow-Origin": origin,
+                    "Access-Control-Allow-Credentials": "true",
+                    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
+                    "Access-Control-Max-Age": "3600",
+                }
+                if requested_headers:
+                    headers["Access-Control-Allow-Headers"] = requested_headers
+                else:
+                    headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Accept, X-Requested-With, Origin"
+                
+                logger.info(f"OPTIONS Preflight Response - Allowing origin: {origin}")
+                return Response(status_code=200, headers=headers)
+            elif origin:
+                logger.warning(f"OPTIONS Preflight - Origin '{origin}' not allowed")
+                return Response(status_code=200)
+            else:
+                return Response(status_code=200)
+        
+        # For non-OPTIONS requests, continue normally
         origin = request.headers.get("origin")
         method = request.method
         
@@ -126,14 +170,15 @@ class CORSDebugMiddleware(BaseHTTPMiddleware):
         
         response = await call_next(request)
         
-        # Log response status for OPTIONS requests
-        if method == "OPTIONS":
-            logger.info(f"OPTIONS Response - Status: {response.status_code}, Origin: {origin}")
+        # Ensure CORS headers are present in response
+        if origin and origin in allowed_origins:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
         
         return response
 
-# Add debug middleware after CORS to log requests
-app.add_middleware(CORSDebugMiddleware)
+# Add OPTIONS handler middleware AFTER CORS middleware
+app.add_middleware(OPTIONSHandlerMiddleware)
 
 # --- Global exception handlers -> uniform response ---
 @app.exception_handler(HTTPException)
@@ -159,36 +204,8 @@ async def unhandled_exception_handler(_: Request, exc: Exception):
 
 
 
-# Explicit OPTIONS handler as fallback (CORS middleware should handle this, but this ensures it works)
-# This catches any OPTIONS requests that might slip through before CORS middleware
-@app.options("/{full_path:path}")
-async def options_handler(request: Request):
-    """Handle OPTIONS requests explicitly to prevent validation errors"""
-    origin = request.headers.get("origin")
-    requested_method = request.headers.get("Access-Control-Request-Method", "POST")
-    requested_headers = request.headers.get("Access-Control-Request-Headers", "*")
-    
-    logger.info(f"OPTIONS Handler - Origin: {origin}, Path: {request.url.path}, Requested Method: {requested_method}")
-    
-    # Check if origin is allowed
-    if origin and origin in allowed_origins:
-        return Response(
-            status_code=200,
-            headers={
-                "Access-Control-Allow-Origin": origin,
-                "Access-Control-Allow-Credentials": "true",
-                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
-                "Access-Control-Allow-Headers": requested_headers,
-                "Access-Control-Max-Age": "3600",
-            }
-        )
-    elif origin:
-        logger.warning(f"OPTIONS Handler - Origin '{origin}' not allowed. Allowed origins: {allowed_origins}")
-        # Still return 200 but without CORS headers (browser will block it)
-        return Response(status_code=200)
-    else:
-        # No origin header (same-origin request or direct API call)
-        return Response(status_code=200)
+# Note: OPTIONS requests are handled by OPTIONSHandlerMiddleware
+# No need for explicit route handler - middleware handles it before FastAPI validation
 
 app.include_router(user.router)
 app.include_router(auth.router)
