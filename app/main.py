@@ -84,7 +84,7 @@ env = os.getenv("ENVIRONMENT", "development")
 
 if ALLOWED_ORIGINS_ENV:
     # Parse comma-separated origins from environment variable
-    allowed_origins = [origin.strip() for origin in ALLOWED_ORIGINS_ENV.split(",") if origin.strip()]
+    allowed_origins = [origin.strip().rstrip('/') for origin in ALLOWED_ORIGINS_ENV.split(",") if origin.strip()]
     
     # CRITICAL: Always add localhost origins for local development
     dev_origins = [
@@ -155,7 +155,11 @@ class OPTIONSHandlerMiddleware(BaseHTTPMiddleware):
             
             logger.info(f"OPTIONS Preflight - Origin: {origin}, Path: {request.url.path}, Method: {requested_method}")
             
-            if origin and origin_matches(origin, allowed_origins):
+            # Normalize origin for comparison (remove trailing slash) and check with wildcard support
+            normalized_origin = origin.rstrip('/') if origin else None
+            origin_allowed = origin and (origin_matches(origin, allowed_origins) or origin_matches(normalized_origin, allowed_origins))
+            
+            if origin_allowed:
                 headers = {
                     "Access-Control-Allow-Origin": origin,
                     "Access-Control-Allow-Credentials": "true",
@@ -181,18 +185,35 @@ class OPTIONSHandlerMiddleware(BaseHTTPMiddleware):
         
         # Log CORS requests
         if origin:
+            normalized_origin = origin.rstrip('/')
+            origin_allowed = origin_matches(origin, allowed_origins) or origin_matches(normalized_origin, allowed_origins)
             logger.info(f"CORS Request - Origin: {origin}, Path: {request.url.path}, Method: {method}")
-            if not origin_matches(origin, allowed_origins):
-                logger.warning(f"CORS Warning - Origin '{origin}' not in allowed origins: {allowed_origins}")
+            if not origin_allowed:
+                logger.warning(f"CORS Warning - Origin '{origin}' (normalized: '{normalized_origin}') not in allowed origins: {allowed_origins}")
             else:
                 logger.info(f"CORS Allowed - Origin '{origin}' is in allowed list")
         
         response = await call_next(request)
         
-        # Ensure CORS headers are present in response
-        if origin and origin_matches(origin, allowed_origins):
-            response.headers["Access-Control-Allow-Origin"] = origin
-            response.headers["Access-Control-Allow-Credentials"] = "true"
+        # CRITICAL: Force add CORS headers to ALL responses (override any existing)
+        # This ensures headers are present even if CORSMiddleware didn't add them
+        if origin:
+            # Normalize origin (remove trailing slash for comparison)
+            normalized_origin = origin.rstrip('/')
+            
+            # Check if origin matches (with wildcard support and normalization)
+            origin_allowed = origin_matches(origin, allowed_origins) or origin_matches(normalized_origin, allowed_origins)
+            
+            if origin_allowed:
+                # Force set headers - don't rely on CORSMiddleware alone
+                # Use the original origin (browser sent it, so return it as-is)
+                response.headers["Access-Control-Allow-Origin"] = origin
+                response.headers["Access-Control-Allow-Credentials"] = "true"
+                logger.info(f"✓ Added CORS headers to {method} response - Origin: {origin}, Status: {response.status_code}, Path: {request.url.path}")
+            else:
+                logger.error(f"✗ CORS BLOCKED - Origin '{origin}' (normalized: '{normalized_origin}') not in allowed list: {allowed_origins}")
+        else:
+            logger.debug(f"No origin header - Path: {request.url.path}, Method: {method}")
         
         return response
 
@@ -200,26 +221,63 @@ class OPTIONSHandlerMiddleware(BaseHTTPMiddleware):
 app.add_middleware(OPTIONSHandlerMiddleware)
 
 # --- Global exception handlers -> uniform response ---
+# CRITICAL: Exception handlers MUST add CORS headers or browser will block error responses
 @app.exception_handler(HTTPException)
-async def http_exception_handler(_: Request, exc: HTTPException):
+async def http_exception_handler(request: Request, exc: HTTPException):
+    origin = request.headers.get("origin")
     body = APIResponse(status_code=exc.status_code, message=str(exc.detail), data=None)
-    return JSONResponse(status_code=exc.status_code, content=body.model_dump())
+    response = JSONResponse(status_code=exc.status_code, content=body.model_dump())
+    
+    # Add CORS headers to error responses
+    if origin:
+        normalized_origin = origin.rstrip('/')
+        origin_allowed = origin_matches(origin, allowed_origins) or origin_matches(normalized_origin, allowed_origins)
+        if origin_allowed:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            logger.info(f"✓ Added CORS headers to HTTPException response - Origin: {origin}, Status: {exc.status_code}")
+    
+    return response
 
 @app.exception_handler(RequestValidationError)
-async def validation_exception_handler(_: Request, exc: RequestValidationError):
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    origin = request.headers.get("origin")
     body = APIResponse(status_code=HTTP_422_UNPROCESSABLE_ENTITY,
                        message="Validation error",
                        data={"errors": exc.errors()})
-    return JSONResponse(status_code=HTTP_422_UNPROCESSABLE_ENTITY, content=body.model_dump())
+    response = JSONResponse(status_code=HTTP_422_UNPROCESSABLE_ENTITY, content=body.model_dump())
+    
+    # Add CORS headers to error responses
+    if origin:
+        normalized_origin = origin.rstrip('/')
+        origin_allowed = origin_matches(origin, allowed_origins) or origin_matches(normalized_origin, allowed_origins)
+        if origin_allowed:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            logger.info(f"✓ Added CORS headers to ValidationError response - Origin: {origin}")
+    
+    return response
 
 @app.exception_handler(Exception)
-async def unhandled_exception_handler(_: Request, exc: Exception):
+async def unhandled_exception_handler(request: Request, exc: Exception):
     # Log the exception with full traceback for debugging
     logger.exception("Unhandled exception occurred: %s", str(exc))
+    origin = request.headers.get("origin")
     body = APIResponse(status_code=HTTP_500_INTERNAL_SERVER_ERROR,
                        message="Something went wrong",
                        data=None)
-    return JSONResponse(status_code=HTTP_500_INTERNAL_SERVER_ERROR, content=body.model_dump())
+    response = JSONResponse(status_code=HTTP_500_INTERNAL_SERVER_ERROR, content=body.model_dump())
+    
+    # Add CORS headers to error responses
+    if origin:
+        normalized_origin = origin.rstrip('/')
+        origin_allowed = origin_matches(origin, allowed_origins) or origin_matches(normalized_origin, allowed_origins)
+        if origin_allowed:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            logger.info(f"✓ Added CORS headers to Exception response - Origin: {origin}")
+    
+    return response
 
 
 
