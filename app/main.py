@@ -7,6 +7,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.status import HTTP_422_UNPROCESSABLE_ENTITY, HTTP_500_INTERNAL_SERVER_ERROR
 from starlette.responses import JSONResponse, Response
 from app.schemas.response import APIResponse
+import fnmatch
 
 from app.core.db import check_db_connection
 from app.services.user import UserService
@@ -60,6 +61,20 @@ logger.info("App started")
 
 app = FastAPI()
 
+# Helper function to check if origin matches allowed patterns (supports wildcards)
+def origin_matches(origin: str, allowed_patterns: list) -> bool:
+    """Check if an origin matches any pattern in allowed_patterns (supports wildcards like *.vercel.app)"""
+    if not origin:
+        return False
+    for pattern in allowed_patterns:
+        if pattern == origin:
+            return True
+        # Support wildcard patterns like *.vercel.app
+        if '*' in pattern:
+            if fnmatch.fnmatch(origin, pattern):
+                return True
+    return False
+
 # Enhanced CORS configuration
 # Note: When allow_credentials=True, we MUST specify origins explicitly (cannot use "*")
 # For production, set ALLOWED_ORIGINS environment variable
@@ -112,11 +127,15 @@ else:
 # Log CORS configuration for debugging
 logger.info(f"CORS Configuration - Origins: {allowed_origins}, Credentials: True")
 
+# Filter out wildcard patterns for CORSMiddleware (it doesn't support wildcards)
+# Our custom OPTIONSHandlerMiddleware will handle wildcard matching
+cors_origins_for_middleware = [origin for origin in allowed_origins if '*' not in origin]
+
 # IMPORTANT: CORS middleware must be added FIRST
 # This ensures OPTIONS preflight requests are handled before route validation
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=cors_origins_for_middleware,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With", "Origin"],
@@ -136,7 +155,7 @@ class OPTIONSHandlerMiddleware(BaseHTTPMiddleware):
             
             logger.info(f"OPTIONS Preflight - Origin: {origin}, Path: {request.url.path}, Method: {requested_method}")
             
-            if origin and origin in allowed_origins:
+            if origin and origin_matches(origin, allowed_origins):
                 headers = {
                     "Access-Control-Allow-Origin": origin,
                     "Access-Control-Allow-Credentials": "true",
@@ -163,7 +182,7 @@ class OPTIONSHandlerMiddleware(BaseHTTPMiddleware):
         # Log CORS requests
         if origin:
             logger.info(f"CORS Request - Origin: {origin}, Path: {request.url.path}, Method: {method}")
-            if origin not in allowed_origins:
+            if not origin_matches(origin, allowed_origins):
                 logger.warning(f"CORS Warning - Origin '{origin}' not in allowed origins: {allowed_origins}")
             else:
                 logger.info(f"CORS Allowed - Origin '{origin}' is in allowed list")
@@ -171,7 +190,7 @@ class OPTIONSHandlerMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         
         # Ensure CORS headers are present in response
-        if origin and origin in allowed_origins:
+        if origin and origin_matches(origin, allowed_origins):
             response.headers["Access-Control-Allow-Origin"] = origin
             response.headers["Access-Control-Allow-Credentials"] = "true"
         
