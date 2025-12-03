@@ -76,7 +76,7 @@ class AgreementCreate(BaseModel):
     freelancer: UserRef
     project_id: str
 
-    rate: float = Field(..., ge=0, example=1200)
+    rate: Optional[float] = Field(None, ge=0, example=1200)  # Calculated field: total_amount / duration_days
     rate_unit: Optional[str] = Field("day", example="day")
     currency: Optional[str] = Field("INR")
     start_date: int = Field(..., ge=0, example=1662505600)

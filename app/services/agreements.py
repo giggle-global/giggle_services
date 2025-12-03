@@ -25,23 +25,39 @@ class AgreementService:
         seconds_in_day = 86400
         return int((end_date - start_date) / seconds_in_day) + 1
 
+    def _calc_total_from_milestones(self, agreement_id: str) -> float:
+        """
+        Calculate total_amount from sum of all milestone payment amounts.
+        """
+        milestones = self.milestone_service.list_for_agreement(agreement_id)
+        if not milestones:
+            return 0.0
+        total = sum(m.get("payment", {}).get("amount", 0.0) for m in milestones)
+        return float(total)
 
-    def _calc_total_from_rate(self, rate: float, rate_unit: str, duration_days: int) -> float:
-        # simple default: rate_unit "day" => rate * duration_days
-        # if "week" or "hour" implement accordingly. For now only "day" and "week".
-        if rate_unit == "week":
-            weeks = max(1, round(duration_days / 7))
-            return rate * weeks
-        # default day
-        return rate * duration_days
+    def _calc_rate_from_total(self, total_amount: float, duration_days: int) -> float:
+        """
+        Calculate rate from total_amount / duration_days.
+        Returns 0.0 if duration_days is 0 to avoid division by zero.
+        """
+        if duration_days <= 0:
+            return 0.0
+        return total_amount / duration_days
 
     def create_agreement(self, payload: AgreementCreate, created_by: str) -> Dict[str, Any]:
         try:
             duration_days = self._calc_duration_days(payload.start_date, payload.end_date)
-            total_amount = self._calc_total_from_rate(payload.rate, payload.rate_unit or "day", duration_days)
             project_check = self.project_service.get(payload.project_id)
             if not project_check:
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, "Project not found")
+
+            # Calculate initial total_amount from milestones if provided, otherwise 0
+            initial_total = 0.0
+            if payload.milestones:
+                initial_total = sum(m.get("payment", {}).get("amount", 0.0) for m in payload.milestones)
+            
+            # Calculate rate from total_amount / duration_days
+            rate = self._calc_rate_from_total(initial_total, duration_days)
 
             doc = AgreementInDB(
                 title=payload.title,
@@ -49,14 +65,14 @@ class AgreementService:
                 project_id=payload.project_id,
                 client=payload.client,
                 freelancer=payload.freelancer,
-                rate=payload.rate,
+                rate=rate,
                 rate_unit=payload.rate_unit or "day",
                 currency=payload.currency or "INR",
                 start_date=payload.start_date,
                 end_date=payload.end_date,
                 project_scope=payload.project_scope,
                 additional_terms=payload.additional_terms,
-                total_amount=total_amount,
+                total_amount=initial_total,
                 duration_days=duration_days,
                 num_milestones=0,
                 created_by=created_by,
@@ -70,7 +86,16 @@ class AgreementService:
                 for m in payload.milestones:
                     self.milestone_service.add_milestone(created["agreement_id"], m, {"user_id": created_by, "role": "client"})
 
-                # refresh computed fields
+                # refresh computed fields (total_amount and rate will be recalculated from milestones)
+                created = self.repo.get_by_id(created["agreement_id"])
+                # Recalculate total_amount and rate from actual milestones
+                total_amount = self._calc_total_from_milestones(created["agreement_id"])
+                rate = self._calc_rate_from_total(total_amount, duration_days)
+                self.repo.update(created["agreement_id"], {
+                    "total_amount": total_amount,
+                    "rate": rate,
+                    "num_milestones": len(payload.milestones)
+                })
                 created = self.repo.get_by_id(created["agreement_id"])
 
             # Send notification to the recipient (if client created, notify freelancer; if freelancer created, notify client)
@@ -242,19 +267,26 @@ class AgreementService:
         if ag["status"] in [AgreementStatus.CANCELLED, AgreementStatus.COMPLETED]:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot update cancelled/completed agreement")
 
-        # recompute totals if rate or dates changed
+        # Remove rate from update_payload if present (rate is calculated, not directly editable)
+        if "rate" in update_payload:
+            del update_payload["rate"]
+
+        # recompute duration_days and derived fields if dates changed
         recalc = False
-        if "rate" in update_payload or "start_date" in update_payload or "end_date" in update_payload or "rate_unit" in update_payload:
+        if "start_date" in update_payload or "end_date" in update_payload:
             recalc = True
 
         if recalc:
             start = update_payload.get("start_date", ag["start_date"])
             end = update_payload.get("end_date", ag["end_date"])
-            rate = update_payload.get("rate", ag["rate"])
-            rate_unit = update_payload.get("rate_unit", ag.get("rate_unit", "day"))
             duration_days = self._calc_duration_days(start, end)
             update_payload["duration_days"] = duration_days
-            update_payload["total_amount"] = self._calc_total_from_rate(rate, rate_unit, duration_days)
+            
+            # Recalculate total_amount from milestones and rate from total_amount/duration_days
+            total_amount = self._calc_total_from_milestones(agreement_id)
+            rate = self._calc_rate_from_total(total_amount, duration_days)
+            update_payload["total_amount"] = total_amount
+            update_payload["rate"] = rate
 
         updated = self.repo.update(agreement_id, update_payload)
         return updated

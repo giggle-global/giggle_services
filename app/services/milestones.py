@@ -43,13 +43,32 @@ class MilestoneService:
         ).model_dump()
 
         created = self.milestone_repo.create(m_doc)
-        # update agreement's milestone list and recalc num_milestones
-        # Note: total_amount should remain calculated from rate × duration_days, not from milestone sums
+        # update agreement's milestone list and recalc totals
         self.agreement_repo.add_milestone(agreement_id, created.get("milestone_id"))
 
         milestones = self.milestone_repo.list_for_agreement(agreement_id)
-        # Only update num_milestones, not total_amount (total_amount is calculated from rate × duration)
-        self.agreement_repo.update(agreement_id, {"num_milestones": len(milestones)})
+        # Calculate total_amount from sum of milestone payments
+        total_amount = sum(m.get("payment", {}).get("amount", 0.0) for m in milestones)
+        
+        # Get agreement to calculate rate
+        ag = self.agreement_repo.get_by_id(agreement_id)
+        duration_days = ag.get("duration_days", 0)
+        if duration_days <= 0:
+            # Calculate duration_days if not set
+            start_date = ag.get("start_date", 0)
+            end_date = ag.get("end_date", 0)
+            if start_date > 0 and end_date > 0:
+                seconds_in_day = 86400
+                duration_days = int((end_date - start_date) / seconds_in_day) + 1
+        
+        # Calculate rate from total_amount / duration_days
+        rate = (total_amount / duration_days) if duration_days > 0 else 0.0
+        
+        self.agreement_repo.update(agreement_id, {
+            "num_milestones": len(milestones),
+            "total_amount": total_amount,
+            "rate": rate
+        })
 
         return created
 
@@ -130,8 +149,28 @@ class MilestoneService:
 
         # recompute agreement summary
         milestones = self.milestone_repo.list_for_agreement(ms["agreement_id"]) or []
-        # Only update num_milestones, not total_amount (total_amount is calculated from rate × duration)
-        self.agreement_repo.update(ms["agreement_id"], {"num_milestones": len(milestones)})
+        # Calculate total_amount from sum of milestone payments
+        total_amount = sum(m.get("payment", {}).get("amount", 0.0) for m in milestones)
+        
+        # Get agreement to calculate rate
+        ag = self.agreement_repo.get_by_id(ms["agreement_id"])
+        duration_days = ag.get("duration_days", 0)
+        if duration_days <= 0:
+            # Calculate duration_days if not set
+            start_date = ag.get("start_date", 0)
+            end_date = ag.get("end_date", 0)
+            if start_date > 0 and end_date > 0:
+                seconds_in_day = 86400
+                duration_days = int((end_date - start_date) / seconds_in_day) + 1
+        
+        # Calculate rate from total_amount / duration_days
+        rate = (total_amount / duration_days) if duration_days > 0 else 0.0
+        
+        self.agreement_repo.update(ms["agreement_id"], {
+            "num_milestones": len(milestones),
+            "total_amount": total_amount,
+            "rate": rate
+        })
 
         # if all milestones completed/approved -> set agreement Completed
         def _is_completed_or_approved(m):
@@ -171,6 +210,25 @@ class MilestoneService:
             # use $pull and recompute
             self.agreement_repo.col.update_one({"agreement_id": ag["agreement_id"]}, {"$pull": {"milestones": milestone_id}})
             milestones = self.milestone_repo.list_for_agreement(ag["agreement_id"])
-            # Only update num_milestones, not total_amount (total_amount is calculated from rate × duration)
-            self.agreement_repo.update(ag["agreement_id"], {"num_milestones": len(milestones)})
+            # Calculate total_amount from sum of milestone payments
+            total_amount = sum(m.get("payment", {}).get("amount", 0.0) for m in milestones)
+            
+            # Get duration_days from agreement
+            duration_days = ag.get("duration_days", 0)
+            if duration_days <= 0:
+                # Calculate duration_days if not set
+                start_date = ag.get("start_date", 0)
+                end_date = ag.get("end_date", 0)
+                if start_date > 0 and end_date > 0:
+                    seconds_in_day = 86400
+                    duration_days = int((end_date - start_date) / seconds_in_day) + 1
+            
+            # Calculate rate from total_amount / duration_days
+            rate = (total_amount / duration_days) if duration_days > 0 else 0.0
+            
+            self.agreement_repo.update(ag["agreement_id"], {
+                "num_milestones": len(milestones),
+                "total_amount": total_amount,
+                "rate": rate
+            })
         return {"deleted": deleted}

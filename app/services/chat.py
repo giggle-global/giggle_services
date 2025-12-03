@@ -47,7 +47,7 @@
 # app/services/chat.py
 import asyncio
 from typing import Dict, Any, Set, Tuple, List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import WebSocket
 from app.repositories.chat import ChatRepository
 from pymongo import DESCENDING, ASCENDING
@@ -106,11 +106,21 @@ class ChatService:
     def _build_sender_name(self, user: Dict[str, Any]) -> str:
         return ((user.get("first_name") or "") + " " + (user.get("last_name") or "")).strip()
 
+    def _utc_to_ist_iso(self, utc_timestamp: int) -> str:
+        """
+        Convert UTC Unix timestamp to IST ISO string format.
+        IST is UTC+5:30 (19800 seconds)
+        """
+        utc_dt = datetime.utcfromtimestamp(utc_timestamp)
+        ist_dt = utc_dt + timedelta(hours=5, minutes=30)
+        return ist_dt.isoformat() + 'Z'
+
     def log_chat(self, group_type: str, request_id: str, group_id: str, sender_user: Dict[str, Any], content: str, meta: Dict[str, Any] = None) -> Dict[str, Any]:
         """
         Persist chat message to DB and return the saved document (without _id).
         sender_user is the full user dict (with id, role, first_name, last_name)
         """
+        utc_timestamp = int(datetime.utcnow().timestamp())
         doc = {
             "group_type": group_type,
             "group_id": group_id,
@@ -121,12 +131,14 @@ class ChatService:
             "content": content,
             "seen_by": [sender_user.get("id") or sender_user.get("user_id") or sender_user.get("sub")],
             "meta": meta or {},
-            "created_at": int(datetime.utcnow().timestamp()),
-            "updated_at": int(datetime.utcnow().timestamp())
+            "created_at": utc_timestamp,
+            "updated_at": utc_timestamp
         }
         saved = self.repo.save_message(doc)
         # Remove _id before returning to caller (router will not expose DB internal IDs)
         saved.pop("_id", None)
+        # Add IST timestamp for frontend display
+        saved["timestamp"] = self._utc_to_ist_iso(saved.get("created_at", utc_timestamp))
         return saved
     
     def get_history_before(self, group_type: str, group_id: str, before: Optional[int], limit: int = 30) -> Tuple[List[dict], bool, Optional[int]]:
@@ -158,13 +170,30 @@ class ChatService:
         for d in docs:
             if "_id" in d:
                 d["_id"] = str(d["_id"])
-            # created_at already int; if not, convert here
+            # Add IST timestamp for frontend display
+            if "created_at" in d:
+                # Handle both datetime objects and Unix timestamps
+                if isinstance(d["created_at"], datetime):
+                    utc_timestamp = int(d["created_at"].timestamp())
+                else:
+                    utc_timestamp = d["created_at"]
+                d["timestamp"] = self._utc_to_ist_iso(utc_timestamp)
 
         next_before = docs[0]["created_at"] if docs else None
         return docs, has_more, next_before
 
     def get_chat_history(self, group_type: str, group_id: str, limit: int = 100, before_iso: str = None):
-        return self.repo.get_history(group_type, group_id, limit=limit, before_iso=before_iso)
+        history = self.repo.get_history(group_type, group_id, limit=limit, before_iso=before_iso)
+        # Add IST timestamp to each message for frontend display
+        for msg in history:
+            if "created_at" in msg:
+                # Handle both datetime objects and Unix timestamps
+                if isinstance(msg["created_at"], datetime):
+                    utc_timestamp = int(msg["created_at"].timestamp())
+                else:
+                    utc_timestamp = msg["created_at"]
+                msg["timestamp"] = self._utc_to_ist_iso(utc_timestamp)
+        return history
 
     def mark_seen(self, group_type: str, group_id: str, user_id: str) -> int:
         return self.repo.mark_seen(group_type, group_id, user_id)
