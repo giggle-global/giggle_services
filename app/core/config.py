@@ -34,6 +34,9 @@ if not config:
     config["aws_secret_key"] = os.environ["AWS_SECRET_KEY"]
     config["aws_region"] = os.environ["AWS_REGION"]
 
+    # Optional integrations
+    config["openai_api_key"] = os.environ.get("OPENAI_API_KEY")
+
     config = dotdict(config)
 
 print(config)

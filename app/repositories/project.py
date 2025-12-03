@@ -26,3 +26,17 @@ class ProjectRepository:
     def delete(self, project_id: str) -> int:
         result = self.collection.delete_one({"id": project_id})
         return result.deleted_count
+
+    def find_similar(
+        self,
+        industry: Optional[str] = None,
+        background: Optional[str] = None,
+        limit: int = 10,
+    ) -> List[Dict[str, Any]]:
+        query: Dict[str, Any] = {}
+        if industry:
+            query["industry"] = industry
+        if background:
+            query["background_industry"] = background
+        cursor = self.collection.find(query, {"_id": 0}).sort("created_at", -1).limit(limit)
+        return list(cursor)

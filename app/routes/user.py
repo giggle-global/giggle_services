@@ -1,7 +1,7 @@
 # app/routes/user.py
 import logging
 from typing import List, Dict, Any, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from app.models.user import UserUpdate, UserOut, KycUpdate
 from app.services.user import UserService
 from app.services.skill import SkillService
@@ -27,14 +27,62 @@ def get_user(current_user: Dict[str, Any] = Depends(get_current_user), svc: User
     return ok(data=user, message="Fetched current user")
 
 @router.get("/freelancer", response_model=APIResponse[List[Dict [str, Any]]])
-def get_freelancer(current_user: Dict[str, Any] = Depends(get_current_user), svc: UserService = Depends(get_user_service)):
-    logger.debug(f"Freelancer list requested by user_id={current_user.get('user_id')} role={current_user.get('role')}")
+def get_freelancer(
+    project_id: Optional[str] = None,
+    min_score: Optional[int] = None,
+    limit: Optional[int] = None,
+    current_user: Dict[str, Any] = Depends(get_current_user), 
+    svc: UserService = Depends(get_user_service)
+):
+    """
+    Get freelancers list with optional matching algorithm.
+    
+    Query Parameters:
+    - project_id (optional): If provided, returns matched freelancers ranked by score
+    - min_score (optional): Minimum match score (0-100) to filter results
+    - limit (optional): Maximum number of freelancers to return (default: 50)
+    
+    Without project_id: Returns all active freelancers (backward compatible)
+    With project_id: Returns matched freelancers sorted by match score (highest first)
+    """
+    logger.debug(f"Freelancer list requested by user_id={current_user.get('user_id')} role={current_user.get('role')} project_id={project_id}")
     if current_user["role"] == "FL":
         logger.warning("Freelancer attempted to fetch freelancer list (forbidden).")
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only clients can get the freelancers list")
-    freelancers = svc.list_freelancer()
-    logger.info(f"Freelancer list fetched: count={len(freelancers) if freelancers else 0}")
-    return ok(data=freelancers, message="Freelancers fetched")
+    
+    # If project_id is provided, use matching algorithm
+    if project_id:
+        from app.services.matching import MatchingService
+        matching_svc = MatchingService()
+        try:
+            matches = matching_svc.match_freelancers_to_project(project_id, limit=limit or 50)
+            
+            # Filter by min_score if provided
+            if min_score is not None and min_score > 0:
+                matches = [m for m in matches if m["score"] >= min_score]
+            
+            # Format response to include match score
+            freelancers = []
+            for match in matches:
+                freelancer_data = {
+                    **match,
+                    "match_score": match["score"],
+                    "score_breakdown": match.get("score_breakdown", {})
+                }
+                freelancers.append(freelancer_data)
+            
+            logger.info(f"Matched freelancers fetched: project_id={project_id} count={len(freelancers)}")
+            return ok(data=freelancers, message=f"Found {len(freelancers)} matching freelancers")
+        except ValueError as e:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(e))
+        except Exception as e:
+            logger.exception(f"Error matching freelancers for project {project_id}")
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error matching freelancers: {str(e)}")
+    else:
+        # Backward compatible: return all freelancers
+        freelancers = svc.list_freelancer()
+        logger.info(f"Freelancer list fetched: count={len(freelancers) if freelancers else 0}")
+        return ok(data=freelancers, message="Freelancers fetched")
 
 
 
