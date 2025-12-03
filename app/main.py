@@ -68,10 +68,13 @@ ALLOWED_ORIGINS_ENV = os.getenv("ALLOWED_ORIGINS", "")
 if ALLOWED_ORIGINS_ENV:
     # Parse comma-separated origins from environment variable
     allowed_origins = [origin.strip() for origin in ALLOWED_ORIGINS_ENV.split(",") if origin.strip()]
+    logger.info(f"CORS: Using ALLOWED_ORIGINS from environment: {allowed_origins}")
 else:
     # Default origins for development and production
     # In production, set ALLOWED_ORIGINS="https://begiggle.keydraft.com,https://www.begiggle.keydraft.com"
     env = os.getenv("ENVIRONMENT", "development")
+    logger.info(f"CORS: ENVIRONMENT={env}, ALLOWED_ORIGINS not set, using defaults")
+    
     if env == "development":
         # Allow common development origins
         allowed_origins = [
@@ -82,11 +85,21 @@ else:
         ]
     else:
         # Production: must specify exact origins
+        # Include common production patterns
         allowed_origins = [
             "https://begiggle.keydraft.com",
             "https://www.begiggle.keydraft.com",
+            "http://begiggle.keydraft.com",  # In case HTTP is used
+            "http://www.begiggle.keydraft.com",  # In case HTTP is used
         ]
+    
+    logger.info(f"CORS: Configured allowed origins: {allowed_origins}")
 
+# Log CORS configuration for debugging
+logger.info(f"CORS Configuration - Origins: {allowed_origins}, Credentials: True")
+
+# IMPORTANT: CORS middleware must be added FIRST
+# This ensures OPTIONS preflight requests are handled before route validation
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
@@ -96,6 +109,31 @@ app.add_middleware(
     expose_headers=["*"],
     max_age=3600,  # Cache preflight requests for 1 hour
 )
+
+# Add middleware to log CORS-related requests for debugging
+class CORSDebugMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        origin = request.headers.get("origin")
+        method = request.method
+        
+        # Log CORS requests
+        if origin:
+            logger.info(f"CORS Request - Origin: {origin}, Path: {request.url.path}, Method: {method}")
+            if origin not in allowed_origins:
+                logger.warning(f"CORS Warning - Origin '{origin}' not in allowed origins: {allowed_origins}")
+            else:
+                logger.info(f"CORS Allowed - Origin '{origin}' is in allowed list")
+        
+        response = await call_next(request)
+        
+        # Log response status for OPTIONS requests
+        if method == "OPTIONS":
+            logger.info(f"OPTIONS Response - Status: {response.status_code}, Origin: {origin}")
+        
+        return response
+
+# Add debug middleware after CORS to log requests
+app.add_middleware(CORSDebugMiddleware)
 
 # --- Global exception handlers -> uniform response ---
 @app.exception_handler(HTTPException)
@@ -120,6 +158,37 @@ async def unhandled_exception_handler(_: Request, exc: Exception):
     return JSONResponse(status_code=HTTP_500_INTERNAL_SERVER_ERROR, content=body.model_dump())
 
 
+
+# Explicit OPTIONS handler as fallback (CORS middleware should handle this, but this ensures it works)
+# This catches any OPTIONS requests that might slip through before CORS middleware
+@app.options("/{full_path:path}")
+async def options_handler(request: Request):
+    """Handle OPTIONS requests explicitly to prevent validation errors"""
+    origin = request.headers.get("origin")
+    requested_method = request.headers.get("Access-Control-Request-Method", "POST")
+    requested_headers = request.headers.get("Access-Control-Request-Headers", "*")
+    
+    logger.info(f"OPTIONS Handler - Origin: {origin}, Path: {request.url.path}, Requested Method: {requested_method}")
+    
+    # Check if origin is allowed
+    if origin and origin in allowed_origins:
+        return Response(
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": origin,
+                "Access-Control-Allow-Credentials": "true",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
+                "Access-Control-Allow-Headers": requested_headers,
+                "Access-Control-Max-Age": "3600",
+            }
+        )
+    elif origin:
+        logger.warning(f"OPTIONS Handler - Origin '{origin}' not allowed. Allowed origins: {allowed_origins}")
+        # Still return 200 but without CORS headers (browser will block it)
+        return Response(status_code=200)
+    else:
+        # No origin header (same-origin request or direct API call)
+        return Response(status_code=200)
 
 app.include_router(user.router)
 app.include_router(auth.router)
