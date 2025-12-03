@@ -61,7 +61,7 @@ logger.info("App started")
 app = FastAPI()
 
 # Enhanced CORS configuration
-# Note: When allow_credentials=True, we should specify origins explicitly
+# Note: When allow_credentials=True, we MUST specify origins explicitly (cannot use "*")
 # For production, set ALLOWED_ORIGINS environment variable
 import os
 ALLOWED_ORIGINS_ENV = os.getenv("ALLOWED_ORIGINS", "")
@@ -69,37 +69,33 @@ if ALLOWED_ORIGINS_ENV:
     # Parse comma-separated origins from environment variable
     allowed_origins = [origin.strip() for origin in ALLOWED_ORIGINS_ENV.split(",") if origin.strip()]
 else:
-    # Default: allow all in development, restrict in production
+    # Default origins for development and production
     # In production, set ALLOWED_ORIGINS="https://begiggle.keydraft.com,https://www.begiggle.keydraft.com"
-    allowed_origins = ["*"] if os.getenv("ENVIRONMENT", "development") == "development" else []
+    env = os.getenv("ENVIRONMENT", "development")
+    if env == "development":
+        # Allow common development origins
+        allowed_origins = [
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:3001",
+        ]
+    else:
+        # Production: must specify exact origins
+        allowed_origins = [
+            "https://begiggle.keydraft.com",
+            "https://www.begiggle.keydraft.com",
+        ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins if allowed_origins else ["*"],  # Fallback to * if empty
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["*"],
     expose_headers=["*"],
     max_age=3600,  # Cache preflight requests for 1 hour
 )
-
-# Explicit OPTIONS handler for all routes to ensure CORS preflight works
-@app.options("/{full_path:path}")
-async def options_handler(full_path: str, request: Request):
-    """
-    Handle OPTIONS requests for CORS preflight.
-    This ensures that OPTIONS requests are properly handled even if middleware fails.
-    """
-    return Response(
-        status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": request.headers.get("Origin", "*"),
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
-            "Access-Control-Allow-Headers": request.headers.get("Access-Control-Request-Headers", "*"),
-            "Access-Control-Allow-Credentials": "true",
-            "Access-Control-Max-Age": "3600",
-        }
-    )
 
 # --- Global exception handlers -> uniform response ---
 @app.exception_handler(HTTPException)
