@@ -1,0 +1,319 @@
+"""
+Meeting service for business logic
+"""
+import logging
+from typing import Dict, Any, List, Optional
+from datetime import datetime, timedelta
+from app.repositories.meeting import MeetingRepository
+from app.repositories.agreements import AgreementRepository
+from app.models.meeting import MeetingCreate, MeetingUpdate, MeetingStatus, MeetingFilter
+from app.core.google_calendar import GoogleCalendarService
+from fastapi import HTTPException, status
+from pymongo.errors import PyMongoError
+
+logger = logging.getLogger(__name__)
+
+
+class MeetingService:
+    """Service for meeting operations"""
+    
+    def __init__(self):
+        self.repo = MeetingRepository()
+        self.agreement_repo = AgreementRepository()
+        self.google_calendar = GoogleCalendarService()
+    
+    def create_meeting(
+        self,
+        payload: MeetingCreate,
+        created_by: str
+    ) -> Dict[str, Any]:
+        """
+        Create a new meeting with Google Meet link
+        """
+        try:
+            # Get agreement to verify participants
+            agreement = self.agreement_repo.get_by_id(payload.agreement_id)
+            if not agreement:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "Agreement not found")
+            
+            client = agreement.get("client", {})
+            freelancer = agreement.get("freelancer", {})
+            
+            # Verify user is part of the agreement
+            if created_by not in [client.get("user_id"), freelancer.get("user_id")]:
+                raise HTTPException(
+                    status.HTTP_403_FORBIDDEN,
+                    "You are not authorized to create meetings for this agreement"
+                )
+            
+            # Validate scheduled time is in the future
+            now = int(datetime.utcnow().timestamp())
+            if payload.scheduled_time <= now:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    "Scheduled time must be in the future"
+                )
+            
+            # Create Google Calendar event with Meet link
+            start_time = datetime.fromtimestamp(payload.scheduled_time)
+            end_time = start_time + timedelta(minutes=payload.duration_minutes)
+            
+            client_email = client.get("email")
+            freelancer_email = freelancer.get("email")
+            attendees = []
+            
+            if client_email:
+                attendees.append(client_email)
+            if freelancer_email:
+                attendees.append(freelancer_email)
+            
+            google_event = None
+            meet_link = None
+            calendar_event_id = None
+            
+            # Try to create Google Calendar event, but don't fail if it doesn't work
+            try:
+                if self.google_calendar.service and attendees:
+                    google_event = self.google_calendar.create_meeting(
+                        title=payload.title,
+                        description=payload.description or f"Meeting for {agreement.get('title', 'Agreement')}",
+                        start_time=start_time,
+                        end_time=end_time,
+                        attendees=attendees,
+                        timezone=payload.timezone
+                    )
+                    
+                    if google_event:
+                        meet_link = google_event.get("meet_link")
+                        calendar_event_id = google_event.get("event_id")
+                        logger.info("Google Calendar event created: %s", calendar_event_id)
+                    else:
+                        logger.warning("Failed to create Google Calendar event, proceeding without Meet link")
+                else:
+                    if not self.google_calendar.service:
+                        logger.warning("Google Calendar service not initialized, proceeding without Meet link")
+                    elif not attendees:
+                        logger.warning("No attendees provided, proceeding without Meet link")
+            except Exception as e:
+                # Log the error but continue with meeting creation
+                logger.error("Error creating Google Calendar event: %s. Proceeding without Meet link.", str(e))
+                logger.exception("Full exception details:")
+            
+            # Create meeting in database
+            meeting_data = {
+                "agreement_id": payload.agreement_id,
+                "title": payload.title,
+                "description": payload.description,
+                "scheduled_time": payload.scheduled_time,
+                "duration_minutes": payload.duration_minutes,
+                "timezone": payload.timezone,
+                "status": MeetingStatus.SCHEDULED.value,
+                "google_meet_link": meet_link,
+                "google_calendar_event_id": calendar_event_id,
+                "client": client,
+                "freelancer": freelancer,
+                "created_by": created_by
+            }
+            
+            meeting = self.repo.create(meeting_data)
+            logger.info("Meeting created: %s for agreement: %s", meeting.get("meeting_id"), payload.agreement_id)
+            
+            return meeting
+            
+        except HTTPException:
+            raise
+        except PyMongoError as e:
+            logger.exception("Database error creating meeting: %s", e)
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to create meeting")
+        except Exception as e:
+            logger.exception("Error creating meeting: %s", e)
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to create meeting")
+    
+    def get_meeting(self, meeting_id: str) -> Dict[str, Any]:
+        """Get a meeting by ID"""
+        meeting = self.repo.get_by_id(meeting_id)
+        if not meeting:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Meeting not found")
+        return meeting
+    
+    def get_meetings_by_agreement(
+        self,
+        agreement_id: str,
+        upcoming_only: bool = False
+    ) -> List[Dict[str, Any]]:
+        """Get all meetings for an agreement"""
+        return self.repo.get_by_agreement(agreement_id, upcoming_only)
+    
+    def get_meetings_by_user(
+        self,
+        user_id: str,
+        upcoming_only: bool = False
+    ) -> List[Dict[str, Any]]:
+        """Get all meetings for a user"""
+        return self.repo.get_by_user(user_id, upcoming_only)
+    
+    def update_meeting(
+        self,
+        meeting_id: str,
+        payload: MeetingUpdate,
+        updated_by: str
+    ) -> Dict[str, Any]:
+        """Update a meeting"""
+        try:
+            meeting = self.repo.get_by_id(meeting_id)
+            if not meeting:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "Meeting not found")
+            
+            # Verify user is part of the agreement
+            if updated_by not in [
+                meeting.get("client", {}).get("user_id"),
+                meeting.get("freelancer", {}).get("user_id")
+            ]:
+                raise HTTPException(
+                    status.HTTP_403_FORBIDDEN,
+                    "You are not authorized to update this meeting"
+                )
+            
+            # Don't allow updates to cancelled or completed meetings
+            if meeting.get("status") in [MeetingStatus.CANCELLED.value, MeetingStatus.COMPLETED.value]:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"Cannot update {meeting.get('status')} meeting"
+                )
+            
+            update_data = {}
+            
+            if payload.title is not None:
+                update_data["title"] = payload.title
+            if payload.description is not None:
+                update_data["description"] = payload.description
+            if payload.scheduled_time is not None:
+                # Validate scheduled time is in the future
+                now = int(datetime.utcnow().timestamp())
+                if payload.scheduled_time <= now:
+                    raise HTTPException(
+                        status.HTTP_400_BAD_REQUEST,
+                        "Scheduled time must be in the future"
+                    )
+                update_data["scheduled_time"] = payload.scheduled_time
+            if payload.duration_minutes is not None:
+                update_data["duration_minutes"] = payload.duration_minutes
+            if payload.status is not None:
+                update_data["status"] = payload.status.value
+            
+            # Update Google Calendar event if needed
+            calendar_event_id = meeting.get("google_calendar_event_id")
+            if calendar_event_id and self.google_calendar.service and update_data:
+                start_time = None
+                end_time = None
+                
+                scheduled_time = update_data.get("scheduled_time", meeting.get("scheduled_time"))
+                duration = update_data.get("duration_minutes", meeting.get("duration_minutes"))
+                
+                if scheduled_time:
+                    start_time = datetime.fromtimestamp(scheduled_time)
+                    end_time = start_time + timedelta(minutes=duration)
+                
+                client_email = meeting.get("client", {}).get("email")
+                freelancer_email = meeting.get("freelancer", {}).get("email")
+                attendees = []
+                if client_email:
+                    attendees.append(client_email)
+                if freelancer_email:
+                    attendees.append(freelancer_email)
+                
+                google_event = self.google_calendar.update_meeting(
+                    event_id=calendar_event_id,
+                    title=update_data.get("title") or meeting.get("title"),
+                    description=update_data.get("description") or meeting.get("description"),
+                    start_time=start_time,
+                    end_time=end_time,
+                    attendees=attendees if attendees else None,
+                    timezone=meeting.get("timezone", "UTC")
+                )
+                
+                if google_event:
+                    if google_event.get("meet_link"):
+                        update_data["google_meet_link"] = google_event.get("meet_link")
+                    logger.info("Google Calendar event updated: %s", calendar_event_id)
+            
+            updated_meeting = self.repo.update(meeting_id, update_data)
+            if not updated_meeting:
+                raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to update meeting")
+            
+            logger.info("Meeting updated: %s", meeting_id)
+            return updated_meeting
+            
+        except HTTPException:
+            raise
+        except PyMongoError as e:
+            logger.exception("Database error updating meeting: %s", e)
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to update meeting")
+        except Exception as e:
+            logger.exception("Error updating meeting: %s", e)
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to update meeting")
+    
+    def cancel_meeting(self, meeting_id: str, cancelled_by: str) -> Dict[str, Any]:
+        """Cancel a meeting"""
+        try:
+            meeting = self.repo.get_by_id(meeting_id)
+            if not meeting:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "Meeting not found")
+            
+            # Verify user is part of the agreement
+            if cancelled_by not in [
+                meeting.get("client", {}).get("user_id"),
+                meeting.get("freelancer", {}).get("user_id")
+            ]:
+                raise HTTPException(
+                    status.HTTP_403_FORBIDDEN,
+                    "You are not authorized to cancel this meeting"
+                )
+            
+            # Don't allow cancelling already cancelled or completed meetings
+            if meeting.get("status") == MeetingStatus.CANCELLED.value:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    "Meeting is already cancelled"
+                )
+            
+            if meeting.get("status") == MeetingStatus.COMPLETED.value:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    "Cannot cancel a completed meeting"
+                )
+            
+            # Cancel Google Calendar event
+            calendar_event_id = meeting.get("google_calendar_event_id")
+            if calendar_event_id and self.google_calendar.service:
+                self.google_calendar.cancel_meeting(calendar_event_id)
+                logger.info("Google Calendar event cancelled: %s", calendar_event_id)
+            
+            # Cancel meeting in database
+            cancelled_meeting = self.repo.cancel(meeting_id, cancelled_by)
+            if not cancelled_meeting:
+                raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to cancel meeting")
+            
+            logger.info("Meeting cancelled: %s by %s", meeting_id, cancelled_by)
+            return cancelled_meeting
+            
+        except HTTPException:
+            raise
+        except PyMongoError as e:
+            logger.exception("Database error cancelling meeting: %s", e)
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to cancel meeting")
+        except Exception as e:
+            logger.exception("Error cancelling meeting: %s", e)
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to cancel meeting")
+    
+    def get_filtered_meetings(self, filter: MeetingFilter) -> List[Dict[str, Any]]:
+        """Get meetings with filters"""
+        if filter.agreement_id:
+            return self.repo.get_by_agreement(filter.agreement_id, filter.upcoming_only or False)
+        elif filter.user_id:
+            return self.repo.get_by_user(filter.user_id, filter.upcoming_only or False)
+        else:
+            # Return all upcoming meetings if no filter
+            return self.repo.get_upcoming_meetings(limit=50)
+
+

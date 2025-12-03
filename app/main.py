@@ -2,10 +2,12 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from starlette.status import HTTP_422_UNPROCESSABLE_ENTITY, HTTP_500_INTERNAL_SERVER_ERROR
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 from app.schemas.response import APIResponse
+import fnmatch
 
 from app.core.db import check_db_connection
 from app.services.user import UserService
@@ -26,6 +28,10 @@ from app.routes import milestones
 from app.routes import portfolio
 from app.routes import matching
 from app.routes import ai_scope
+from app.routes import otp
+from app.routes import notification
+from app.routes import meeting
+from app.core.scheduler import milestone_scheduler
 import time
 
 import logging
@@ -56,36 +62,228 @@ logger.info("App started")
 
 app = FastAPI()
 
+# Helper function to check if origin matches allowed patterns (supports wildcards)
+def origin_matches(origin: str, allowed_patterns: list) -> bool:
+    """Check if an origin matches any pattern in allowed_patterns (supports wildcards like *.vercel.app)"""
+    if not origin:
+        return False
+    for pattern in allowed_patterns:
+        if pattern == origin:
+            return True
+        # Support wildcard patterns like *.vercel.app
+        if '*' in pattern:
+            if fnmatch.fnmatch(origin, pattern):
+                return True
+    return False
+
+# Enhanced CORS configuration
+# Note: When allow_credentials=True, we MUST specify origins explicitly (cannot use "*")
+# For production, set ALLOWED_ORIGINS environment variable
+import os
+ALLOWED_ORIGINS_ENV = os.getenv("ALLOWED_ORIGINS", "")
+env = os.getenv("ENVIRONMENT", "development")
+
+if ALLOWED_ORIGINS_ENV:
+    # Parse comma-separated origins from environment variable
+    allowed_origins = [origin.strip().rstrip('/') for origin in ALLOWED_ORIGINS_ENV.split(",") if origin.strip()]
+    
+    # CRITICAL: Always add localhost origins for local development
+    dev_origins = [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+    ]
+    for dev_origin in dev_origins:
+        if dev_origin not in allowed_origins:
+            allowed_origins.append(dev_origin)
+    
+    logger.info(f"CORS: Using ALLOWED_ORIGINS from environment + localhost: {allowed_origins}")
+else:
+    # Default origins for development and production
+    # In production, set ALLOWED_ORIGINS="https://begiggle.keydraft.com,https://www.begiggle.keydraft.com"
+    env = os.getenv("ENVIRONMENT", "development")
+    logger.info(f"CORS: ENVIRONMENT={env}, ALLOWED_ORIGINS not set, using defaults")
+    
+    if env == "development":
+        # Allow common development origins
+        allowed_origins = [
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:3001",
+        ]
+    else:
+        # Production: must specify exact origins
+        # Include common production patterns
+        allowed_origins = [
+            "https://begiggle.keydraft.com",
+            "https://www.begiggle.keydraft.com",
+            "http://begiggle.keydraft.com",  # In case HTTP is used
+            "http://www.begiggle.keydraft.com",  # In case HTTP is used
+        ]
+    
+    logger.info(f"CORS: Configured allowed origins: {allowed_origins}")
+
+# Log CORS configuration for debugging
+logger.info(f"CORS Configuration - Origins: {allowed_origins}, Credentials: True")
+
+# Filter out wildcard patterns for CORSMiddleware (it doesn't support wildcards)
+# Our custom OPTIONSHandlerMiddleware will handle wildcard matching
+cors_origins_for_middleware = [origin for origin in allowed_origins if '*' not in origin]
+
+# IMPORTANT: CORS middleware must be added FIRST
+# This ensures OPTIONS preflight requests are handled before route validation
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins_for_middleware,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With", "Origin"],
+    expose_headers=["*"],
+    max_age=3600,  # Cache preflight requests for 1 hour
 )
 
+# CRITICAL: Middleware to handle OPTIONS BEFORE FastAPI validation
+# This MUST be added AFTER CORSMiddleware but handles OPTIONS immediately
+class OPTIONSHandlerMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        # Handle OPTIONS requests immediately - before FastAPI tries to validate them
+        if request.method == "OPTIONS":
+            origin = request.headers.get("origin")
+            requested_method = request.headers.get("Access-Control-Request-Method", "POST")
+            requested_headers = request.headers.get("Access-Control-Request-Headers", "")
+            
+            logger.info(f"OPTIONS Preflight - Origin: {origin}, Path: {request.url.path}, Method: {requested_method}")
+            
+            # Normalize origin for comparison (remove trailing slash) and check with wildcard support
+            normalized_origin = origin.rstrip('/') if origin else None
+            origin_allowed = origin and (origin_matches(origin, allowed_origins) or origin_matches(normalized_origin, allowed_origins))
+            
+            if origin_allowed:
+                headers = {
+                    "Access-Control-Allow-Origin": origin,
+                    "Access-Control-Allow-Credentials": "true",
+                    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
+                    "Access-Control-Max-Age": "3600",
+                }
+                if requested_headers:
+                    headers["Access-Control-Allow-Headers"] = requested_headers
+                else:
+                    headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Accept, X-Requested-With, Origin"
+                
+                logger.info(f"OPTIONS Preflight Response - Allowing origin: {origin}")
+                return Response(status_code=200, headers=headers)
+            elif origin:
+                logger.warning(f"OPTIONS Preflight - Origin '{origin}' not allowed")
+                return Response(status_code=200)
+            else:
+                return Response(status_code=200)
+        
+        # For non-OPTIONS requests, continue normally
+        origin = request.headers.get("origin")
+        method = request.method
+        
+        # Log CORS requests
+        if origin:
+            normalized_origin = origin.rstrip('/')
+            origin_allowed = origin_matches(origin, allowed_origins) or origin_matches(normalized_origin, allowed_origins)
+            logger.info(f"CORS Request - Origin: {origin}, Path: {request.url.path}, Method: {method}")
+            if not origin_allowed:
+                logger.warning(f"CORS Warning - Origin '{origin}' (normalized: '{normalized_origin}') not in allowed origins: {allowed_origins}")
+            else:
+                logger.info(f"CORS Allowed - Origin '{origin}' is in allowed list")
+        
+        response = await call_next(request)
+        
+        # CRITICAL: Force add CORS headers to ALL responses (override any existing)
+        # This ensures headers are present even if CORSMiddleware didn't add them
+        if origin:
+            # Normalize origin (remove trailing slash for comparison)
+            normalized_origin = origin.rstrip('/')
+            
+            # Check if origin matches (with wildcard support and normalization)
+            origin_allowed = origin_matches(origin, allowed_origins) or origin_matches(normalized_origin, allowed_origins)
+            
+            if origin_allowed:
+                # Force set headers - don't rely on CORSMiddleware alone
+                # Use the original origin (browser sent it, so return it as-is)
+                response.headers["Access-Control-Allow-Origin"] = origin
+                response.headers["Access-Control-Allow-Credentials"] = "true"
+                logger.info(f"✓ Added CORS headers to {method} response - Origin: {origin}, Status: {response.status_code}, Path: {request.url.path}")
+            else:
+                logger.error(f"✗ CORS BLOCKED - Origin '{origin}' (normalized: '{normalized_origin}') not in allowed list: {allowed_origins}")
+        else:
+            logger.debug(f"No origin header - Path: {request.url.path}, Method: {method}")
+        
+        return response
+
+# Add OPTIONS handler middleware AFTER CORS middleware
+app.add_middleware(OPTIONSHandlerMiddleware)
+
 # --- Global exception handlers -> uniform response ---
+# CRITICAL: Exception handlers MUST add CORS headers or browser will block error responses
 @app.exception_handler(HTTPException)
-async def http_exception_handler(_: Request, exc: HTTPException):
+async def http_exception_handler(request: Request, exc: HTTPException):
+    origin = request.headers.get("origin")
     body = APIResponse(status_code=exc.status_code, message=str(exc.detail), data=None)
-    return JSONResponse(status_code=exc.status_code, content=body.model_dump())
+    response = JSONResponse(status_code=exc.status_code, content=body.model_dump())
+    
+    # Add CORS headers to error responses
+    if origin:
+        normalized_origin = origin.rstrip('/')
+        origin_allowed = origin_matches(origin, allowed_origins) or origin_matches(normalized_origin, allowed_origins)
+        if origin_allowed:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            logger.info(f"✓ Added CORS headers to HTTPException response - Origin: {origin}, Status: {exc.status_code}")
+    
+    return response
 
 @app.exception_handler(RequestValidationError)
-async def validation_exception_handler(_: Request, exc: RequestValidationError):
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    origin = request.headers.get("origin")
     body = APIResponse(status_code=HTTP_422_UNPROCESSABLE_ENTITY,
                        message="Validation error",
                        data={"errors": exc.errors()})
-    return JSONResponse(status_code=HTTP_422_UNPROCESSABLE_ENTITY, content=body.model_dump())
+    response = JSONResponse(status_code=HTTP_422_UNPROCESSABLE_ENTITY, content=body.model_dump())
+    
+    # Add CORS headers to error responses
+    if origin:
+        normalized_origin = origin.rstrip('/')
+        origin_allowed = origin_matches(origin, allowed_origins) or origin_matches(normalized_origin, allowed_origins)
+        if origin_allowed:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            logger.info(f"✓ Added CORS headers to ValidationError response - Origin: {origin}")
+    
+    return response
 
 @app.exception_handler(Exception)
-async def unhandled_exception_handler(_: Request, exc: Exception):
-    # Tip: log exc with traceback here
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    # Log the exception with full traceback for debugging
+    logger.exception("Unhandled exception occurred: %s", str(exc))
+    origin = request.headers.get("origin")
     body = APIResponse(status_code=HTTP_500_INTERNAL_SERVER_ERROR,
                        message="Something went wrong",
                        data=None)
-    return JSONResponse(status_code=HTTP_500_INTERNAL_SERVER_ERROR, content=body.model_dump())
+    response = JSONResponse(status_code=HTTP_500_INTERNAL_SERVER_ERROR, content=body.model_dump())
+    
+    # Add CORS headers to error responses
+    if origin:
+        normalized_origin = origin.rstrip('/')
+        origin_allowed = origin_matches(origin, allowed_origins) or origin_matches(normalized_origin, allowed_origins)
+        if origin_allowed:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            logger.info(f"✓ Added CORS headers to Exception response - Origin: {origin}")
+    
+    return response
 
 
+
+# Note: OPTIONS requests are handled by OPTIONSHandlerMiddleware
+# No need for explicit route handler - middleware handles it before FastAPI validation
 
 app.include_router(user.router)
 app.include_router(auth.router)
@@ -100,6 +298,9 @@ app.include_router(milestones.router)
 app.include_router(portfolio.router)
 app.include_router(matching.router)
 app.include_router(ai_scope.router)
+app.include_router(otp.router)
+app.include_router(notification.router)
+app.include_router(meeting.router)
 
 
 user_service = UserService()
@@ -112,7 +313,72 @@ def on_startup():
     user_service.create_root_user()
     skill_service = SkillService()
     skill_service.seed_skills_if_missing()
+    
+    # Validate email configuration on startup
+    from app.core.config import config
+    from app.core.email_service import EmailService
+    email_provider = config.get("email_provider", "smtp").lower()
+    logger.info("Email provider configured: %s", email_provider)
+    
+    if email_provider == "smtp":
+        smtp_server = config.get("smtp_server")
+        smtp_username = config.get("smtp_username")
+        if not smtp_server or not smtp_username:
+            logger.warning("SMTP configuration incomplete. SMTP_SERVER=%s, SMTP_USERNAME=%s", 
+                         smtp_server, smtp_username)
+        else:
+            logger.info("SMTP configuration validated: server=%s, username=%s", 
+                       smtp_server, smtp_username)
+    elif email_provider == "ses":
+        ses_from = config.get("ses_from_email")
+        aws_key = config.get("aws_access_key")
+        if not ses_from or not aws_key:
+            logger.warning("SES configuration incomplete. SES_FROM_EMAIL=%s, AWS_ACCESS_KEY=%s", 
+                         ses_from, "***" if aws_key else None)
+        else:
+            logger.info("SES configuration validated")
+    
+    # Start milestone reminder scheduler
+    try:
+        milestone_scheduler.start()
+        logger.info("Milestone reminder scheduler started")
+    except Exception as e:
+        logger.error("Failed to start milestone scheduler: %s", e)
+
+@app.on_event("shutdown")
+def on_shutdown():
+    """Cleanup on server shutdown"""
+    try:
+        milestone_scheduler.stop()
+        from app.core.rabbitmq import RabbitMQConnection
+        RabbitMQConnection.close()
+        logger.info("Scheduler and RabbitMQ connections closed")
+    except Exception as e:
+        logger.error("Error during shutdown: %s", e)
 
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+@app.get("/health/config")
+def health_check_config():
+    """Diagnostic endpoint to check email configuration (without sensitive data)"""
+    from app.core.config import config
+    return {
+        "status": "ok",
+        "email_provider": config.get("email_provider", "not set"),
+        "smtp_server": config.get("smtp_server", "not set") or "not set",
+        "smtp_port": config.get("smtp_port", "not set"),
+        "smtp_username": config.get("smtp_username", "not set") or "not set",
+        "smtp_from_email": config.get("smtp_from_email", "not set") or "not set",
+        "smtp_configured": bool(
+            config.get("smtp_server") and 
+            config.get("smtp_username") and 
+            config.get("smtp_password")
+        ),
+        "ses_configured": bool(
+            config.get("ses_from_email") and 
+            config.get("aws_access_key") and 
+            config.get("aws_secret_key")
+        )
+    }

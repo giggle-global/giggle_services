@@ -62,6 +62,20 @@ def list_sent_requests(current_user: Dict[str, Any] = Depends(get_current_user),
     logger.info(f"Sent requests fetched: count={len(items) if items else 0}")
     return ok(data=items, message="Sent requests fetched")
 
+@router.get("/count", response_model=APIResponse[Dict[str, int]])
+def get_request_count(current_user: Dict[str, Any] = Depends(get_current_user), svc: RequestService = Depends(get_request_service)):
+    """Get total request count for the current client"""
+    logger.debug(f"Get request count by user_id={current_user.get('user_id')} role={current_user.get('role')}")
+    
+    if current_user["role"] != "CL":
+        logger.warning("Non-client attempted to view request count.")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only clients can view request count")
+    
+    from app.services.request import MAX_REQUESTS_PER_CLIENT
+    total_count = svc.get_total_request_count(current_user["user_id"])
+    logger.info(f"Request count fetched: client={current_user.get('user_id')} count={total_count}")
+    return ok(data={"count": total_count, "max": MAX_REQUESTS_PER_CLIENT}, message="Request count fetched")
+
 @router.get("/received", response_model=APIResponse[List[RequestOut]])
 def list_received_requests(current_user: Dict[str, Any] = Depends(get_current_user), svc: RequestService = Depends(get_request_service)):
     logger.debug(f"List received requests by user_id={current_user.get('user_id')} role={current_user.get('role')}")

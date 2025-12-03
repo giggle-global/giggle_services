@@ -15,6 +15,7 @@ class AgreementStatus(str, Enum):
     DRAFT = "Draft"
     PENDING_SIGNATURE = "PendingSignature"
     ACTIVE = "Active"
+    PAUSED = "Paused"
     CANCELLED = "Cancelled"
     COMPLETED = "Completed"
 
@@ -75,7 +76,7 @@ class AgreementCreate(BaseModel):
     freelancer: UserRef
     project_id: str
 
-    rate: float = Field(..., ge=0, example=1200)
+    rate: Optional[float] = Field(None, ge=0, example=1200)  # Calculated field: total_amount / duration_days
     rate_unit: Optional[str] = Field("day", example="day")
     currency: Optional[str] = Field("INR")
     start_date: int = Field(..., ge=0, example=1662505600)
@@ -189,6 +190,7 @@ class AgreementInDB(BaseModel):
     cancelled_reason: Optional[str] = None
     exported_pdf_url: Optional[str] = None
     draft: bool = True
+    paused_from_status: Optional[str] = None  # Store the status before pausing
 
     class Config:
         from_attributes = True

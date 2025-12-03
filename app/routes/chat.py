@@ -128,13 +128,13 @@
 
 
 # app/router/chat_router.py
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query, HTTPException
 from starlette import status
 from typing import Optional
 from app.services.chat import ChatService, WebSocketManager
 from app.services.request import RequestService
 from app.services.user import UserService
-from app.core.keycloak import get_current_user
+from app.core.keycloak import get_current_user, _validate_token_and_get_user
 from app.services.project import ProjectService
 from app.services.agreements import AgreementService
 import traceback
@@ -183,13 +183,33 @@ async def ws_project(request_id: str, websocket: WebSocket, token: Optional[str]
     Connect to project group chat.
     Clients must pass ?token=<keycloak_token> in websocket URL.
     """
-    print("token: ", token)
+    print(f"🔌 WebSocket connection attempt: request_id={request_id}, token_present={bool(token)}")
+    # Accept connection first (required by WebSocket protocol)
     await websocket.accept()
     try:
-        # decode token (reject if invalid)
-        caller = get_current_user(token)
-        if not caller:
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        # Validate token after accepting connection
+        if not token:
+            print("❌ WebSocket rejected: No token provided")
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Token is required")
+            return
+        
+        try:
+            caller = _validate_token_and_get_user(token)
+            if not caller:
+                print("❌ WebSocket rejected: Invalid token (caller is None)")
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid token")
+                return
+            print(f"✅ WebSocket authenticated: user_id={caller.get('user_id')}")
+        except HTTPException as e:
+            print(f"❌ WebSocket rejected: HTTPException - {e.detail}")
+            await websocket.send_json({"error": e.detail})
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=str(e.detail))
+            return
+        except Exception as e:
+            print(f"❌ WebSocket rejected: Exception during auth - {str(e)}")
+            traceback.print_exc()
+            await websocket.send_json({"error": "Authentication failed"})
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Authentication failed")
             return
 
         # allow privileged roles to join any project; otherwise ensure membership (simple example)
@@ -278,13 +298,33 @@ async def ws_agreement(agreement_id: str, websocket: WebSocket, token: Optional[
     Connect to agreement group chat.
     Clients must pass ?token=<keycloak_token> in websocket URL.
     """
-    print("ws_agreement: agreement_id=", agreement_id, " token=", bool(token))
+    print(f"🔌 Agreement WebSocket connection attempt: agreement_id={agreement_id}, token_present={bool(token)}")
+    # Accept connection first (required by WebSocket protocol)
     await websocket.accept()
     try:
-        # decode token (reject if invalid)
-        caller = get_current_user(token)
-        if not caller:
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        # Validate token after accepting connection
+        if not token:
+            print("❌ Agreement WebSocket rejected: No token provided")
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Token is required")
+            return
+        
+        try:
+            caller = _validate_token_and_get_user(token)
+            if not caller:
+                print("❌ Agreement WebSocket rejected: Invalid token (caller is None)")
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid token")
+                return
+            print(f"✅ Agreement WebSocket authenticated: user_id={caller.get('user_id')}")
+        except HTTPException as e:
+            print(f"❌ Agreement WebSocket rejected: HTTPException - {e.detail}")
+            await websocket.send_json({"error": e.detail})
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=str(e.detail))
+            return
+        except Exception as e:
+            print(f"❌ Agreement WebSocket rejected: Exception during auth - {str(e)}")
+            traceback.print_exc()
+            await websocket.send_json({"error": "Authentication failed"})
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Authentication failed")
             return
 
         # load agreement
@@ -294,6 +334,10 @@ async def ws_agreement(agreement_id: str, websocket: WebSocket, token: Optional[
             await websocket.send_json({"error": "Agreement not found"})
             await websocket.close()
             return
+        
+        # Check if agreement is paused - block sending messages but allow viewing
+        agreement_status = agreement_details.get("status", "")
+        is_paused = agreement_status == "Paused"
 
         # build participant set and normalize IDs
         participants = set()
@@ -334,6 +378,14 @@ async def ws_agreement(agreement_id: str, websocket: WebSocket, token: Optional[
             content = (data.get("content") or "").strip()
             if not content:
                 await websocket.send_json({"error": "Message cannot be empty"})
+                continue
+
+            # Check if agreement is paused - refresh status on each message attempt
+            current_agreement = agreement_service.get_agreement(agreement_id)
+            if current_agreement and current_agreement.get("status") == "Paused":
+                await websocket.send_json({
+                    "error": "This agreement is currently paused. You cannot send messages until it is unpaused by the administrator."
+                })
                 continue
 
             # log chat: request_id is None here

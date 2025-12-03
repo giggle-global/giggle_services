@@ -1,9 +1,18 @@
 """ Configurations Module"""
 
 import os
+import logging
 from dotenv import load_dotenv, find_dotenv
 
-load_dotenv(dotenv_path=find_dotenv())
+logger = logging.getLogger(__name__)
+
+# Try to load .env file, but don't fail if it doesn't exist (for production)
+env_path = find_dotenv()
+if env_path:
+    load_dotenv(dotenv_path=env_path)
+    logger.info(f"Loaded .env file from: {env_path}")
+else:
+    logger.info("No .env file found, using environment variables directly")
 
 
 class dotdict(dict):
@@ -36,7 +45,31 @@ if not config:
 
     # Optional integrations
     config["openai_api_key"] = os.environ.get("OPENAI_API_KEY")
+    # Email / OTP configuration (optional, defaults keep existing behaviour)
+    config["email_provider"] = os.environ.get("EMAIL_PROVIDER", "smtp").lower()
+
+    # SMTP settings
+    config["smtp_server"] = os.environ.get("SMTP_SERVER", "")
+    config["smtp_port"] = int(os.environ.get("SMTP_PORT", "587"))
+    config["smtp_username"] = os.environ.get("SMTP_USERNAME", "")
+    config["smtp_password"] = os.environ.get("SMTP_PASSWORD", "")
+    config["smtp_from_email"] = os.environ.get("SMTP_FROM_EMAIL", "")
+
+    # AWS SES fallback (kept for future use)
+    config["ses_from_email"] = os.environ.get("SES_FROM_EMAIL", os.environ.get("SMTP_FROM_EMAIL", "no-reply@yourdomain.com"))
+
+    # RabbitMQ configuration (optional, defaults for local development)
+    config["rabbitmq_host"] = os.environ.get("RABBITMQ_HOST", "localhost")
+    config["rabbitmq_port"] = int(os.environ.get("RABBITMQ_PORT", "5672"))
+    config["rabbitmq_user"] = os.environ.get("RABBITMQ_USER", "guest")
+    config["rabbitmq_password"] = os.environ.get("RABBITMQ_PASSWORD", "guest")
+    config["rabbitmq_vhost"] = os.environ.get("RABBITMQ_VHOST", "/")
 
     config = dotdict(config)
 
-print(config)
+# Log email configuration status (without sensitive data)
+logger.info("Email configuration loaded - Provider: %s, SMTP Server: %s, SMTP Username: %s, SMTP From: %s",
+           config.get("email_provider", "not set"),
+           config.get("smtp_server", "not set") or "not set",
+           config.get("smtp_username", "not set") or "not set",
+           config.get("smtp_from_email", "not set") or "not set")

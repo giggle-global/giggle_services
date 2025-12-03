@@ -71,6 +71,15 @@ class TokenRepository:
 
     def list_tokens_for_user(self, user_id: str) -> List[dict]:
         return list(self.collection.find({"generated_by": user_id}, {"_id": 0}).sort("created_at", -1))
+    
+    def get_active_token_for_user(self, user_id: str) -> Optional[dict]:
+        """Get the active (non-expired, unused) token for a user"""
+        now = self._now()
+        token = self.collection.find_one(
+            {"generated_by": user_id, "used": False, "expires_at": {"$gt": now}},
+            {"_id": 0}
+        )
+        return token
 
     def revoke_token(self, token: str) -> dict:
         res = self.collection.find_one_and_update(

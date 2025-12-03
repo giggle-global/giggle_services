@@ -6,6 +6,7 @@ from enum import Enum
 
 class TokenTargetRole(str, Enum):
     FREELANCER = "FL"
+    CLIENT = "CL"
 
 class SignupTokenBase(BaseModel):
     token: str

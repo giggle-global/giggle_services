@@ -5,7 +5,10 @@ from fastapi import HTTPException
 from app.models.user import UserBase, UserCreate, UserUpdate, UserOut
 from app.core.db import database
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+# IST is UTC+5:30
+IST = timezone(timedelta(hours=5, minutes=30))
 
 class UserRepository:
     def __init__(self):
@@ -19,9 +22,9 @@ class UserRepository:
         user_dict.pop("passcode", None)
 
         audit_log = {
-            "created_at":  datetime.utcnow(),
+            "created_at":  datetime.now(timezone.utc),
             "created_by": "self",
-            "updated_at":  datetime.utcnow(),
+            "updated_at":  datetime.now(timezone.utc),
             "updated_by": "self",
         }
         user_dict["audit_log"] = audit_log
@@ -29,17 +32,51 @@ class UserRepository:
         result = self.collection.insert_one(user_dict)
         return self.collection.find_one({"_id": result.inserted_id}, {"_id": 0})
 
+    def _attach_defaults(self, user: Optional[dict]) -> Optional[dict]:
+        if user is not None and "email_verified" not in user:
+            user["email_verified"] = False
+        
+        # Convert first_edit_date to IST if it exists (MongoDB stores as UTC)
+        if user and "first_edit_date" in user and user["first_edit_date"]:
+            first_edit = user["first_edit_date"]
+            if isinstance(first_edit, datetime):
+                # MongoDB returns UTC, convert to IST
+                if first_edit.tzinfo is None:
+                    # Naive datetime from MongoDB, assume UTC
+                    first_edit = first_edit.replace(tzinfo=timezone.utc).astimezone(IST)
+                elif first_edit.tzinfo == timezone.utc:
+                    # UTC datetime, convert to IST
+                    first_edit = first_edit.astimezone(IST)
+                # If already in IST, keep as is
+                user["first_edit_date"] = first_edit
+        
+        return user
+
     def get_user_by_id(self, user_id: str) -> Optional[dict]:
         # print("Fetching user by ID:", user_id)
         user = self.collection.find_one({"user_id": user_id, "status": {"$in": ["ACTIVE", "BANNED"]}}, {"_id": 0})
+        user = self._attach_defaults(user)
         print("Fetched user:", user.get("user_id") if user else None)
         if not user:
             raise HTTPException(404, "User not found")
+        
+        # Convert first_edit_date to IST if it exists
+        if user and "first_edit_date" in user and user["first_edit_date"]:
+            first_edit = user["first_edit_date"]
+            if isinstance(first_edit, datetime):
+                # Convert to IST if it's in UTC or naive
+                if first_edit.tzinfo is None:
+                    first_edit = first_edit.replace(tzinfo=timezone.utc).astimezone(IST)
+                elif first_edit.tzinfo == timezone.utc:
+                    first_edit = first_edit.astimezone(IST)
+                user["first_edit_date"] = first_edit
+        
         return user
     
     def get_user_by_email(self, email: str) -> Optional[dict]:
         """Get user by email address"""
         user = self.collection.find_one({"email": email, "status": {"$in": ["ACTIVE", "BANNED"]}}, {"_id": 0})
+        user = self._attach_defaults(user)
         if not user:
             raise HTTPException(404, "User not found")
         return user
@@ -47,6 +84,7 @@ class UserRepository:
     def get_user_by_keycloak_id(self, keycloak_id: str) -> Optional[dict]:
         """Get user by Keycloak user id"""
         user = self.collection.find_one({"keycloak_id": keycloak_id, "status": {"$in": ["ACTIVE", "BANNED"]}}, {"_id": 0})
+        user = self._attach_defaults(user)
         if not user:
             raise HTTPException(404, "User not found")
         return user
@@ -78,7 +116,7 @@ class UserRepository:
     def update_user(self, user_id: str, update_payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
 
-        update_payload["audit_log.updated_at"] = datetime.utcnow()
+        update_payload["audit_log.updated_at"] = datetime.now(timezone.utc)
         update_payload["audit_log.updated_by"] = user_id
 
         # build $set and $unset based on presence of keys and explicit None values
@@ -125,7 +163,7 @@ class UserRepository:
     def ban_user(self, user_id: str, reason: str) -> dict:
         result = self.collection.update_one(
             {"user_id": user_id},
-            {"$set": {"status": "BANNED", "audit_log.updated_at": datetime.utcnow(), "audit_log.updated_by": "system", "ban_reason": reason}}
+            {"$set": {"status": "BANNED", "audit_log.updated_at": datetime.now(timezone.utc), "audit_log.updated_by": "system", "ban_reason": reason}}
         )
         if result.matched_count == 0:
             raise HTTPException(404, "User not found.")

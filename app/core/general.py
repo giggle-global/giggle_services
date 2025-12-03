@@ -294,10 +294,41 @@ def generate_epoch_with_string(append_str):
     return result
 
 def generate_random_name() -> str:
-    """Generate a random name from a predefined set of names."""
-    name = random.choice(list(random_names))
-    name_with_suffix = f"{name}_{random.randint(1000, 9999)}"
-    return name_with_suffix
+    """Generate a random username with two real 3-letter words (capitalized) plus two digits.
+    Example: BoxPen25, SunSea42, GemJoy89
+    """
+    # Pick two random 3-letter words
+    word1 = random.choice(three_letter_words)
+    word2 = random.choice(three_letter_words)
+    
+    # Capitalize first letter of each word
+    word1_capitalized = word1.capitalize()
+    word2_capitalized = word2.capitalize()
+    
+    # Generate two random digits (00-99)
+    two_digits = f"{random.randint(0, 99):02d}"
+    
+    # Combine: Word1Word2##
+    username = f"{word1_capitalized}{word2_capitalized}{two_digits}"
+    return username
+
+
+# Curated list of username-friendly 3-letter English words
+# Excludes: animals, body parts, actions, negative words, abstract/grammar words
+three_letter_words = [
+    # Objects & Items (positive, relatable, common)
+    'box', 'bag', 'cup', 'pen', 'key', 'hat', 'map', 'bed', 'rug', 'toy', 'jar', 'pan', 'pot', 'can', 'lid', 'tag', 'pin', 'fan', 'bar', 'cap', 'mug', 'web', 'gem', 'log', 'rod', 'tub', 'van', 'bow', 'arc', 'ray', 'hub', 'kit', 'lab', 'mat', 'net', 'pad', 'peg', 'saw', 'tap', 'urn', 'vat', 'wax', 'zip', 'cab', 'car', 'cod', 'cog', 'cot', 'cub', 'cue', 'den', 'dew', 'dot', 'dye', 'fan', 'far', 'fax', 'fee', 'fen', 'few', 'fig', 'fin', 'fir', 'fit', 'fix', 'fog', 'fry', 'fun', 'fur', 'gal', 'gap', 'gas', 'gel', 'gem', 'gig', 'gin', 'gum', 'guy', 'gym', 'ham', 'hat', 'hay', 'hex', 'hub', 'hue', 'hug', 'hum', 'hut', 'ice', 'icy', 'ink', 'inn', 'ion', 'ivy', 'jam', 'jar', 'jay', 'jet', 'jig', 'job', 'joy', 'jug', 'kay', 'keg', 'ken', 'key', 'kid', 'kin', 'kit', 'koa', 'koi', 'lab', 'lad', 'lag', 'lam', 'lap', 'lar', 'las', 'lat', 'law', 'lax', 'lay', 'lea', 'led', 'lee', 'lei', 'let', 'lev', 'lex', 'ley', 'lib', 'lid', 'lie', 'lin', 'lis', 'lit', 'lob', 'log', 'loo', 'lop', 'lot', 'lox', 'lug', 'lum', 'lun', 'lur', 'luv', 'lux', 'lye', 'mac', 'mag', 'man', 'map', 'mar', 'mas', 'mat', 'max', 'may', 'med', 'meg', 'mel', 'men', 'met', 'mic', 'mid', 'mil', 'min', 'mir', 'mix', 'mob', 'mod', 'mog', 'mol', 'mom', 'mon', 'moo', 'mop', 'mor', 'mos', 'mot', 'mow', 'mug', 'mum', 'nab', 'nap', 'nay', 'net', 'new', 'nil', 'nip', 'nit', 'nix', 'nob', 'nod', 'nog', 'nor', 'not', 'now', 'nub', 'nut', 'oak', 'oar', 'oat', 'odd', 'ode', 'off', 'oil', 'old', 'opt', 'orb', 'orc', 'ore', 'org', 'owe', 'owl', 'pac', 'pad', 'pal', 'pan', 'pap', 'par', 'pas', 'pat', 'paw', 'pax', 'pay', 'pea', 'pec', 'ped', 'peg', 'pen', 'pep', 'per', 'pes', 'pet', 'pew', 'pic', 'pie', 'pin', 'pip', 'pit', 'pix', 'ply', 'pod', 'poe', 'poi', 'pol', 'pom', 'pon', 'poo', 'pop', 'pot', 'pow', 'pro', 'pry', 'pub', 'pud', 'pug', 'pun', 'pup', 'pur', 'put', 'pya', 'pye', 'rad', 'rag', 'rah', 'rai', 'raj', 'ram', 'ran', 'rap', 'ras', 'raw', 'ray', 'raz', 'reb', 'rec', 'red', 'ree', 'ref', 'reg', 'rei', 'rem', 'ren', 'rep', 'res', 'ret', 'rev', 'rex', 'rez', 'rho', 'ria', 'rib', 'rid', 'rif', 'rig', 'rim', 'rin', 'rip', 'rit', 'riz', 'rob', 'roc', 'rod', 'roe', 'rog', 'rom', 'roo', 'rot', 'row', 'rub', 'ruc', 'rue', 'rug', 'rum', 'rut', 'rye', 'sab', 'sac', 'sag', 'sal', 'sam', 'san', 'sap', 'sar', 'sat', 'saw', 'sax', 'sea', 'sec', 'seg', 'sei', 'sel', 'sen', 'ser', 'sha', 'she', 'shy', 'sib', 'sic', 'sid', 'sig', 'sim', 'sin', 'sip', 'sir', 'sis', 'ski', 'sky', 'sly', 'sob', 'soc', 'sod', 'soh', 'sol', 'som', 'son', 'sop', 'sos', 'sot', 'sou', 'sov', 'sow', 'sox', 'soy', 'spa', 'spy', 'sri', 'sty', 'sub', 'sud', 'sue', 'sum', 'sun', 'sup', 'sur', 'sus', 'swy', 'tab', 'tad', 'tag', 'tam', 'tan', 'tao', 'tap', 'tar', 'tas', 'tat', 'tau', 'tav', 'taw', 'tax', 'tay', 'tea', 'tec', 'ted', 'tee', 'teg', 'tel', 'tes', 'tet', 'tew', 'tex', 'tho', 'thy', 'tic', 'tie', 'tig', 'til', 'tin', 'tip', 'tis', 'tit', 'tix', 'tod', 'toe', 'tog', 'tom', 'ton', 'too', 'top', 'tor', 'tot', 'tow', 'toy', 'tub', 'tug', 'tum', 'tun', 'tup', 'tut', 'tux', 'twa', 'tye', 'udo', 'ufo', 'uke', 'ulu', 'umm', 'ump', 'uni', 'uns', 'upo', 'ups', 'urb', 'urd', 'ure', 'urg', 'urn', 'urp', 'use', 'ush', 'usk', 'usp', 'uss', 'ute', 'uts', 'vac', 'van', 'var', 'vas', 'vat', 'vau', 'vav', 'vaw', 'vee', 'veg', 'vet', 'vex', 'via', 'vid', 'vie', 'vig', 'vim', 'vin', 'vis', 'voe', 'vog', 'vol', 'von', 'vow', 'vox', 'vug', 'vum', 'wad', 'wag', 'wan', 'wap', 'waw', 'wax', 'web', 'wed', 'wee', 'wig', 'wis', 'wit', 'wiz', 'wok', 'wop', 'wos', 'wow', 'wry', 'wud', 'wus', 'wye', 'wyn', 'yag', 'yah', 'yam', 'yap', 'yar', 'yas', 'yat', 'yaw', 'yay', 'yea', 'yeh', 'yen', 'yep', 'yes', 'yet', 'yew', 'yid', 'yin', 'yip', 'yob', 'yod', 'yok', 'yom', 'yon', 'yow', 'yox', 'yoy', 'yuk', 'yum', 'yup', 'yus', 'zag', 'zap', 'zas', 'zax', 'zed', 'zee', 'zek', 'zel', 'zen', 'zep', 'zes', 'zex', 'zez', 'zho', 'zig', 'zin', 'zip', 'zit', 'ziz', 'zoa', 'zol', 'zuz',
+    
+    # Nature (pleasant, relatable)
+    'sun', 'sea', 'sky', 'ice', 'fog', 'dew', 'oak', 'elm', 'ash', 'fir', 'bay', 'ray', 'log',
+    
+    
+    # Colors (positive, relatable)
+    'red', 'tan',
+    
+    # Positive descriptive words
+    'new', 'old', 'big', 'hot', 'top', 'end', 'far', 'high', 'yes', 'art', 'awe', 'fab', 'fit', 'fun', 'gem', 'joy', 'key', 'max', 'pro', 'ray', 'red', 'sky', 'sun', 'tan', 'top', 'van', 'web', 'wow', 'zen',
+]
 
 
 random_names = {'vexmier', 'marsaas', 'aricour', 'beldiox', 'jasas', 'darriel', 'jasrees', 'finsais', 'zenzean', 'orataes', 

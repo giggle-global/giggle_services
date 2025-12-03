@@ -242,108 +242,110 @@ def update_user_in_keycloak(token, keycloak_id, updated_data):
         )
 
 
-def get_current_user(token: str = Depends(oauth2_scheme)):
+def _validate_token_and_get_user(token: str) -> dict:
+    """
+    Internal helper function to validate token and get user.
+    Can be called directly with a token string (for WebSocket) or via get_current_user (for HTTP).
+    """
+    if not token:
+        raise HTTPException(status_code=401, detail="Token is required")
+    
+    if token.startswith("Bearer "):
+        token = token[len("Bearer ") :]
 
-    try:
-        if token.startswith("Bearer "):
-            token = token[len("Bearer ") :]
+    # Use cached public key to avoid Keycloak API call on every request
+    public_key = _get_cached_public_key()
 
-        # Use cached public key to avoid Keycloak API call on every request
-        public_key = _get_cached_public_key()
+    # Decode JWT token
+    user_base_detail = jwt.decode(
+        token, public_key, algorithms=["RS256"], audience="account"
+    )
 
-        # Decode JWT token
-        user_base_detail = jwt.decode(
-            token, public_key, algorithms=["RS256"], audience="account"
-        )
-
-        # Extract user info from JWT token (JWT is already validated and signed)
-        if "sub" not in user_base_detail:
-            define_logger(
-                level=40,
-                message="Invalid token structure",
-                pid=os.getpid(),
-                loggName=inspect.stack()[0],
-            )
-            raise HTTPException(status_code=400, detail="Invalid token structure")
-        
-        sid = user_base_detail.get("sid")
-        # Try to get username from JWT (preferred_username is standard in Keycloak JWT)
-        username = user_base_detail.get("preferred_username") or user_base_detail.get("username")
-        
-        # Fallback: if username not in JWT, fetch from Keycloak (rare case)
-        if not username:
-            keycloak_admin = keycloak_instance()
-            keycloak_user = keycloak_admin.get_user(user_base_detail["sub"])
-            if keycloak_user:
-                username = keycloak_user.get("username")
-                enabled = keycloak_user.get("enabled")
-                if not enabled:
-                    raise HTTPException(status_code=401, detail="User is disabled")
-        
-        if not username:
-            define_logger(
-                level=40,
-                message="Username not found in token or Keycloak",
-                pid=os.getpid(),
-                loggName=inspect.stack()[0],
-            )
-            raise HTTPException(status_code=400, detail="Unable to identify user from token")
-        
-        # Fetch from MongoDB (much faster than Keycloak API call)
-        user_repo = UserRepository()
-        user = None
-
-        if username:
-            try:
-                user = user_repo.get_user_by_id(user_id=username)
-            except HTTPException as exc:
-                if exc.status_code != status.HTTP_404_NOT_FOUND:
-                    raise
-
-        if not user:
-            keycloak_user_id = user_base_detail.get("sub")
-            if keycloak_user_id:
-                try:
-                    user = user_repo.get_user_by_keycloak_id(keycloak_user_id)
-                except HTTPException as exc:
-                    if exc.status_code != status.HTTP_404_NOT_FOUND:
-                        raise
-
-        if not user:
-            email = user_base_detail.get("email")
-            if email:
-                try:
-                    user = user_repo.get_user_by_email(email)
-                except HTTPException as exc:
-                    if exc.status_code != status.HTTP_404_NOT_FOUND:
-                        raise
-
-        if not user:
-            define_logger(
-                level=40,
-                message="User not found in database",
-                pid=os.getpid(),
-                loggName=inspect.stack()[0],
-            )
-            raise HTTPException(status_code=404, detail="User not found")
-        
-        # Add session ID if available
-        if sid:
-            user["sid"] = sid
-            
-        return user
-
-        # If 'sub' is missing, token might be malformed
+    # Extract user info from JWT token (JWT is already validated and signed)
+    if "sub" not in user_base_detail:
         define_logger(
             level=40,
             message="Invalid token structure",
             pid=os.getpid(),
             loggName=inspect.stack()[0],
         )
-
-        # If 'sub' is missing, token might be malformed
         raise HTTPException(status_code=400, detail="Invalid token structure")
+    
+    sid = user_base_detail.get("sid")
+    # Try to get username from JWT (preferred_username is standard in Keycloak JWT)
+    username = user_base_detail.get("preferred_username") or user_base_detail.get("username")
+    
+    # Fallback: if username not in JWT, fetch from Keycloak (rare case)
+    if not username:
+        keycloak_admin = keycloak_instance()
+        keycloak_user = keycloak_admin.get_user(user_base_detail["sub"])
+        if keycloak_user:
+            username = keycloak_user.get("username")
+            enabled = keycloak_user.get("enabled")
+            if not enabled:
+                raise HTTPException(status_code=401, detail="User is disabled")
+    
+    if not username:
+        define_logger(
+            level=40,
+            message="Username not found in token or Keycloak",
+            pid=os.getpid(),
+            loggName=inspect.stack()[0],
+        )
+        raise HTTPException(status_code=400, detail="Unable to identify user from token")
+    
+    # Fetch from MongoDB (much faster than Keycloak API call)
+    user_repo = UserRepository()
+    user = None
 
+    if username:
+        try:
+            user = user_repo.get_user_by_id(user_id=username)
+        except HTTPException as exc:
+            if exc.status_code != status.HTTP_404_NOT_FOUND:
+                raise
+
+    if not user:
+        keycloak_user_id = user_base_detail.get("sub")
+        if keycloak_user_id:
+            try:
+                user = user_repo.get_user_by_keycloak_id(keycloak_user_id)
+            except HTTPException as exc:
+                if exc.status_code != status.HTTP_404_NOT_FOUND:
+                    raise
+
+    if not user:
+        email = user_base_detail.get("email")
+        if email:
+            try:
+                user = user_repo.get_user_by_email(email)
+            except HTTPException as exc:
+                if exc.status_code != status.HTTP_404_NOT_FOUND:
+                    raise
+
+    if not user:
+        define_logger(
+            level=40,
+            message="User not found in database",
+            pid=os.getpid(),
+            loggName=inspect.stack()[0],
+        )
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Add session ID if available
+    if sid:
+        user["sid"] = sid
+        
+    return user
+
+
+def get_current_user(token: str = Depends(oauth2_scheme)):
+    """
+    FastAPI dependency for HTTP requests.
+    For WebSocket, use _validate_token_and_get_user() directly.
+    """
+    try:
+        return _validate_token_and_get_user(token)
     except (DecodeError, InvalidTokenError) as exception:
         define_logger(
             level=40,
