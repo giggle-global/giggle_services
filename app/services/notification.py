@@ -79,19 +79,51 @@ class NotificationService:
                 logger.warning("Failed to publish to RabbitMQ (notification still created): %s", e)
                 # Continue even if RabbitMQ fails - notification is already in DB
 
-            # Send email if requested and user has email notifications enabled
+            # Send email if requested
             if send_email:
                 try:
                     user = self.user_repo.get_user_by_id(user_id)
-                    if user and user.get("notification_service", {}).get("email", False):
-                        self.email_service.send_notification_email(
-                            to_email=user.get("email"),
-                            subject=title,
-                            message=message,
-                            notification_data=data
-                        )
+                    if not user:
+                        logger.warning("Cannot send notification email: User %s not found", user_id)
+                        return notification
+                    
+                    user_email = user.get("email")
+                    if not user_email:
+                        logger.warning("Cannot send notification email: User %s has no email address", user_id)
+                        return notification
+                    
+                    # Check if user has email notifications enabled (default to True if not set)
+                    notification_prefs = user.get("notification_service", {})
+                    email_enabled = notification_prefs.get("email", True)  # Default to True if not set
+                    
+                    if email_enabled:
+                        logger.info("📧 Sending notification email to %s for notification %s", user_email, notification.get("notification_id"))
+                        try:
+                            # Prepare notification data with link included
+                            email_notification_data = (data or {}).copy()
+                            if link:
+                                email_notification_data["link"] = link
+                            
+                            logger.debug("Email notification data: %s", email_notification_data)
+                            self.email_service.send_notification_email(
+                                to_email=user_email,
+                                subject=title,
+                                message=message,
+                                notification_data=email_notification_data
+                            )
+                            logger.info("✅ Notification email sent successfully to %s", user_email)
+                        except ValueError as e:
+                            # Configuration errors - log as error with details
+                            logger.error("❌ Email configuration error for user %s: %s", user_id, str(e))
+                            logger.error("   Check SMTP/SES environment variables: SMTP_SERVER, SMTP_USERNAME, SMTP_PASSWORD, SMTP_FROM_EMAIL")
+                        except Exception as email_error:
+                            # Other email errors - log with full traceback
+                            logger.exception("❌ Failed to send notification email to %s: %s", user_email, str(email_error))
+                            logger.error("   Email service provider: %s", self.email_service.provider)
+                    else:
+                        logger.debug("Email notifications disabled for user %s, skipping email send", user_id)
                 except Exception as e:
-                    logger.warning("Failed to send notification email: %s", e)
+                    logger.exception("Failed to process notification email for user %s: %s", user_id, str(e))
                     # Don't fail the whole operation if email fails
 
             return notification

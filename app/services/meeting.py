@@ -71,24 +71,33 @@ class MeetingService:
             meet_link = None
             calendar_event_id = None
             
-            if self.google_calendar.service and attendees:
-                google_event = self.google_calendar.create_meeting(
-                    title=payload.title,
-                    description=payload.description or f"Meeting for {agreement.get('title', 'Agreement')}",
-                    start_time=start_time,
-                    end_time=end_time,
-                    attendees=attendees,
-                    timezone=payload.timezone
-                )
-                
-                if google_event:
-                    meet_link = google_event.get("meet_link")
-                    calendar_event_id = google_event.get("event_id")
-                    logger.info("Google Calendar event created: %s", calendar_event_id)
+            # Try to create Google Calendar event, but don't fail if it doesn't work
+            try:
+                if self.google_calendar.service and attendees:
+                    google_event = self.google_calendar.create_meeting(
+                        title=payload.title,
+                        description=payload.description or f"Meeting for {agreement.get('title', 'Agreement')}",
+                        start_time=start_time,
+                        end_time=end_time,
+                        attendees=attendees,
+                        timezone=payload.timezone
+                    )
+                    
+                    if google_event:
+                        meet_link = google_event.get("meet_link")
+                        calendar_event_id = google_event.get("event_id")
+                        logger.info("Google Calendar event created: %s", calendar_event_id)
+                    else:
+                        logger.warning("Failed to create Google Calendar event, proceeding without Meet link")
                 else:
-                    logger.warning("Failed to create Google Calendar event, proceeding without Meet link")
-            else:
-                logger.warning("Google Calendar service not available or no attendees, proceeding without Meet link")
+                    if not self.google_calendar.service:
+                        logger.warning("Google Calendar service not initialized, proceeding without Meet link")
+                    elif not attendees:
+                        logger.warning("No attendees provided, proceeding without Meet link")
+            except Exception as e:
+                # Log the error but continue with meeting creation
+                logger.error("Error creating Google Calendar event: %s. Proceeding without Meet link.", str(e))
+                logger.exception("Full exception details:")
             
             # Create meeting in database
             meeting_data = {

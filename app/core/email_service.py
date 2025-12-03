@@ -20,7 +20,50 @@ class EmailService:
     def __init__(self, provider: Optional[str] = None):
         self.provider = (provider or config.get("email_provider") or "smtp").lower()
         # Log email provider configuration on initialization for debugging
-        logger.debug("EmailService initialized with provider: %s", self.provider)
+        logger.info("📧 EmailService initialized with provider: %s", self.provider)
+        
+        # Validate configuration on initialization
+        if self.provider == "smtp":
+            smtp_server = config.get("smtp_server")
+            smtp_port = config.get("smtp_port", 587)
+            smtp_username = config.get("smtp_username")
+            smtp_password = config.get("smtp_password")
+            smtp_from = config.get("smtp_from_email")
+            
+            missing_config = []
+            if not smtp_server:
+                missing_config.append("SMTP_SERVER")
+            if not smtp_username:
+                missing_config.append("SMTP_USERNAME")
+            if not smtp_password:
+                missing_config.append("SMTP_PASSWORD")
+            if not smtp_from:
+                missing_config.append("SMTP_FROM_EMAIL")
+            
+            if missing_config:
+                logger.warning("⚠️ SMTP configuration incomplete. Missing: %s", ", ".join(missing_config))
+                logger.warning("   Emails will fail to send until these are configured.")
+            else:
+                logger.info("✅ SMTP configuration validated - Server: %s:%s, From: %s", 
+                          smtp_server, smtp_port, smtp_from)
+        elif self.provider == "ses":
+            aws_key = config.get("aws_access_key")
+            aws_secret = config.get("aws_secret_key")
+            ses_from = config.get("ses_from_email")
+            
+            missing_config = []
+            if not aws_key:
+                missing_config.append("AWS_ACCESS_KEY")
+            if not aws_secret:
+                missing_config.append("AWS_SECRET_KEY")
+            if not ses_from:
+                missing_config.append("SES_FROM_EMAIL")
+            
+            if missing_config:
+                logger.warning("⚠️ AWS SES configuration incomplete. Missing: %s", ", ".join(missing_config))
+                logger.warning("   Emails will fail to send until these are configured.")
+            else:
+                logger.info("✅ AWS SES configuration validated - From: %s", ses_from)
 
     def send_email(
         self,
@@ -97,19 +140,29 @@ class EmailService:
         message.attach(MIMEText(body_html, "html"))
 
         try:
+            logger.debug("Connecting to SMTP server %s:%s", smtp_server, smtp_port)
             with smtplib.SMTP(smtp_server, smtp_port) as server:
+                logger.debug("Starting TLS...")
                 server.starttls()
+                logger.debug("Logging in with username: %s", smtp_username)
                 server.login(smtp_username, smtp_password)
+                logger.debug("Sending email from %s to %s", sender, to_addresses)
                 server.sendmail(sender, list(to_addresses), message.as_string())
-                logger.info("SMTP email sent to %s", to_addresses)
+                logger.info("✅ SMTP email sent successfully to %s", to_addresses)
         except smtplib.SMTPAuthenticationError as exc:
-            logger.exception("SMTP authentication failed. Check SMTP_USERNAME and SMTP_PASSWORD")
+            logger.error("❌ SMTP authentication failed. Check SMTP_USERNAME and SMTP_PASSWORD")
+            logger.error("   Server: %s, Port: %s, Username: %s", smtp_server, smtp_port, smtp_username)
+            logger.exception("Full authentication error:")
             raise RuntimeError("Failed to send email via SMTP: Authentication failed") from exc
         except smtplib.SMTPConnectError as exc:
-            logger.exception("SMTP connection failed. Check SMTP_SERVER and SMTP_PORT")
+            logger.error("❌ SMTP connection failed. Check SMTP_SERVER and SMTP_PORT")
+            logger.error("   Server: %s, Port: %s", smtp_server, smtp_port)
+            logger.exception("Full connection error:")
             raise RuntimeError(f"Failed to send email via SMTP: Cannot connect to {smtp_server}:{smtp_port}") from exc
         except Exception as exc:
-            logger.exception("Failed to send email via SMTP: %s", str(exc))
+            logger.error("❌ Failed to send email via SMTP: %s", str(exc))
+            logger.error("   Server: %s, Port: %s, From: %s, To: %s", smtp_server, smtp_port, sender, to_addresses)
+            logger.exception("Full SMTP error:")
             raise RuntimeError(f"Failed to send email via SMTP: {str(exc)}") from exc
 
     def _send_via_ses(
@@ -165,6 +218,14 @@ class EmailService:
         notification_data: Optional[dict] = None
     ) -> None:
         """Send a notification email with HTML template"""
+        logger.info("Preparing notification email to %s with subject: %s", to_email, subject)
+        
+        # Build link URL if provided
+        link_url = "#"
+        if notification_data and notification_data.get("link"):
+            link_url = notification_data.get("link")
+            logger.debug("Notification email includes link: %s", link_url)
+        
         html_body = f"""
         <!DOCTYPE html>
         <html>
@@ -185,7 +246,7 @@ class EmailService:
                 </div>
                 <div class="content">
                     <p>{message}</p>
-                    {f'<a href="{notification_data.get("link", "#")}" class="button">View Details</a>' if notification_data and notification_data.get("link") else ""}
+                    {f'<a href="{link_url}" class="button">View Details</a>' if link_url != "#" else ""}
                 </div>
             </div>
         </body>
@@ -194,10 +255,16 @@ class EmailService:
         
         text_body = message
         
-        self.send_email(
-            to_addresses=[to_email],
-            subject=subject,
-            body_html=html_body,
-            body_text=text_body
-        )
+        logger.debug("Calling send_email with provider: %s", self.provider)
+        try:
+            self.send_email(
+                to_addresses=[to_email],
+                subject=subject,
+                body_html=html_body,
+                body_text=text_body
+            )
+            logger.info("Notification email sent successfully via %s to %s", self.provider, to_email)
+        except Exception as e:
+            logger.error("Failed to send notification email to %s via %s: %s", to_email, self.provider, str(e))
+            raise
 

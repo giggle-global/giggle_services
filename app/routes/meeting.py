@@ -18,7 +18,9 @@ def get_meeting_service() -> MeetingService:
     return MeetingService()
 
 
-@router.post("/", response_model=APIResponse[MeetingOut], status_code=status.HTTP_201_CREATED)
+# POST route must come first to avoid conflicts with GET /{meeting_id}
+# Using empty string to match /api/meetings exactly (no trailing slash)
+@router.post("", response_model=APIResponse[MeetingOut], status_code=status.HTTP_201_CREATED)
 def create_meeting(
     payload: MeetingCreate,
     current_user: Dict[str, Any] = Depends(get_current_user),
@@ -32,33 +34,11 @@ def create_meeting(
         raise
     except Exception as e:
         logger.exception("Error creating meeting: %s", e)
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to create meeting")
+        error_message = str(e) if str(e) else "Failed to create meeting"
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, f"Failed to create meeting: {error_message}")
 
 
-@router.get("/{meeting_id}", response_model=APIResponse[MeetingOut])
-def get_meeting(
-    meeting_id: str,
-    current_user: Dict[str, Any] = Depends(get_current_user),
-    svc: MeetingService = Depends(get_meeting_service)
-):
-    """Get a meeting by ID"""
-    try:
-        meeting = svc.get_meeting(meeting_id)
-        # Verify user has access
-        user_id = current_user["user_id"]
-        if user_id not in [
-            meeting.get("client", {}).get("user_id"),
-            meeting.get("freelancer", {}).get("user_id")
-        ]:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "You don't have access to this meeting")
-        return ok(meeting, "Meeting fetched successfully")
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("Error fetching meeting: %s", e)
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to fetch meeting")
-
-
+# Specific routes must come before parameterized routes
 @router.get("/agreement/{agreement_id}", response_model=APIResponse[List[MeetingOut]])
 def get_meetings_by_agreement(
     agreement_id: str,
@@ -103,6 +83,32 @@ def get_filtered_meetings(
     except Exception as e:
         logger.exception("Error fetching filtered meetings: %s", e)
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to fetch meetings")
+
+
+
+
+@router.get("/{meeting_id}", response_model=APIResponse[MeetingOut])
+def get_meeting(
+    meeting_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    svc: MeetingService = Depends(get_meeting_service)
+):
+    """Get a meeting by ID"""
+    try:
+        meeting = svc.get_meeting(meeting_id)
+        # Verify user has access
+        user_id = current_user["user_id"]
+        if user_id not in [
+            meeting.get("client", {}).get("user_id"),
+            meeting.get("freelancer", {}).get("user_id")
+        ]:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "You don't have access to this meeting")
+        return ok(meeting, "Meeting fetched successfully")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error fetching meeting: %s", e)
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to fetch meeting")
 
 
 @router.put("/{meeting_id}", response_model=APIResponse[MeetingOut])

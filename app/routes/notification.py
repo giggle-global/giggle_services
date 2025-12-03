@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from typing import List, Dict, Any
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
+from typing import List, Dict, Any, Optional
 from app.services.notification import NotificationService
 from app.models.notification import NotificationOut
 from app.schemas.response import APIResponse, ok
 from app.core.keycloak import get_current_user
 from app.core.scheduler import milestone_scheduler
+from app.core.email_service import EmailService
+from app.core.config import config
 import logging
 
 logger = logging.getLogger(__name__)
@@ -98,4 +100,75 @@ def get_scheduler_status(
     except Exception as e:
         logger.exception("Error getting scheduler status: %s", e)
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to get scheduler status")
+
+
+@router.post("/test-email", response_model=APIResponse[Dict[str, Any]])
+def test_email(
+    email: str = Body(..., embed=True, description="Email address to send test email to"),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Test email configuration by sending a test email"""
+    try:
+        # Check email configuration
+        email_provider = config.get("email_provider", "smtp").lower()
+        config_status = {}
+        
+        if email_provider == "smtp":
+            config_status = {
+                "provider": "SMTP",
+                "server": config.get("smtp_server"),
+                "port": config.get("smtp_port"),
+                "username": config.get("smtp_username"),
+                "from_email": config.get("smtp_from_email"),
+                "server_configured": bool(config.get("smtp_server")),
+                "username_configured": bool(config.get("smtp_username")),
+                "password_configured": bool(config.get("smtp_password")),
+            }
+        else:
+            config_status = {
+                "provider": "AWS SES",
+                "region": config.get("aws_region"),
+                "from_email": config.get("ses_from_email"),
+                "access_key_configured": bool(config.get("aws_access_key")),
+                "secret_key_configured": bool(config.get("aws_secret_key")),
+            }
+        
+        # Try to send test email
+        email_service = EmailService()
+        try:
+            email_service.send_notification_email(
+                to_email=email,
+                subject="Test Email from Giggle",
+                message="This is a test email to verify email configuration is working correctly."
+            )
+            return ok(
+                data={
+                    "status": "success",
+                    "message": f"Test email sent successfully to {email}",
+                    "config": config_status
+                },
+                message="Test email sent successfully"
+            )
+        except ValueError as e:
+            return ok(
+                data={
+                    "status": "configuration_error",
+                    "message": str(e),
+                    "config": config_status
+                },
+                message="Email configuration error"
+            )
+        except Exception as e:
+            logger.exception("Failed to send test email: %s", e)
+            return ok(
+                data={
+                    "status": "send_error",
+                    "message": str(e),
+                    "config": config_status
+                },
+                message="Failed to send test email"
+            )
+    except Exception as e:
+        logger.exception("Error testing email: %s", e)
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, f"Failed to test email: {str(e)}")
 

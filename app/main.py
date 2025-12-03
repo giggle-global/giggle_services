@@ -2,9 +2,10 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from starlette.status import HTTP_422_UNPROCESSABLE_ENTITY, HTTP_500_INTERNAL_SERVER_ERROR
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 from app.schemas.response import APIResponse
 
 from app.core.db import check_db_connection
@@ -59,13 +60,46 @@ logger.info("App started")
 
 app = FastAPI()
 
+# Enhanced CORS configuration
+# Note: When allow_credentials=True, we should specify origins explicitly
+# For production, set ALLOWED_ORIGINS environment variable
+import os
+ALLOWED_ORIGINS_ENV = os.getenv("ALLOWED_ORIGINS", "")
+if ALLOWED_ORIGINS_ENV:
+    # Parse comma-separated origins from environment variable
+    allowed_origins = [origin.strip() for origin in ALLOWED_ORIGINS_ENV.split(",") if origin.strip()]
+else:
+    # Default: allow all in development, restrict in production
+    # In production, set ALLOWED_ORIGINS="https://begiggle.keydraft.com,https://www.begiggle.keydraft.com"
+    allowed_origins = ["*"] if os.getenv("ENVIRONMENT", "development") == "development" else []
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins if allowed_origins else ["*"],  # Fallback to * if empty
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,  # Cache preflight requests for 1 hour
 )
+
+# Explicit OPTIONS handler for all routes to ensure CORS preflight works
+@app.options("/{full_path:path}")
+async def options_handler(full_path: str, request: Request):
+    """
+    Handle OPTIONS requests for CORS preflight.
+    This ensures that OPTIONS requests are properly handled even if middleware fails.
+    """
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": request.headers.get("Origin", "*"),
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
+            "Access-Control-Allow-Headers": request.headers.get("Access-Control-Request-Headers", "*"),
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Max-Age": "3600",
+        }
+    )
 
 # --- Global exception handlers -> uniform response ---
 @app.exception_handler(HTTPException)

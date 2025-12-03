@@ -36,29 +36,55 @@ class GoogleCalendarService:
             
             # Load existing token if available
             if os.path.exists(token_path):
-                creds = Credentials.from_authorized_user_file(token_path, SCOPES)
+                try:
+                    creds = Credentials.from_authorized_user_file(token_path, SCOPES)
+                except Exception as e:
+                    logger.warning("Failed to load existing token file: %s. Will try to create new credentials.", str(e))
+                    creds = None
             
             # If no valid credentials, get new ones
             if not creds or not creds.valid:
                 if creds and creds.expired and creds.refresh_token:
-                    creds.refresh(Request())
-                else:
+                    try:
+                        creds.refresh(Request())
+                    except Exception as e:
+                        logger.warning("Failed to refresh token: %s. Will try to create new credentials.", str(e))
+                        creds = None
+                
+                if not creds or not creds.valid:
                     if not os.path.exists(credentials_path):
-                        logger.warning("Google credentials file not found at %s. Meeting creation will be disabled.", credentials_path)
+                        logger.warning("Google credentials file not found at %s. Meeting creation will proceed without Google Meet links.", credentials_path)
+                        self.service = None
                         return
                     
-                    flow = InstalledAppFlow.from_client_secrets_file(credentials_path, SCOPES)
-                    creds = flow.run_local_server(port=0)
+                    try:
+                        flow = InstalledAppFlow.from_client_secrets_file(credentials_path, SCOPES)
+                        # Note: run_local_server requires user interaction, which may not be available in production
+                        # In production, consider using service account credentials instead
+                        creds = flow.run_local_server(port=0)
+                    except Exception as e:
+                        logger.error("Failed to obtain Google credentials: %s. Meeting creation will proceed without Google Meet links.", str(e))
+                        self.service = None
+                        return
                 
                 # Save credentials for next run
-                with open(token_path, 'w') as token:
-                    token.write(creds.to_json())
+                if creds:
+                    try:
+                        with open(token_path, 'w') as token:
+                            token.write(creds.to_json())
+                    except Exception as e:
+                        logger.warning("Failed to save token file: %s", str(e))
             
-            self.service = build('calendar', 'v3', credentials=creds)
-            logger.info("Google Calendar service initialized successfully")
+            if creds:
+                self.service = build('calendar', 'v3', credentials=creds)
+                logger.info("Google Calendar service initialized successfully")
+            else:
+                self.service = None
+                logger.warning("Google Calendar service not initialized. Meeting creation will proceed without Google Meet links.")
             
         except Exception as e:
-            logger.error("Failed to initialize Google Calendar service: %s", e)
+            logger.error("Failed to initialize Google Calendar service: %s. Meeting creation will proceed without Google Meet links.", e)
+            logger.exception("Full exception details:")
             self.service = None
     
     def create_meeting(
