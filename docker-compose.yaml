@@ -11,6 +11,8 @@ services:
     # make sure your app uses this URI or set it in .env
     environment:
       MONGODB_URI: ${MONGODB_URI:-mongodb://mongodb:27017/yourdb}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://begiggle.keydraft.com,https://www.begiggle.keydraft.com,http://begiggle.keydraft.com,http://www.begiggle.keydraft.com}
     volumes:
       - .misc/logger:/app/logger/
     networks:
