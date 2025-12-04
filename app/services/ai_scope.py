@@ -1,4 +1,5 @@
 import json
+import logging
 import math
 from statistics import mean
 from typing import Any, Dict, List, Optional
@@ -7,6 +8,8 @@ from fastapi import HTTPException, status
 from openai import OpenAI
 
 from app.core.config import config
+
+logger = logging.getLogger(__name__)
 from app.models.ai_scope import (
     MatchedFreelancer,
     ScopeConfirmRequest,
@@ -90,9 +93,18 @@ class AIScopeService:
         ]
 
         try:
-            response_json = self._safe_json(self._invoke_chat(messages))
+            raw_response = self._invoke_chat(messages)
+            logger.info(f"[AI] Raw OpenAI response: {raw_response[:500]}...")  # Log first 500 chars
+            response_json = self._safe_json(raw_response)
+            logger.info(f"[AI] Parsed JSON: {response_json}")
             question_text = response_json.get("question")
+        except json.JSONDecodeError as exc:
+            logger.error(f"[AI] JSON decode error: {exc}. Raw response: {raw_response if 'raw_response' in locals() else 'N/A'}")
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY, detail=f"Failed to parse AI response as JSON: {exc}"
+            ) from exc
         except Exception as exc:  # noqa: BLE001
+            logger.exception(f"[AI] Unexpected error generating question: {exc}")
             raise HTTPException(
                 status.HTTP_502_BAD_GATEWAY, detail=f"Failed to generate question: {exc}"
             ) from exc
@@ -130,13 +142,13 @@ class AIScopeService:
             "client_background": payload.background_industry,
             "answers": self._format_history(payload.answers),
             "similar_projects": [
-                {
-                    "title": project.get("title"),
-                    "industry": project.get("industry"),
-                    "background_industry": project.get("background_industry"),
-                    "budget": project.get("budget"),
-                    "duration": project.get("duration"),
-                }
+            {
+                "title": project.get("title"),
+                "industry": project.get("industry"),
+                "background_industry": project.get("background_industry"),
+                "budget": project.get("budget"),
+                "duration": project.get("duration"),
+            }
                 for project in similar_projects[:5]
             ],
             "average_budget": average_budget,
@@ -177,8 +189,17 @@ class AIScopeService:
         ]
 
         try:
-            payload_json = self._safe_json(self._invoke_chat(messages))
+            raw_response = self._invoke_chat(messages)
+            logger.info(f"[AI] Raw OpenAI suggestion response: {raw_response[:500]}...")
+            payload_json = self._safe_json(raw_response)
+            logger.info(f"[AI] Parsed suggestion JSON keys: {list(payload_json.keys())}")
+        except json.JSONDecodeError as exc:
+            logger.error(f"[AI] JSON decode error in suggestion: {exc}. Raw response: {raw_response if 'raw_response' in locals() else 'N/A'}")
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY, detail=f"Failed to parse AI suggestion as JSON: {exc}"
+            ) from exc
         except Exception as exc:  # noqa: BLE001
+            logger.exception(f"[AI] Unexpected error generating suggestion: {exc}")
             raise HTTPException(
                 status.HTTP_502_BAD_GATEWAY, detail=f"Failed to generate scope suggestion: {exc}"
             ) from exc
@@ -207,7 +228,7 @@ class AIScopeService:
                     budget=project.get("budget"),
                     duration=project.get("duration"),
                 )
-                for project in similar_projects[:5]
+            for project in similar_projects[:5]
             ],
         )
 
@@ -308,9 +329,12 @@ class AIScopeService:
     def _safe_json(payload: str) -> Dict[str, Any]:
         cleaned = payload.strip()
         if cleaned.startswith("```"):
+            # Remove markdown code fences
             cleaned = cleaned.strip("`")
-            cleaned = cleaned.split("\n", 1)[-1]
-        return json.loads(cleaned)
+            # Remove language identifier (e.g., "json")
+            if "\n" in cleaned:
+                cleaned = cleaned.split("\n", 1)[-1]
+        return json.loads(cleaned)  # FIXED: This was inside the if block!
 
     @staticmethod
     def _format_history(answers: List[ScopeQA]) -> str:

@@ -41,10 +41,10 @@ class EmailService:
                 missing_config.append("SMTP_FROM_EMAIL")
             
             if missing_config:
-                logger.warning("⚠️ SMTP configuration incomplete. Missing: %s", ", ".join(missing_config))
+                logger.warning("[WARNING] SMTP configuration incomplete. Missing: %s", ", ".join(missing_config))
                 logger.warning("   Emails will fail to send until these are configured.")
             else:
-                logger.info("✅ SMTP configuration validated - Server: %s:%s, From: %s", 
+                logger.info("[OK] SMTP configuration validated - Server: %s:%s, From: %s", 
                           smtp_server, smtp_port, smtp_from)
         elif self.provider == "ses":
             aws_key = config.get("aws_access_key")
@@ -60,10 +60,10 @@ class EmailService:
                 missing_config.append("SES_FROM_EMAIL")
             
             if missing_config:
-                logger.warning("⚠️ AWS SES configuration incomplete. Missing: %s", ", ".join(missing_config))
+                logger.warning("[WARNING] AWS SES configuration incomplete. Missing: %s", ", ".join(missing_config))
                 logger.warning("   Emails will fail to send until these are configured.")
             else:
-                logger.info("✅ AWS SES configuration validated - From: %s", ses_from)
+                logger.info("[OK] AWS SES configuration validated - From: %s", ses_from)
 
     def send_email(
         self,
@@ -148,19 +148,19 @@ class EmailService:
                 server.login(smtp_username, smtp_password)
                 logger.debug("Sending email from %s to %s", sender, to_addresses)
                 server.sendmail(sender, list(to_addresses), message.as_string())
-                logger.info("✅ SMTP email sent successfully to %s", to_addresses)
+                logger.info("[OK] SMTP email sent successfully to %s", to_addresses)
         except smtplib.SMTPAuthenticationError as exc:
-            logger.error("❌ SMTP authentication failed. Check SMTP_USERNAME and SMTP_PASSWORD")
+            logger.error("[ERROR] SMTP authentication failed. Check SMTP_USERNAME and SMTP_PASSWORD")
             logger.error("   Server: %s, Port: %s, Username: %s", smtp_server, smtp_port, smtp_username)
             logger.exception("Full authentication error:")
             raise RuntimeError("Failed to send email via SMTP: Authentication failed") from exc
         except smtplib.SMTPConnectError as exc:
-            logger.error("❌ SMTP connection failed. Check SMTP_SERVER and SMTP_PORT")
+            logger.error("[ERROR] SMTP connection failed. Check SMTP_SERVER and SMTP_PORT")
             logger.error("   Server: %s, Port: %s", smtp_server, smtp_port)
             logger.exception("Full connection error:")
             raise RuntimeError(f"Failed to send email via SMTP: Cannot connect to {smtp_server}:{smtp_port}") from exc
         except Exception as exc:
-            logger.error("❌ Failed to send email via SMTP: %s", str(exc))
+            logger.error("[ERROR] Failed to send email via SMTP: %s", str(exc))
             logger.error("   Server: %s, Port: %s, From: %s, To: %s", smtp_server, smtp_port, sender, to_addresses)
             logger.exception("Full SMTP error:")
             raise RuntimeError(f"Failed to send email via SMTP: {str(exc)}") from exc

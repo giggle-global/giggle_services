@@ -133,7 +133,7 @@ class MatchingService:
         
         # Log score breakdown for debugging
         logger.info(
-            f"✅ Score for {freelancer.get('username', 'Unknown')} ({freelancer.get('designation', 'No designation')}) - "
+            f"[SCORE] {freelancer.get('username', 'Unknown')} ({freelancer.get('designation', 'No designation')}) - "
             f"Industry: {industry_score}/20, Timeline: {timeline_score}/10, "
             f"Background: {background_score}/20, Rating: {rating_score}/20, "
             f"Geography: {geography_score}/30, Total: {total}/100"
@@ -225,16 +225,16 @@ class MatchingService:
         )
         
         if matches == 0:
-            logger.info(f"  ❌ No industry match - 0/20 points")
+            logger.info(f"  [X] No industry match - 0/20 points")
             return 0
         elif matches >= 3:
-            logger.info(f"  ✅ Strong match ({matches} keywords) - 20/20 points")
+            logger.info(f"  [OK] Strong match ({matches} keywords) - 20/20 points")
             return 20  # Strong match
         elif matches == 2:
-            logger.info(f"  ⚠️  Good match (2 keywords) - 15/20 points")
+            logger.info(f"  [~] Good match (2 keywords) - 15/20 points")
             return 15  # Good match
         else:
-            logger.info(f"  ⚠️  Weak match (1 keyword) - 10/20 points")
+            logger.info(f"  [~] Weak match (1 keyword) - 10/20 points")
             return 10  # Weak match
 
     def _calculate_timeline_score(self, project: Dict, freelancer: Dict) -> int:

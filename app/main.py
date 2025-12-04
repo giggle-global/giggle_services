@@ -210,7 +210,7 @@ class OPTIONSHandlerMiddleware(BaseHTTPMiddleware):
                 # Use the original origin (browser sent it, so return it as-is)
                 response.headers["Access-Control-Allow-Origin"] = origin
                 response.headers["Access-Control-Allow-Credentials"] = "true"
-                logger.info(f"✓ Added CORS headers to {method} response - Origin: {origin}, Status: {response.status_code}, Path: {request.url.path}")
+                logger.info(f"[CORS] Added headers to {method} response - Origin: {origin}, Status: {response.status_code}, Path: {request.url.path}")
             else:
                 logger.error(f"✗ CORS BLOCKED - Origin '{origin}' (normalized: '{normalized_origin}') not in allowed list: {allowed_origins}")
         else:
@@ -236,7 +236,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         if origin_allowed:
             response.headers["Access-Control-Allow-Origin"] = origin
             response.headers["Access-Control-Allow-Credentials"] = "true"
-            logger.info(f"✓ Added CORS headers to HTTPException response - Origin: {origin}, Status: {exc.status_code}")
+            logger.info(f"[CORS] Added headers to HTTPException response - Origin: {origin}, Status: {exc.status_code}")
     
     return response
 
@@ -255,7 +255,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         if origin_allowed:
             response.headers["Access-Control-Allow-Origin"] = origin
             response.headers["Access-Control-Allow-Credentials"] = "true"
-            logger.info(f"✓ Added CORS headers to ValidationError response - Origin: {origin}")
+            logger.info(f"[CORS] Added headers to ValidationError response - Origin: {origin}")
     
     return response
 
@@ -276,7 +276,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
         if origin_allowed:
             response.headers["Access-Control-Allow-Origin"] = origin
             response.headers["Access-Control-Allow-Credentials"] = "true"
-            logger.info(f"✓ Added CORS headers to Exception response - Origin: {origin}")
+            logger.info(f"[CORS] Added headers to Exception response - Origin: {origin}")
     
     return response
 
