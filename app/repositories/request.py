@@ -159,9 +159,15 @@ class RequestRepository:
         }) > 0
     
     def count_total_requests_by_client(self, client_id: str) -> int:
-        """Count total number of requests sent by a client (all statuses)"""
+        """
+        Count total number of *active* requests sent by a client.
+
+        We intentionally exclude requests that have been cancelled or rejected so that
+        the client's available quota is freed up again once a request is no longer active.
+        """
         return self.collection.count_documents({
-            "client_id": client_id
+            "client_id": client_id,
+            "status": {"$in": [RequestStatus.PENDING.value, RequestStatus.ACCEPTED.value]}
         })
     
     def get_request_by_parties(self, project_id: str, freelancer_id: str, client_id: str) -> Optional[dict]:

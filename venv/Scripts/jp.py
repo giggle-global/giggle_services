@@ -1,4 +1,4 @@
-#!D:\Projects\giggle_services\venv\Scripts\python.exe
+#!C:\Users\Admin\OneDrive\Desktop\Giggle__ - Copy\giggle_services\venv\scripts\python.exe
 
 import sys
 import json
