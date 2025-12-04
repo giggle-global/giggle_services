@@ -113,7 +113,8 @@ class ChatService:
         """
         utc_dt = datetime.utcfromtimestamp(utc_timestamp)
         ist_dt = utc_dt + timedelta(hours=5, minutes=30)
-        return ist_dt.isoformat() + 'Z'
+        # Format with IST timezone offset (+05:30) instead of Z (UTC)
+        return ist_dt.isoformat() + '+05:30'
 
     def log_chat(self, group_type: str, request_id: str, group_id: str, sender_user: Dict[str, Any], content: str, meta: Dict[str, Any] = None) -> Dict[str, Any]:
         """

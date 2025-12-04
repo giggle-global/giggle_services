@@ -86,42 +86,8 @@ class TicketService:
             created = self.repo.create_ticket(data)
             logger.info("Ticket created: freelancer=%s client=%s", freelancer_id, client_id)
             
-            # Send chat message when dispute is created
-            if project_id:
-                try:
-                    # Get request_id from project_id, client_id, and freelancer_id
-                    request = self.request_service.get_request_by_parties(project_id, freelancer_id, client_id)
-                    if request and request.get("request_id"):
-                        request_id = request.get("request_id")
-                        # Build sender name
-                        sender_name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
-                        if not sender_name:
-                            sender_name = user.get("username", "User")
-                        
-                        # Create dispute message
-                        dispute_message = f"Dispute has been created by {sender_name}"
-                        
-                        # Send message to project chat
-                        saved_message = self.chat_service.log_chat(
-                            group_type="project",
-                            request_id=request_id,
-                            group_id=project_id,
-                            sender_user=user,
-                            content=dispute_message,
-                            meta={"type": "system", "dispute_created": True}
-                        )
-                        logger.info("Dispute chat message sent: project_id=%s request_id=%s", project_id, request_id)
-                        
-                        # Store saved_message and request_id in created ticket dict for broadcasting
-                        created["_dispute_chat_message"] = saved_message
-                        created["_dispute_request_id"] = request_id
-                        created["_dispute_project_id"] = project_id
-                    else:
-                        logger.warning("Could not find request for dispute chat message: project_id=%s client_id=%s freelancer_id=%s", 
-                                     project_id, client_id, freelancer_id)
-                except Exception as e:
-                    # Don't fail ticket creation if chat message fails
-                    logger.exception("Error sending dispute chat message: %s", str(e))
+            # Note: Dispute creation no longer sends chat messages
+            # Instead, a badge is shown in the UI when a dispute exists
             
             return created
         except PyMongoError:
@@ -329,4 +295,22 @@ class TicketService:
             return self.repo.has_active_dispute(project_id)
         except PyMongoError:
             logger.exception("Mongo error checking active dispute: project_id=%s", project_id)
+            return False
+    
+    def get_tickets_by_agreement_id(self, agreement_id: str, user: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Get all tickets for a specific agreement_id"""
+        try:
+            items = self.repo.get_tickets_by_agreement_id(agreement_id)
+            logger.debug("Tickets by agreement_id: agreement_id=%s count=%s", agreement_id, len(items) if items else 0)
+            return items
+        except PyMongoError:
+            logger.exception("Mongo error fetching tickets by agreement_id: agreement_id=%s", agreement_id)
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to fetch tickets by agreement_id")
+    
+    def has_active_dispute_by_agreement(self, agreement_id: str) -> bool:
+        """Check if there's an active dispute for an agreement"""
+        try:
+            return self.repo.has_active_dispute_by_agreement(agreement_id)
+        except PyMongoError:
+            logger.exception("Mongo error checking active dispute: agreement_id=%s", agreement_id)
             return False

@@ -73,3 +73,16 @@ class TicketRepository:
             "status": {"$in": active_statuses}
         })
         return count > 0
+    
+    def get_tickets_by_agreement_id(self, agreement_id: str) -> List[dict]:
+        """Get all tickets (disputes) for a specific agreement_id"""
+        return list(self.collection.find({"agreement_id": agreement_id}, {"_id": 0}))
+    
+    def has_active_dispute_by_agreement(self, agreement_id: str) -> bool:
+        """Check if there's an active dispute (open/in_progress/reopened) for an agreement"""
+        active_statuses = ["open", "in_progress", "reopened"]
+        count = self.collection.count_documents({
+            "agreement_id": agreement_id,
+            "status": {"$in": active_statuses}
+        })
+        return count > 0

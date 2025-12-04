@@ -1,6 +1,6 @@
 # app/routes/ticket.py
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.models.ticket import TicketCreate, TicketUpdate, TicketStatusUpdate, TicketOut, TicketAdminResponse
 from app.services.ticket import TicketService
@@ -101,31 +101,8 @@ async def create_ticket(
 
     logger.info(f"Ticket created: id={getattr(created, 'id', None)} by={caller_id} against={target_user.get('user_id')}")
     
-    # Broadcast dispute chat message via WebSocket if available
-    if isinstance(created, dict) and created.get("_dispute_chat_message"):
-        try:
-            saved_message = created.pop("_dispute_chat_message")  # Remove from response
-            request_id = created.pop("_dispute_request_id", None)
-            project_id = created.pop("_dispute_project_id", None)
-            
-            if project_id and request_id and saved_message:
-                # Broadcast to group (other participants)
-                group_id = f"project::{project_id}"
-                payload = {
-                    "type": "message",
-                    "payload": {
-                        "group_type": "project",
-                        "request_id": request_id,
-                        "group_id": project_id,
-                        "message": saved_message,
-                    }
-                }
-                websocket_manager = get_websocket_manager()
-                await websocket_manager.send_to_group(group_id, payload)
-                logger.info(f"Dispute message broadcasted via WebSocket: project_id={project_id}")
-        except Exception as e:
-            # Don't fail ticket creation if WebSocket broadcast fails
-            logger.exception(f"Error broadcasting dispute message via WebSocket: {str(e)}")
+    # Note: Dispute creation no longer broadcasts chat messages via WebSocket
+    # Instead, a badge is shown in the UI when a dispute exists
     
     return ok(data=created, message="Ticket created", status_code=status.HTTP_201_CREATED)
 
@@ -212,3 +189,41 @@ def check_dispute_by_project(project_id: str, user: Dict[str, Any] = Depends(get
     has_dispute = tickets.has_active_dispute(project_id)
     logger.info(f"Dispute check for project_id={project_id}: {has_dispute}")
     return ok(data=has_dispute, message="Dispute check completed")
+
+@router.get("/agreement/{agreement_id}/has-dispute", response_model=APIResponse[bool])
+def check_dispute_by_agreement(agreement_id: str, user: Dict[str, Any] = Depends(get_current_user), tickets: TicketService = Depends(get_ticket_service)):
+    """Check if there's an active dispute for an agreement"""
+    logger.debug(f"Check dispute for agreement_id={agreement_id} by user_id={user.get('user_id')}")
+    has_dispute = tickets.has_active_dispute_by_agreement(agreement_id)
+    logger.info(f"Dispute check for agreement_id={agreement_id}: {has_dispute}")
+    return ok(data=has_dispute, message="Dispute check completed")
+
+@router.get("/project/{project_id}/dispute", response_model=APIResponse[Optional[TicketOut]])
+def get_active_dispute_by_project(project_id: str, user: Dict[str, Any] = Depends(get_current_user), tickets: TicketService = Depends(get_ticket_service)):
+    """Get active dispute details for a project"""
+    logger.debug(f"Get active dispute for project_id={project_id} by user_id={user.get('user_id')}")
+    dispute_tickets = tickets.get_tickets_by_project_id(project_id, user)
+    # Find the first active dispute
+    active_dispute = None
+    active_statuses = ["open", "in_progress", "reopened"]
+    for ticket in dispute_tickets:
+        if ticket.get("status") in active_statuses:
+            active_dispute = ticket
+            break
+    logger.info(f"Active dispute for project_id={project_id}: {active_dispute.get('ticket_id') if active_dispute else None}")
+    return ok(data=active_dispute, message="Dispute fetched")
+
+@router.get("/agreement/{agreement_id}/dispute", response_model=APIResponse[Optional[TicketOut]])
+def get_active_dispute_by_agreement(agreement_id: str, user: Dict[str, Any] = Depends(get_current_user), tickets: TicketService = Depends(get_ticket_service)):
+    """Get active dispute details for an agreement"""
+    logger.debug(f"Get active dispute for agreement_id={agreement_id} by user_id={user.get('user_id')}")
+    dispute_tickets = tickets.get_tickets_by_agreement_id(agreement_id, user)
+    # Find the first active dispute
+    active_dispute = None
+    active_statuses = ["open", "in_progress", "reopened"]
+    for ticket in dispute_tickets:
+        if ticket.get("status") in active_statuses:
+            active_dispute = ticket
+            break
+    logger.info(f"Active dispute for agreement_id={agreement_id}: {active_dispute.get('ticket_id') if active_dispute else None}")
+    return ok(data=active_dispute, message="Dispute fetched")
