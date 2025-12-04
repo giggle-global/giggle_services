@@ -19,7 +19,7 @@ fastapi==0.116.1
 h11==0.16.0
 httpcore==1.0.9
 httptools==0.6.4
-httpx==0.28.1
+httpx==0.27.2
 idna==3.10
 imagesize==1.4.1
 Jinja2==3.1.6
@@ -42,11 +42,12 @@ PyYAML==6.0.2
 requests==2.32.4
 requests-toolbelt==1.0.0
 roman-numerals-py==3.1.0
+openai==1.52.0
 s3transfer==0.14.0
 six==1.17.0
 sniffio==1.3.1
 snowballstemmer==3.0.1
-Sphinx==8.2.3
+Sphinx==8.1.1
 sphinxcontrib-applehelp==2.0.0
 sphinxcontrib-devhelp==2.0.0
 sphinxcontrib-htmlhelp==2.1.0

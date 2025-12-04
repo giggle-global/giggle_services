@@ -20,6 +20,18 @@ class ProjectService:
             "status": ProjectStatus.enabled.value,
             "created_by": current_user.get("id"),
         }
+        # Optional matching fields
+        optional_fields = (
+            "industry",
+            "background_industry",
+            "timeline_weeks",
+            "required_location",
+            "location_preference",
+        )
+        for field in optional_fields:
+            value = getattr(payload, field, None)
+            if value is not None:
+                doc[field] = value
         self.repo.insert(doc)
         return ProjectOut(**doc)
 

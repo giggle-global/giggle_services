@@ -28,10 +28,15 @@ class MatchingService:
         self.portfolio_repo = PortfolioRepository()
         self.review_repo = ReviewRepository()
 
-    def match_freelancers_to_project(self, project_id: str, limit: int = 50) -> List[Dict]:
+    def match_freelancers_to_project(self, project_id: str, limit: int = 50, min_score: int = 0) -> List[Dict]:
         """
         Match and rank freelancers for a given project
         Returns list of freelancers with their match scores (0-100)
+        
+        Args:
+            project_id: ID of the project to match freelancers against
+            limit: Maximum number of matches to return
+            min_score: Minimum score threshold (0-100). Default 0 returns all matches.
         """
         # Get project details
         project = self.project_repo.find_by_id(project_id)
@@ -41,6 +46,8 @@ class MatchingService:
         # Get all freelancers
         freelancers = self.user_repo.find_by_role("FL")
         
+        logger.info(f"Matching freelancers for project: {project.get('title')} (Industry: {project.get('industry')})")
+        
         # Calculate scores for each freelancer
         matches = []
         for freelancer in freelancers:
@@ -49,6 +56,46 @@ class MatchingService:
                 
             score_breakdown = self._calculate_match_score(project, freelancer)
             total_score = score_breakdown["total"]
+            
+            # Filter by minimum score
+            if total_score < min_score:
+                continue
+            
+            skill_set = freelancer.get("skill_set")
+            
+            # Log raw skill_set to debug the structure
+            if skill_set:
+                logger.info(f"RAW skill_set for {freelancer.get('username')}: {skill_set} (type: {type(skill_set)})")
+            
+            # Convert skill objects to strings if needed
+            if skill_set and isinstance(skill_set, list):
+                processed_skills = []
+                for idx, skill in enumerate(skill_set):
+                    if isinstance(skill, str):
+                        processed_skills.append(skill)
+                        logger.debug(f"  Skill [{idx}]: '{skill}' (string)")
+                    elif isinstance(skill, dict):
+                        # Log each skill object to see its structure
+                        logger.info(f"  Skill [{idx}] object keys: {list(skill.keys())}, values: {skill}")
+                        # Extract skill name from dict
+                        skill_name = (
+                            skill.get("skill") or 
+                            skill.get("name") or 
+                            skill.get("title") or 
+                            skill.get("skill_name") or
+                            None
+                        )
+                        if not skill_name:
+                            # If no recognizable key, log all keys and use str representation
+                            logger.warning(f"  Could not extract skill name from object: {skill}")
+                            skill_name = str(skill)
+                        processed_skills.append(skill_name)
+                        logger.debug(f"  Extracted skill name: '{skill_name}'")
+                    else:
+                        logger.warning(f"  Skill [{idx}]: Unexpected type {type(skill)}: {skill}")
+                        processed_skills.append(str(skill))
+                skill_set = processed_skills
+                logger.info(f"PROCESSED skills for {freelancer.get('username')}: {skill_set}")
             
             matches.append({
                 "freelancer_id": freelancer.get("user_id"),
@@ -61,10 +108,13 @@ class MatchingService:
                 "profile_pic": freelancer.get("profile_pic"),
                 "bio": freelancer.get("bio"),
                 "designation": freelancer.get("designation"),
+                "skill_set": skill_set,
             })
         
         # Sort by score (highest first)
         matches.sort(key=lambda x: x["score"], reverse=True)
+        
+        logger.info(f"Found {len(matches)} matches (min_score: {min_score}), returning top {limit}")
         
         return matches[:limit]
 
@@ -81,6 +131,14 @@ class MatchingService:
         
         total = industry_score + timeline_score + background_score + rating_score + geography_score
         
+        # Log score breakdown for debugging
+        logger.info(
+            f"[SCORE] {freelancer.get('username', 'Unknown')} ({freelancer.get('designation', 'No designation')}) - "
+            f"Industry: {industry_score}/20, Timeline: {timeline_score}/10, "
+            f"Background: {background_score}/20, Rating: {rating_score}/20, "
+            f"Geography: {geography_score}/30, Total: {total}/100"
+        )
+        
         return {
             "industry": industry_score,
             "timeline": timeline_score,
@@ -93,32 +151,91 @@ class MatchingService:
     def _calculate_industry_score(self, project: Dict, freelancer: Dict) -> int:
         """
         Industry Match Score: 0-20 points
-        Check if freelancer's skills match the project industry
+        Check if freelancer's skills AND designation match the project industry
         """
         project_industry = project.get("industry", "").lower()
         if not project_industry:
-            return 20  # No specific industry required
+            logger.warning(f"Project {project.get('project_id')} has no industry set - giving 0 points")
+            return 0  # No industry = no match (FIXED: was returning 20)
         
-        # Check freelancer skills
+        # Get freelancer designation and skills
+        freelancer_designation = (freelancer.get("designation") or "").lower()
         freelancer_skills = freelancer.get("skill_set", [])
-        if not freelancer_skills:
+        
+        # Handle both string and dict formats for skills
+        skills_list = []
+        for skill in freelancer_skills:
+            if isinstance(skill, str):
+                skills_list.append(skill)
+            elif isinstance(skill, dict):
+                # Try skill_name first (from database), then other keys
+                skill_name = (
+                    skill.get("skill_name") or 
+                    skill.get("skill") or 
+                    skill.get("name") or 
+                    skill.get("title") or 
+                    str(skill)
+                )
+                skills_list.append(skill_name)
+            else:
+                skills_list.append(str(skill))
+        
+        freelancer_skills_str = " ".join([s.lower() for s in skills_list if s])
+        
+        logger.debug(f"Industry matching for {freelancer.get('username')}: designation='{freelancer_designation}', skills={skills_list}")
+        
+        # Combine designation and skills for better matching
+        freelancer_profile = f"{freelancer_designation} {freelancer_skills_str}"
+        
+        # Define industry-to-role mappings for better matching
+        industry_mappings = {
+            "web development": ["web", "frontend", "backend", "full stack", "developer", "react", "angular", "vue", "node", "django", "flask", "php", "javascript", "typescript", "html", "css"],
+            "website development": ["web", "frontend", "backend", "full stack", "developer", "react", "angular", "vue", "node", "django", "flask", "php", "javascript", "typescript", "html", "css"],
+            "mobile development": ["mobile", "android", "ios", "flutter", "react native", "swift", "kotlin", "app developer"],
+            "software development": ["software", "developer", "programmer", "engineer", "python", "java", "c++", "c#", ".net"],
+            "ui/ux design": ["ui", "ux", "designer", "figma", "sketch", "adobe xd", "design", "user interface", "user experience"],
+            "graphic design": ["graphic", "designer", "photoshop", "illustrator", "indesign", "design", "branding", "logo"],
+            "content writing": ["writer", "content", "copywriter", "blogger", "seo", "article", "blog"],
+            "digital marketing": ["marketing", "seo", "sem", "social media", "ads", "ppc", "google ads", "facebook ads", "marketing strategy"],
+            "video editing": ["video", "editor", "premiere", "after effects", "final cut", "editing", "videographer"],
+            "data analysis": ["data", "analyst", "excel", "tableau", "power bi", "sql", "python", "statistics"],
+            "testing": ["tester", "qa", "quality assurance", "testing", "automation", "selenium", "test"],
+            "product management": ["product manager", "product", "pm", "roadmap", "strategy", "agile", "scrum"],
+        }
+        
+        # Try to find relevant keywords for the project industry
+        relevant_keywords = []
+        for industry_key, keywords in industry_mappings.items():
+            if industry_key in project_industry or any(kw in project_industry for kw in keywords):
+                relevant_keywords.extend(keywords)
+                break
+        
+        # If no specific mapping, use project industry words
+        if not relevant_keywords:
+            relevant_keywords = project_industry.split()
+        
+        # Count matches
+        matched_keywords = [kw for kw in relevant_keywords if kw in freelancer_profile]
+        matches = len(matched_keywords)
+        
+        logger.info(
+            f"  Industry match for {freelancer.get('username')}: "
+            f"Project='{project_industry}', Freelancer='{freelancer_designation}', "
+            f"Matched keywords: {matched_keywords[:5]} ({matches} total matches)"
+        )
+        
+        if matches == 0:
+            logger.info(f"  [X] No industry match - 0/20 points")
             return 0
-        
-        # Simple keyword matching (can be enhanced)
-        freelancer_skills_str = " ".join([s.lower() for s in freelancer_skills])
-        
-        # Check if project industry keywords are in freelancer skills
-        if project_industry in freelancer_skills_str:
-            return 20
-        
-        # Partial match based on common keywords
-        industry_keywords = project_industry.split()
-        matches = sum(1 for keyword in industry_keywords if keyword in freelancer_skills_str)
-        
-        if matches > 0:
-            return min(20, matches * 10)  # Partial credit
-        
-        return 0
+        elif matches >= 3:
+            logger.info(f"  [OK] Strong match ({matches} keywords) - 20/20 points")
+            return 20  # Strong match
+        elif matches == 2:
+            logger.info(f"  [~] Good match (2 keywords) - 15/20 points")
+            return 15  # Good match
+        else:
+            logger.info(f"  [~] Weak match (1 keyword) - 10/20 points")
+            return 10  # Weak match
 
     def _calculate_timeline_score(self, project: Dict, freelancer: Dict) -> int:
         """

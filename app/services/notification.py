@@ -111,14 +111,14 @@ class NotificationService:
                                 message=message,
                                 notification_data=email_notification_data
                             )
-                            logger.info("✅ Notification email sent successfully to %s", user_email)
+                            logger.info("[OK] Notification email sent successfully to %s", user_email)
                         except ValueError as e:
                             # Configuration errors - log as error with details
-                            logger.error("❌ Email configuration error for user %s: %s", user_id, str(e))
+                            logger.error("[ERROR] Email configuration error for user %s: %s", user_id, str(e))
                             logger.error("   Check SMTP/SES environment variables: SMTP_SERVER, SMTP_USERNAME, SMTP_PASSWORD, SMTP_FROM_EMAIL")
                         except Exception as email_error:
                             # Other email errors - log with full traceback
-                            logger.exception("❌ Failed to send notification email to %s: %s", user_email, str(email_error))
+                            logger.exception("[ERROR] Failed to send notification email to %s: %s", user_email, str(email_error))
                             logger.error("   Email service provider: %s", self.email_service.provider)
                     else:
                         logger.debug("Email notifications disabled for user %s, skipping email send", user_id)

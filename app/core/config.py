@@ -43,6 +43,8 @@ if not config:
     config["aws_secret_key"] = os.environ["AWS_SECRET_KEY"]
     config["aws_region"] = os.environ["AWS_REGION"]
 
+    # Optional integrations
+    config["openai_api_key"] = os.environ.get("OPENAI_API_KEY")
     # Email / OTP configuration (optional, defaults keep existing behaviour)
     config["email_provider"] = os.environ.get("EMAIL_PROVIDER", "smtp").lower()
 
