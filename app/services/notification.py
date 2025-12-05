@@ -58,6 +58,8 @@ class NotificationService:
                     NotificationType.MILESTONE_APPROVED: "milestone",
                     NotificationType.AGREEMENT_CREATED: "general",
                     NotificationType.AGREEMENT_SIGN_REMINDER: "general",
+                    NotificationType.DISPUTE_RAISED: "dispute",
+                    NotificationType.DISPUTE_RESOLVED: "dispute",
                 }
                 routing_key = routing_key_map.get(notification_type, "general")
                 
@@ -291,6 +293,114 @@ class NotificationService:
             },
             link=f"/agreement?agreement_id={agreement_id}",
             send_email=True
+        )
+
+    def notify_dispute_raised(
+        self,
+        recipient_id: str,
+        raised_by_role: str,
+        subject: str,
+        project_name: str | None,
+        agreement_id: str | None,
+        ticket_id: str,
+    ):
+        """
+        Notify the opposite party when a dispute is raised.
+        `recipient_id` is the user who should receive the notification
+        (opposite of the user who raised the ticket).
+
+        Context uses project name (if provided) instead of project id.
+        Roles are expressed as 'owner' (client) and 'creator' (freelancer).
+        """
+        # Map internal roles to friendly labels
+        role_map = {
+            "CL": "owner",
+            "FL": "creator",
+        }
+        friendly_role = role_map.get(raised_by_role, "user")
+
+        context_parts = []
+        if project_name:
+            context_parts.append(f"project \"{project_name}\"")
+        # We deliberately do NOT show agreement_id in the user-facing text
+        # If we want to indicate there is an agreement, use a generic label only
+        if agreement_id:
+            context_parts.append("agreement")
+        context = " for " + ", ".join(context_parts) if context_parts else ""
+
+        title = "Dispute raised"
+        message = f"A dispute has been raised by the {friendly_role} about \"{subject}\"{context}."
+
+        return self.create_notification(
+            user_id=recipient_id,
+            notification_type=NotificationType.DISPUTE_RAISED,
+            title=title,
+            message=message,
+            data={
+                "ticket_id": ticket_id,
+                "project_name": project_name,
+                "agreement_id": agreement_id,
+                "raised_by_role": raised_by_role,
+                "raised_by_role_label": friendly_role,
+            },
+            link=f"/admin/disputepanel?ticket_id={ticket_id}",
+            send_email=True,
+        )
+
+    def notify_dispute_resolved(
+        self,
+        client_id: str,
+        freelancer_id: str,
+        subject: str,
+        project_name: str | None,
+        agreement_id: str | None,
+        ticket_id: str,
+    ):
+        """
+        Notify both parties when a dispute is resolved.
+        Context uses project name (if provided) instead of project id.
+        """
+        context_parts = []
+        if project_name:
+            context_parts.append(f"project \"{project_name}\"")
+        # Again, do not expose agreement_id in text; just mention agreement generically
+        if agreement_id:
+            context_parts.append("agreement")
+        context = " for " + ", ".join(context_parts) if context_parts else ""
+
+        title = "Dispute resolved"
+        message = f"The dispute \"{subject}\"{context} has been resolved."
+
+        # notify client
+        self.create_notification(
+            user_id=client_id,
+            notification_type=NotificationType.DISPUTE_RESOLVED,
+            title=title,
+            message=message,
+            data={
+                "ticket_id": ticket_id,
+                "project_name": project_name,
+                "agreement_id": agreement_id,
+                "role": "CL",
+            },
+            link=f"/client/projects?ticket_id={ticket_id}",
+            send_email=True,
+        )
+
+        # notify freelancer
+        self.create_notification(
+            user_id=freelancer_id,
+            notification_type=NotificationType.DISPUTE_RESOLVED,
+            title=title,
+            message=message,
+            data={
+                "ticket_id": ticket_id,
+                "project_name": project_name,
+                "agreement_id": agreement_id,
+                "role": "FL",
+            },
+            link=f"/freelancer/gig?ticket_id={ticket_id}",
+            send_email=True,
         )
 
     def get_user_notifications(

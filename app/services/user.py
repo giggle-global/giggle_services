@@ -313,7 +313,56 @@ class UserService:
         
     def list_all_users(self) -> Any:
         try:
-            return self.user_repo.get_all_users()
+            users = self.user_repo.get_all_users()
+            # Add project count for each user
+            from app.core.db import database
+            project_collection = database["projects"]
+            request_collection = database["chat_requests"]
+            
+            for user in users:
+                user_id = user.get("user_id")
+                role = user.get("role")
+                project_count = 0
+                
+                if role == "CL":
+                    # For clients: count unique projects from created projects and agreements
+                    agreement_collection = database["agreements"]
+                    
+                    # Get distinct project_ids from projects where client created them
+                    created_projects = set(project_collection.distinct("id", {
+                        "client_id": user_id
+                    }))
+                    
+                    # Get distinct project_ids from agreements where client is involved
+                    agreement_projects = set(agreement_collection.distinct("project_id", {
+                        "client.user_id": user_id
+                    }))
+                    
+                    # Combine both sets to get unique project count
+                    all_projects = created_projects.union(agreement_projects)
+                    project_count = len(all_projects)
+                elif role == "FL":
+                    # For freelancers: count unique projects from requests and agreements
+                    agreement_collection = database["agreements"]
+                    
+                    # Get distinct project_ids from requests where freelancer is involved (only accepted, not pending)
+                    request_projects = set(request_collection.distinct("project_id", {
+                        "freelancer_id": user_id,
+                        "status": "accepted"
+                    }))
+                    
+                    # Get distinct project_ids from agreements where freelancer is involved
+                    agreement_projects = set(agreement_collection.distinct("project_id", {
+                        "freelancer.user_id": user_id
+                    }))
+                    
+                    # Combine both sets to get unique project count
+                    all_projects = request_projects.union(agreement_projects)
+                    project_count = len(all_projects)
+                
+                user["project_count"] = project_count
+            
+            return users
         except Exception as e:
             logger.exception("Error listing freelancers: %s", e)
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to fetch freelancers")

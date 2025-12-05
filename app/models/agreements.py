@@ -182,6 +182,10 @@ class AgreementInDB(BaseModel):
     signatures: Dict[str, SignatureRecord] = Field(default_factory=dict)
     milestones: List[str] = Field(default_factory=list)
     total_amount: float = 0.0
+    # Platform fee (applies only to freelancer payouts)
+    platform_fee_rate: float = 0.05  # 5% platform fee
+    platform_fee_amount: float = 0.0
+    freelancer_net_amount: float = 0.0
     num_milestones: int = 0
     duration_days: Optional[int] = None
     created_by: Optional[str] = None
@@ -210,6 +214,9 @@ class AgreementInDB(BaseModel):
                 "freelancer_signed": False,
                 "milestones": ["milestone123"],
                 "total_amount": 40000,
+                "platform_fee_rate": 0.05,
+                "platform_fee_amount": 2000,
+                "freelancer_net_amount": 38000,
                 "num_milestones": 3,
                 "duration_days": 31,
                 "created_by": "client123",

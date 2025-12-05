@@ -76,8 +76,12 @@ class AIScopeService:
             "- Writing: word count, tone, SEO, research depth\n"
             "- Marketing: channels, goals, audience demographics\n"
             "- Video: length, style, editing level, deliverable format\n\n"
-            "Keep questions short, precise, and avoid yes/no questions. Respond strictly with JSON: "
-            '{"question": "...", "is_final": false}.'
+            "Keep questions short, precise, and avoid yes/no questions.\n"
+            "When it makes sense, propose 3-6 SHORT answer options that a user could click on (buttons, chips, etc.). "
+            "Options should be concise phrases, not sentences.\n\n"
+            "Respond strictly with JSON using this schema:\n"
+            '{"question": "...", "options": ["..."], "is_final": false}.\n'
+            "If you think free-text is better, you MUST still return an empty list for 'options' (e.g. \"options\": [])."
         )
         context = {
             "sequence": sequence,
@@ -98,6 +102,10 @@ class AIScopeService:
             response_json = self._safe_json(raw_response)
             logger.info(f"[AI] Parsed JSON: {response_json}")
             question_text = response_json.get("question")
+            options = response_json.get("options") or []
+            if not isinstance(options, list):
+                logger.warning("[AI] 'options' field was not a list; defaulting to empty list")
+                options = []
         except json.JSONDecodeError as exc:
             logger.error(f"[AI] JSON decode error: {exc}. Raw response: {raw_response if 'raw_response' in locals() else 'N/A'}")
             raise HTTPException(
@@ -112,6 +120,7 @@ class AIScopeService:
         is_final = sequence >= MAX_QUESTIONS or not question_text
         return ScopeQuestionResponse(
             question=question_text,
+            options=options,
             sequence=sequence,
             max_questions=MAX_QUESTIONS,
             is_final=is_final,

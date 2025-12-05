@@ -13,6 +13,8 @@ class NotificationType(str, Enum):
     AGREEMENT_CREATED = "agreement_created"
     CLIENT_REQUEST_LIMIT_REACHED = "client_request_limit_reached"
     AGREEMENT_SIGN_REMINDER = "agreement_sign_reminder"
+    DISPUTE_RAISED = "dispute_raised"
+    DISPUTE_RESOLVED = "dispute_resolved"
 
 class NotificationStatus(str, Enum):
     UNREAD = "unread"

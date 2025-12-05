@@ -74,7 +74,7 @@ class ChatRepository:
         cursor = self.col.find(q).sort("created_at", ASCENDING).limit(limit)
         results = []
         for d in cursor:
-            d.pop("_id", None)
+            # Keep _id here; ChatService will convert it to a public `id` field
             results.append(d)
         return results
 

@@ -59,6 +59,11 @@ class AgreementService:
             # Calculate rate from total_amount / duration_days
             rate = self._calc_rate_from_total(initial_total, duration_days)
 
+            # Calculate platform fee (5%) and freelancer net amount
+            platform_fee_rate = 0.05
+            platform_fee_amount = initial_total * platform_fee_rate
+            freelancer_net_amount = initial_total - platform_fee_amount
+
             doc = AgreementInDB(
                 title=payload.title,
                 description=payload.description,
@@ -73,6 +78,9 @@ class AgreementService:
                 project_scope=payload.project_scope,
                 additional_terms=payload.additional_terms,
                 total_amount=initial_total,
+                platform_fee_rate=platform_fee_rate,
+                platform_fee_amount=platform_fee_amount,
+                freelancer_net_amount=freelancer_net_amount,
                 duration_days=duration_days,
                 num_milestones=0,
                 created_by=created_by,
@@ -91,10 +99,18 @@ class AgreementService:
                 # Recalculate total_amount and rate from actual milestones
                 total_amount = self._calc_total_from_milestones(created["agreement_id"])
                 rate = self._calc_rate_from_total(total_amount, duration_days)
+                # Recalculate platform fee and freelancer net amount based on updated total_amount
+                platform_fee_rate = 0.05
+                platform_fee_amount = total_amount * platform_fee_rate
+                freelancer_net_amount = total_amount - platform_fee_amount
+
                 self.repo.update(created["agreement_id"], {
                     "total_amount": total_amount,
                     "rate": rate,
-                    "num_milestones": len(payload.milestones)
+                    "num_milestones": len(payload.milestones),
+                    "platform_fee_rate": platform_fee_rate,
+                    "platform_fee_amount": platform_fee_amount,
+                    "freelancer_net_amount": freelancer_net_amount,
                 })
                 created = self.repo.get_by_id(created["agreement_id"])
 
@@ -285,8 +301,17 @@ class AgreementService:
             # Recalculate total_amount from milestones and rate from total_amount/duration_days
             total_amount = self._calc_total_from_milestones(agreement_id)
             rate = self._calc_rate_from_total(total_amount, duration_days)
+
+            # Recalculate platform fee and freelancer net amount
+            platform_fee_rate = ag.get("platform_fee_rate", 0.05)
+            platform_fee_amount = total_amount * platform_fee_rate
+            freelancer_net_amount = total_amount - platform_fee_amount
+
             update_payload["total_amount"] = total_amount
             update_payload["rate"] = rate
+            update_payload["platform_fee_rate"] = platform_fee_rate
+            update_payload["platform_fee_amount"] = platform_fee_amount
+            update_payload["freelancer_net_amount"] = freelancer_net_amount
 
         updated = self.repo.update(agreement_id, update_payload)
         return updated

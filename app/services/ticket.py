@@ -7,6 +7,8 @@ from pymongo.errors import PyMongoError
 from app.repositories.ticket import TicketRepository
 from app.services.chat import ChatService
 from app.services.request import RequestService
+from app.services.notification import NotificationService
+from app.services.project import ProjectService
 from app.models.ticket import (
     TicketCreate,
     TicketUpdate,
@@ -26,6 +28,8 @@ class TicketService:
         self.repo = repo or TicketRepository()
         self.chat_service = ChatService()
         self.request_service = RequestService()
+        self.notification_service = NotificationService()
+        self.project_service = ProjectService()
 
     # ---------- Helpers ----------
     def _get_ticket_or_404(self, ticket_id: str) -> Dict[str, Any]:
@@ -88,6 +92,36 @@ class TicketService:
             
             # Note: Dispute creation no longer sends chat messages
             # Instead, a badge is shown in the UI when a dispute exists
+            # New: send notification to the opposite party when a dispute is raised
+            try:
+                raised_by_role = user.get("role", "")
+                # Determine recipient: if caller is client, notify freelancer; if caller is freelancer, notify client
+                if user.get("user_id") == client_id:
+                    recipient_id = freelancer_id
+                else:
+                    recipient_id = client_id
+
+                # Resolve project name if possible
+                project_name = None
+                effective_project_id = project_id or created.get("project_id", "")
+                if effective_project_id:
+                    try:
+                        project = self.project_service.get(effective_project_id)
+                        project_name = getattr(project, "title", None) or getattr(project, "project_title", None)
+                    except Exception:
+                        project_name = None
+
+                self.notification_service.notify_dispute_raised(
+                    recipient_id=recipient_id,
+                    raised_by_role=raised_by_role or "user",
+                    subject=subject,
+                    project_name=project_name,
+                    agreement_id=agreement_id or created.get("agreement_id"),
+                    ticket_id=created.get("ticket_id"),
+                )
+            except Exception as notif_err:
+                # Do not fail ticket creation if notification fails
+                logger.warning("Failed to send dispute raised notification: %s", notif_err)
             
             return created
         except PyMongoError:
@@ -168,6 +202,36 @@ class TicketService:
             )
             updated = self.repo.get_ticket(ticket_id)
             logger.info("Ticket status updated: %s -> %s (ticket=%s)", current_status, new_status_value, ticket_id)
+
+            # When dispute becomes resolved, notify both parties
+            if new_status_value == TicketStatus.RESOLVED.value:
+                try:
+                    client_id = updated.get("client_id")
+                    freelancer_id = updated.get("freelancer_id")
+                    subject = updated.get("subject", "")
+                    proj_id = updated.get("project_id", "")
+                    agreement_id = updated.get("agreement_id")
+
+                    # Resolve project name if possible
+                    project_name = None
+                    if proj_id:
+                        try:
+                            project = self.project_service.get(proj_id)
+                            project_name = getattr(project, "title", None) or getattr(project, "project_title", None)
+                        except Exception:
+                            project_name = None
+
+                    self.notification_service.notify_dispute_resolved(
+                        client_id=client_id,
+                        freelancer_id=freelancer_id,
+                        subject=subject,
+                        project_name=project_name,
+                        agreement_id=agreement_id,
+                        ticket_id=updated.get("ticket_id"),
+                    )
+                except Exception as notif_err:
+                    logger.warning("Failed to send dispute resolved notifications: %s", notif_err)
+
             return updated
         except PyMongoError:
             logger.exception("Mongo error changing ticket status: %s", ticket_id)

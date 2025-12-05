@@ -32,6 +32,11 @@ class ScopeQuestionResponse(BaseModel):
         default=None,
         description="AI generated question. None when questionnaire is complete.",
     )
+    options: List[str] = Field(
+        default_factory=list,
+        description="Optional list of AI-generated answer options for UI (buttons, chips, etc.). "
+        "Can be empty when a free-text answer is more appropriate.",
+    )
     sequence: int = Field(..., description="1-based index of this question")
     max_questions: int = Field(..., description="Maximum number of questions allowed")
     is_final: bool = Field(..., description="True when the questionnaire is finished")
