@@ -81,6 +81,11 @@ class MilestoneUpdate(BaseModel):
     progress: Optional[int] = Field(None, ge=0, le=100)
     status: Optional[MilestoneStatus] = None
     approver_comments: Optional[str] = None
+    # New fields for milestone completion flow
+    freelancer_completed: Optional[bool] = None
+    client_verified: Optional[bool] = None
+    payment_sent: Optional[bool] = None
+    payment_received: Optional[bool] = None
 
     class Config:
         json_schema_extra = {
@@ -108,6 +113,16 @@ class MilestoneInDB(BaseModel):
     approved_by: Optional[str] = None
     approved_at: Optional[int] = None
     approval_notes: Optional[str] = None
+    # New fields for milestone completion flow
+    freelancer_completed: bool = Field(default=False)  # Freelancer completes milestone work
+    completed_at: Optional[int] = None  # When freelancer completed
+    client_verified: bool = Field(default=False)  # Client verifies milestone (after freelancer completes)
+    verified_by: Optional[str] = None  # Client user_id who verified
+    verified_at: Optional[int] = None  # When client verified
+    payment_sent: bool = Field(default=False)  # Client confirms payment sent
+    payment_sent_at: Optional[int] = None  # When payment was sent
+    payment_received: bool = Field(default=False)  # Freelancer confirms payment received
+    payment_received_at: Optional[int] = None  # When payment was received
 
     class Config:
         json_schema_extra = {

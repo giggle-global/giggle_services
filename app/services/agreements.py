@@ -313,6 +313,11 @@ class AgreementService:
             update_payload["platform_fee_amount"] = platform_fee_amount
             update_payload["freelancer_net_amount"] = freelancer_net_amount
 
+        # Reset both acceptance flags when agreement is updated (new version created)
+        # Both parties need to accept the new version after any update
+        update_payload["client_accepted_version"] = False
+        update_payload["freelancer_accepted_version"] = False
+
         updated = self.repo.update(agreement_id, update_payload)
         return updated
 
@@ -391,4 +396,49 @@ class AgreementService:
         
         updated = self.repo.update(agreement_id, update_data)
         logger.info(f"Agreement {agreement_id} unpaused to {previous_status} by super admin {user.get('user_id')}")
+        return updated
+
+    def accept_agreement_version(self, agreement_id: str, user: Dict[str, Any], accepted: bool) -> Dict[str, Any]:
+        """
+        Accept or reject the current agreement version.
+        When accepted=True, the user accepts the current version and cannot update.
+        When accepted=False, the user can update again (only if no one has signed yet).
+        """
+        ag = self.repo.get_by_id(agreement_id)
+        if not ag:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Agreement not found")
+        
+        # Check authorization - only client or freelancer can accept
+        is_client = user["user_id"] == ag["client"]["user_id"]
+        is_freelancer = user["user_id"] == ag["freelancer"]["user_id"]
+        
+        if not (is_client or is_freelancer):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Not authorized to accept agreement version")
+        
+        # Cannot unaccept if either party has already signed
+        if not accepted and (ag.get("client_signed") or ag.get("freelancer_signed")):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, 
+                "Cannot unaccept version after signing has started"
+            )
+        
+        # Update only the current user's acceptance flag
+        # Explicitly preserve the other party's acceptance status by reading current value
+        update_data = {}
+        if is_client:
+            update_data["client_accepted_version"] = accepted
+            # Explicitly preserve freelancer's acceptance status from current agreement
+            # Use get() with default False to handle case where field doesn't exist
+            update_data["freelancer_accepted_version"] = ag.get("freelancer_accepted_version", False)
+        elif is_freelancer:
+            update_data["freelancer_accepted_version"] = accepted
+            # Explicitly preserve client's acceptance status from current agreement
+            # Use get() with default False to handle case where field doesn't exist
+            update_data["client_accepted_version"] = ag.get("client_accepted_version", False)
+        
+        logger.info(f"Updating acceptance: client={update_data.get('client_accepted_version')}, freelancer={update_data.get('freelancer_accepted_version')}")
+        
+        # Update with explicit preservation of the other party's status
+        updated = self.repo.update(agreement_id, update_data)
+        logger.info(f"Agreement {agreement_id} version acceptance updated by {user.get('user_id')}: {accepted}")
         return updated

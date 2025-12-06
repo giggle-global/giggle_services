@@ -65,12 +65,56 @@ def approve_milestone(
     return ok(approved, "Milestone approval updated", status.HTTP_200_OK)
 
 
-# # ➤ Delete milestone (if needed later)
-# @router.delete("/{milestone_id}", response_model=APIResponse)
-# def delete_milestone(
-#     milestone_id: str,
-#     current_user: Dict[str, Any] = Depends(get_current_user),
-#     svc: MilestoneService = Depends(get_milestone_service),
-# ):
-#     deleted = svc.delete_milestone(milestone_id, current_user)
-#     return ok(deleted, "Milestone deleted", status.HTTP_200_OK)
+# ➤ Verify milestone (Freelancer)
+@router.post("/{milestone_id}/verify", response_model=APIResponse)
+def verify_milestone(
+    milestone_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    svc: MilestoneService = Depends(get_milestone_service),
+):
+    verified = svc.verify_milestone(milestone_id, current_user)
+    return ok(verified, "Milestone verified", status.HTTP_200_OK)
+
+
+# ➤ Complete milestone (Client)
+@router.post("/{milestone_id}/complete", response_model=APIResponse)
+def complete_milestone(
+    milestone_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    svc: MilestoneService = Depends(get_milestone_service),
+):
+    completed = svc.complete_milestone(milestone_id, current_user)
+    return ok(completed, "Milestone completed", status.HTTP_200_OK)
+
+
+# ➤ Send payment (Client)
+@router.post("/{milestone_id}/payment/send", response_model=APIResponse)
+def send_payment(
+    milestone_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    svc: MilestoneService = Depends(get_milestone_service),
+):
+    result = svc.send_payment(milestone_id, current_user)
+    return ok(result, "Payment marked as sent", status.HTTP_200_OK)
+
+
+# ➤ Receive payment (Freelancer)
+@router.post("/{milestone_id}/payment/receive", response_model=APIResponse)
+def receive_payment(
+    milestone_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    svc: MilestoneService = Depends(get_milestone_service),
+):
+    result = svc.receive_payment(milestone_id, current_user)
+    return ok(result, "Payment marked as received", status.HTTP_200_OK)
+
+
+# ➤ Delete milestone
+@router.delete("/{milestone_id}", response_model=APIResponse)
+def delete_milestone(
+    milestone_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    svc: MilestoneService = Depends(get_milestone_service),
+):
+    deleted = svc.delete_milestone(milestone_id, current_user)
+    return ok(deleted, "Milestone deleted", status.HTTP_200_OK)

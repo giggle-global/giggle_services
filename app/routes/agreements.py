@@ -96,3 +96,14 @@ def unpause_agreement(
 ):
     unpaused = svc.unpause_agreement(agreement_id, current_user)
     return ok(unpaused, "Agreement unpaused", status.HTTP_200_OK)
+
+@router.post("/{agreement_id}/accept-version", response_model=APIResponse)
+def accept_agreement_version(
+    agreement_id: str,
+    payload: Dict[str, Any] = Body(...),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    svc: AgreementService = Depends(get_agreement_service),
+):
+    # payload: {"accepted": true/false}
+    accepted = svc.accept_agreement_version(agreement_id, current_user, payload.get("accepted", False))
+    return ok(accepted, "Agreement version acceptance updated", status.HTTP_200_OK)

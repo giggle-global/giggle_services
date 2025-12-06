@@ -172,14 +172,16 @@ class MilestoneService:
             "rate": rate
         })
 
-        # if all milestones completed/approved -> set agreement Completed
-        def _is_completed_or_approved(m):
+        # if all milestones completed with payment received -> set agreement Completed
+        def _is_fully_completed(m):
+            """Check if milestone is completed with payment received"""
             s = m.get("status")
-            return (s == MilestoneStatus.COMPLETED or str(s) == str(MilestoneStatus.COMPLETED) or
-                    s == MilestoneStatus.APPROVED or str(s) == str(MilestoneStatus.APPROVED))
+            is_completed_status = (s == MilestoneStatus.COMPLETED or str(s) == str(MilestoneStatus.COMPLETED))
+            has_payment_received = m.get("payment_received", False)
+            return is_completed_status and has_payment_received
 
-        all_completed = True if len(milestones) > 0 and all(_is_completed_or_approved(m) for m in milestones) else False
-        if all_completed:
+        all_fully_completed = True if len(milestones) > 0 and all(_is_fully_completed(m) for m in milestones) else False
+        if all_fully_completed:
             self.agreement_repo.update(ms["agreement_id"], {"status": "Completed"})
 
         return updated_ms
@@ -232,3 +234,211 @@ class MilestoneService:
                 "rate": rate
             })
         return {"deleted": deleted}
+
+    def verify_milestone(self, milestone_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Client verifies the milestone after freelancer has completed it.
+        This enables the "Payment Sent" button for the client.
+        """
+        ms = self.milestone_repo.get_by_id(milestone_id)
+        if not ms:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Milestone not found")
+
+        ag = self.agreement_repo.get_by_id(ms["agreement_id"])
+        if not ag:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Agreement not found")
+
+        # Check if both parties have signed the agreement
+        if not (ag.get("client_signed", False) and ag.get("freelancer_signed", False)):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Both parties must sign the agreement before milestones can be verified")
+
+        # Only client can verify milestone
+        if user["user_id"] != ag["client"]["user_id"] and user.get("role") != "admin":
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Only client can verify milestone")
+
+        # Check if agreement is paused
+        if ag.get("status") == "Paused":
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot verify milestone. This agreement is currently paused.")
+
+        # Check if freelancer has completed the milestone
+        if not ms.get("freelancer_completed", False):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Freelancer must complete milestone before client can verify it")
+
+        # Check if milestone is already verified
+        if ms.get("client_verified", False):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Milestone already verified")
+
+        # Update milestone with verification
+        update_data = {
+            "client_verified": True,
+            "verified_by": user["user_id"],
+            "verified_at": self._to_epoch(datetime.utcnow()),
+            "status": MilestoneStatus.APPROVED,
+            "approved_by": user["user_id"],
+            "approved_at": self._to_epoch(datetime.utcnow()),
+            "progress": 100,
+            "completed_date": self._to_epoch(datetime.utcnow())
+        }
+
+        updated_ok = self.milestone_repo.update(milestone_id, update_data)
+        if not updated_ok:
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to verify milestone")
+
+        return self.milestone_repo.get_by_id(milestone_id)
+
+    def complete_milestone(self, milestone_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Freelancer completes the milestone work.
+        This enables the client's "Verify" button.
+        """
+        ms = self.milestone_repo.get_by_id(milestone_id)
+        if not ms:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Milestone not found")
+
+        ag = self.agreement_repo.get_by_id(ms["agreement_id"])
+        if not ag:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Agreement not found")
+
+        # Check if both parties have signed the agreement
+        if not (ag.get("client_signed", False) and ag.get("freelancer_signed", False)):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Both parties must sign the agreement before milestones can be completed")
+
+        # Only freelancer can complete milestone
+        if user["user_id"] != ag["freelancer"]["user_id"] and user.get("role") != "admin":
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Only freelancer can complete milestone")
+
+        # Check if agreement is paused
+        if ag.get("status") == "Paused":
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot complete milestone. This agreement is currently paused.")
+
+        # Check if already completed
+        if ms.get("freelancer_completed", False):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Milestone already completed")
+
+        # Update milestone with completion
+        update_data = {
+            "freelancer_completed": True,
+            "completed_at": self._to_epoch(datetime.utcnow())
+        }
+
+        updated_ok = self.milestone_repo.update(milestone_id, update_data)
+        if not updated_ok:
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to complete milestone")
+
+        return self.milestone_repo.get_by_id(milestone_id)
+
+    def send_payment(self, milestone_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Client confirms that payment has been sent.
+        This enables the freelancer's "Received Payment" button.
+        """
+        ms = self.milestone_repo.get_by_id(milestone_id)
+        if not ms:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Milestone not found")
+
+        ag = self.agreement_repo.get_by_id(ms["agreement_id"])
+        if not ag:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Agreement not found")
+
+        # Only client can send payment
+        if user["user_id"] != ag["client"]["user_id"] and user.get("role") != "admin":
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Only client can confirm payment sent")
+
+        # Check if agreement is paused
+        if ag.get("status") == "Paused":
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot send payment. This agreement is currently paused.")
+
+        # Check if milestone is verified by client
+        if not ms.get("client_verified", False):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Milestone must be verified before payment can be sent")
+
+        # Check if payment already sent
+        if ms.get("payment_sent", False):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Payment already marked as sent")
+
+        # Update milestone with payment sent
+        update_data = {
+            "payment_sent": True,
+            "payment_sent_at": self._to_epoch(datetime.utcnow())
+        }
+
+        updated_ok = self.milestone_repo.update(milestone_id, update_data)
+        if not updated_ok:
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to mark payment as sent")
+
+        return self.milestone_repo.get_by_id(milestone_id)
+
+    def receive_payment(self, milestone_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Freelancer confirms that payment has been received.
+        This completes the milestone and moves to the next milestone if available.
+        """
+        ms = self.milestone_repo.get_by_id(milestone_id)
+        if not ms:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Milestone not found")
+
+        ag = self.agreement_repo.get_by_id(ms["agreement_id"])
+        if not ag:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Agreement not found")
+
+        # Only freelancer can receive payment
+        if user["user_id"] != ag["freelancer"]["user_id"] and user.get("role") != "admin":
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Only freelancer can confirm payment received")
+
+        # Check if agreement is paused
+        if ag.get("status") == "Paused":
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot receive payment. This agreement is currently paused.")
+
+        # Check if payment was sent by client
+        if not ms.get("payment_sent", False):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Client must send payment before freelancer can receive it")
+
+        # Check if payment already received
+        if ms.get("payment_received", False):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Payment already marked as received")
+
+        # Update milestone with payment received
+        update_data = {
+            "payment_received": True,
+            "payment_received_at": self._to_epoch(datetime.utcnow()),
+            "status": MilestoneStatus.COMPLETED
+        }
+
+        updated_ok = self.milestone_repo.update(milestone_id, update_data)
+        if not updated_ok:
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to mark payment as received")
+
+        # Update payment in payment breakdown
+        payment_data = ms.get("payment", {})
+        if payment_data:
+            payment_data["payment_released"] = True
+            self.milestone_repo.update(milestone_id, {"payment": payment_data})
+
+        # Move to next milestone if available
+        milestones = self.milestone_repo.list_for_agreement(ms["agreement_id"])
+        current_index = next((i for i, m in enumerate(milestones) if m["milestone_id"] == milestone_id), -1)
+        
+        if current_index >= 0 and current_index < len(milestones) - 1:
+            next_milestone = milestones[current_index + 1]
+            if next_milestone.get("status") == MilestoneStatus.PENDING:
+                # Set next milestone to InProgress
+                self.milestone_repo.update(next_milestone["milestone_id"], {
+                    "status": MilestoneStatus.IN_PROGRESS,
+                    "start_date": self._to_epoch(datetime.utcnow())
+                })
+
+        # Check if all milestones are completed and payment received -> set agreement Completed
+        # Refresh milestones list to get the updated status
+        milestones = self.milestone_repo.list_for_agreement(ms["agreement_id"])
+        def _is_fully_completed(m):
+            """Check if milestone is completed with payment received"""
+            s = m.get("status")
+            is_completed_status = (s == MilestoneStatus.COMPLETED or str(s) == str(MilestoneStatus.COMPLETED))
+            has_payment_received = m.get("payment_received", False)
+            return is_completed_status and has_payment_received
+
+        all_fully_completed = True if len(milestones) > 0 and all(_is_fully_completed(m) for m in milestones) else False
+        if all_fully_completed:
+            self.agreement_repo.update(ms["agreement_id"], {"status": "Completed"})
+
+        return self.milestone_repo.get_by_id(milestone_id)

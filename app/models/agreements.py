@@ -195,6 +195,8 @@ class AgreementInDB(BaseModel):
     exported_pdf_url: Optional[str] = None
     draft: bool = True
     paused_from_status: Optional[str] = None  # Store the status before pausing
+    client_accepted_version: bool = False  # Client has accepted current version
+    freelancer_accepted_version: bool = False  # Freelancer has accepted current version
 
     class Config:
         from_attributes = True
