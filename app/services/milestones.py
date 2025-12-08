@@ -3,6 +3,7 @@ from typing import Dict, Any, List
 from app.models.milestones import MilestoneCreate, MilestoneInDB, MilestoneUpdate, MilestoneStatus
 from app.repositories.milestones import MilestoneRepository
 from app.repositories.agreements import AgreementRepository
+from app.services.notification import NotificationService
 from fastapi import HTTPException, status
 from pymongo.errors import PyMongoError
 from datetime import datetime, date
@@ -14,6 +15,7 @@ class MilestoneService:
     def __init__(self):
         self.milestone_repo = MilestoneRepository()
         self.agreement_repo = AgreementRepository()
+        self.notification_service = NotificationService()
 
     @staticmethod
     def _to_epoch(ts: datetime) -> int:
@@ -284,6 +286,23 @@ class MilestoneService:
         if not updated_ok:
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to verify milestone")
 
+        # Notify client to send payment after verification
+        try:
+            payment_info = ms.get("payment", {}) if isinstance(ms, dict) else {}
+            amount = payment_info.get("amount")
+            currency = payment_info.get("currency")
+            self.notification_service.notify_milestone_payment_reminder(
+                client_id=ag["client"]["user_id"],
+                milestone_title=ms.get("title", "Milestone"),
+                milestone_id=milestone_id,
+                agreement_id=ms["agreement_id"],
+                project_title=ag.get("title"),
+                amount=amount,
+                currency=currency,
+            )
+        except Exception as notify_err:
+            logger.warning("Failed to send payment reminder notification for milestone %s: %s", milestone_id, notify_err)
+
         return self.milestone_repo.get_by_id(milestone_id)
 
     def complete_milestone(self, milestone_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
@@ -365,6 +384,23 @@ class MilestoneService:
         updated_ok = self.milestone_repo.update(milestone_id, update_data)
         if not updated_ok:
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to mark payment as sent")
+
+        # Notify freelancer that client marked payment as sent
+        try:
+            payment_info = ms.get("payment", {}) if isinstance(ms, dict) else {}
+            amount = payment_info.get("amount")
+            currency = payment_info.get("currency")
+            self.notification_service.notify_milestone_payment_confirmed(
+                freelancer_id=ag["freelancer"]["user_id"],
+                milestone_title=ms.get("title", "Milestone"),
+                milestone_id=milestone_id,
+                agreement_id=ms["agreement_id"],
+                project_title=ag.get("title"),
+                amount=amount,
+                currency=currency,
+            )
+        except Exception as notify_err:
+            logger.warning("Failed to send payment confirmation notification for milestone %s: %s", milestone_id, notify_err)
 
         return self.milestone_repo.get_by_id(milestone_id)
 
