@@ -56,6 +56,8 @@ class NotificationService:
                     NotificationType.MILESTONE_REMINDER: "milestone",
                     NotificationType.MILESTONE_COMPLETED: "milestone",
                     NotificationType.MILESTONE_APPROVED: "milestone",
+                    NotificationType.MILESTONE_PAYMENT_REMINDER: "milestone",
+                    NotificationType.MILESTONE_PAYMENT_CONFIRMED: "milestone",
                     NotificationType.AGREEMENT_CREATED: "general",
                     NotificationType.AGREEMENT_SIGN_REMINDER: "general",
                     NotificationType.DISPUTE_RAISED: "dispute",
@@ -178,6 +180,74 @@ class NotificationService:
             },
             link=f"/milestone?agreement_id={agreement_id}",
             send_email=True
+        )
+
+    def notify_milestone_payment_reminder(
+        self,
+        client_id: str,
+        milestone_title: str,
+        milestone_id: str,
+        agreement_id: str,
+        project_title: str | None = None,
+        amount: float | None = None,
+        currency: str | None = None,
+    ):
+        """Notify client to send payment after verifying a milestone."""
+        amount_text = ""
+        if amount is not None:
+            amount_text = f" {currency or ''}{amount}"
+        project_text = f" in project '{project_title}'" if project_title else ""
+        message = f"Please send payment for milestone '{milestone_title}'{project_text}{amount_text}".strip()
+
+        return self.create_notification(
+            user_id=client_id,
+            notification_type=NotificationType.MILESTONE_PAYMENT_REMINDER,
+            title="Payment Needed for Milestone",
+            message=message,
+            data={
+                "milestone_id": milestone_id,
+                "agreement_id": agreement_id,
+                "milestone_title": milestone_title,
+                "project_title": project_title,
+                "amount": amount,
+                "currency": currency,
+            },
+            link=f"/client/milestones?agreement_id={agreement_id}",
+            send_email=True,
+        )
+
+    def notify_milestone_payment_confirmed(
+        self,
+        freelancer_id: str,
+        milestone_title: str,
+        milestone_id: str,
+        agreement_id: str,
+        project_title: str | None = None,
+        amount: float | None = None,
+        currency: str | None = None,
+    ):
+        """Notify freelancer that client marked payment as sent (question prompt)."""
+        amount_text = ""
+        if amount is not None:
+            amount_text = f" {currency or ''}{amount}"
+        project_text = f" in project '{project_title}'" if project_title else ""
+        message = f"Payment has been sent for milestone '{milestone_title}'{project_text}{amount_text}. Have you received it?".strip()
+
+        return self.create_notification(
+            user_id=freelancer_id,
+            notification_type=NotificationType.MILESTONE_PAYMENT_CONFIRMED,
+            title="Payment Sent for Milestone",
+            message=message,
+            data={
+                "milestone_id": milestone_id,
+                "agreement_id": agreement_id,
+                "milestone_title": milestone_title,
+                "project_title": project_title,
+                "amount": amount,
+                "currency": currency,
+            },
+            link=f"/freelancer/milestones?agreement_id={agreement_id}",
+            send_email=True,
         )
 
     def notify_request_accepted(
