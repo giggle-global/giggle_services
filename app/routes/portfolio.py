@@ -1,5 +1,5 @@
 # app/routes/portfolio.py
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, status, HTTPException
 from typing import Dict, Any, Optional
 from app.core.keycloak import get_current_user
 from app.schemas.response import APIResponse, ok
@@ -19,8 +19,19 @@ def create_project(payload: ProjectCreate, current_user: Dict[str, Any] = Depend
 
 
 @router.get("/", response_model=APIResponse)
-def list_projects(limit: int = Query(50, ge=1, le=200), skip: int = 0, current_user: Dict[str, Any] = Depends(get_current_user), svc: PortfolioService = Depends(get_portfolio_service)):
-    projects = svc.list_for_user(current_user.get("user_id"), limit, skip)
+def list_projects(
+    limit: int = Query(50, ge=1, le=200),
+    skip: int = 0,
+    user_id: Optional[str] = None,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    svc: PortfolioService = Depends(get_portfolio_service),
+):
+    # Allow super admin to view any user's portfolio; others can only view their own
+    requested_user_id = user_id or current_user.get("user_id")
+    if user_id and current_user.get("role") != "SA":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed to view this portfolio")
+
+    projects = svc.list_for_user(requested_user_id, limit, skip)
     return ok(projects, "Projects fetched", status_code=status.HTTP_200_OK)
 
 
