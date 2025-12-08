@@ -209,6 +209,7 @@ def generate_s3_presigned_post(
     content_type_startswith: Optional[str] = None,
     region_name: Optional[str] = None,
     s3_client=None,
+    extra_conditions: Optional[list] = None,
 ) -> Dict[str, Any]:
     """
     Generate a presigned POST (form data + url) for direct browser uploads.
@@ -227,6 +228,9 @@ def generate_s3_presigned_post(
     if content_type_startswith:
         # allows client to set Content-Type that startswith provided value
         conditions.append(["starts-with", "$Content-Type", content_type_startswith])
+
+    if extra_conditions:
+        conditions.extend(extra_conditions)
 
     try:
         resp = client.generate_presigned_post(Bucket=bucket, Key=key, Fields=fields, Conditions=conditions, ExpiresIn=expires_in)
