@@ -99,7 +99,7 @@ class NotificationService:
                     email_enabled = notification_prefs.get("email", True)  # Default to True if not set
                     
                     if email_enabled:
-                        logger.info("📧 Sending notification email to %s for notification %s", user_email, notification.get("notification_id"))
+                        logger.info("Sending notification email to %s for notification %s", user_email, notification.get("notification_id"))
                         try:
                             # Prepare notification data with link included
                             email_notification_data = (data or {}).copy()

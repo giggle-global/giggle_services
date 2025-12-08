@@ -137,7 +137,9 @@ from app.services.user import UserService
 from app.core.keycloak import get_current_user, _validate_token_and_get_user
 from app.services.project import ProjectService
 from app.services.agreements import AgreementService
+from app.services.ticket import TicketService
 import traceback
+import asyncio
 
 router = APIRouter()
 
@@ -423,3 +425,297 @@ async def ws_agreement(agreement_id: str, websocket: WebSocket, token: Optional[
             await websocket_manager.disconnect(websocket)
         except Exception:
             pass
+
+
+@router.websocket("/ws/private/{other_user_id}")
+async def ws_private(
+    other_user_id: str,
+    websocket: WebSocket,
+    token: Optional[str] = Query(None),
+    ticket_id: Optional[str] = Query(None)
+):
+    """
+    Connect to private chat between admin and another user (client or freelancer).
+    Clients must pass ?token=<keycloak_token> in websocket URL.
+    Optional: ?ticket_id=<ticket_id> to link conversation to a dispute.
+    """
+    print(f"🔌 Private WebSocket connection attempt: other_user_id={other_user_id}, token_present={bool(token)}, ticket_id={ticket_id}")
+    # Accept connection first (required by WebSocket protocol)
+    await websocket.accept()
+    try:
+        # Validate token after accepting connection
+        if not token:
+            print("❌ Private WebSocket rejected: No token provided")
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Token is required")
+            return
+        
+        try:
+            caller = _validate_token_and_get_user(token)
+            if not caller:
+                print("❌ Private WebSocket rejected: Invalid token (caller is None)")
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid token")
+                return
+            caller_user_id = caller.get('user_id')
+            caller_role = caller.get('role')
+            print(f"✅ Private WebSocket authenticated: user_id={caller_user_id}, role={caller_role}")
+            print(f"🔐 Token validation result: caller={caller}")
+        except HTTPException as e:
+            print(f"❌ Private WebSocket rejected: HTTPException - {e.detail}")
+            await websocket.send_json({"error": e.detail})
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=str(e.detail))
+            return
+        except Exception as e:
+            print(f"❌ Private WebSocket rejected: Exception during auth - {str(e)}")
+            traceback.print_exc()
+            await websocket.send_json({"error": "Authentication failed"})
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Authentication failed")
+            return
+
+        caller_id = str(caller.get("user_id"))
+        caller_role = caller.get("role")
+        other_user_id_str = str(other_user_id)
+        
+        print(f"🔍 Connection attempt details:")
+        print(f"   - Caller ID: {caller_id}")
+        print(f"   - Caller Role: {caller_role}")
+        print(f"   - Other User ID (from URL): {other_user_id_str}")
+        print(f"   - Ticket ID (from URL): {ticket_id}")
+
+        # Authorization: Only admin can chat with CL/FL, and CL/FL can only chat with admin
+        # Verify the other user exists and has correct role
+        user_service = UserService()
+        other_user = user_service.get_user(other_user_id_str)
+        if not other_user:
+            error_msg = f"User not found: {other_user_id_str}. Please verify the admin user ID is correct."
+            print(f"❌ Private WebSocket rejected: {error_msg}")
+            print(f"   Caller: user_id={caller_id}, role={caller_role}")
+            await websocket.send_json({"type": "error", "error": error_msg})
+            await asyncio.sleep(0.1)  # Give time for message to be sent
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        other_user_role = other_user.get("role")
+        print(f"🔍 User lookup: other_user_id={other_user_id_str}, other_user_role={other_user_role}")
+
+        # Check authorization rules - use same privileged roles as _is_privileged
+        privileged_roles = {"admin", "SA", "customer_care", "support"}
+        is_admin = caller_role in privileged_roles
+        is_other_admin = other_user_role in privileged_roles
+        print(f"🔐 Authorization check: caller_role={caller_role} (is_admin={is_admin}), other_role={other_user_role} (is_other_admin={is_other_admin})")
+
+        if is_admin:
+            # Admin can chat with CL or FL
+            if other_user_role not in ["CL", "FL"]:
+                error_msg = f"Admin can only chat with clients or freelancers, but other user has role: {other_user_role}"
+                print(f"❌ Private WebSocket rejected: {error_msg}")
+                await websocket.send_json({"type": "error", "error": error_msg})
+                await asyncio.sleep(0.1)  # Give time for message to be sent
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                return
+        elif caller_role in ["CL", "FL"]:
+            # CL/FL can only chat with admin
+            if not is_other_admin:
+                error_msg = f"You can only chat with admin privately. The user you're trying to chat with has role: {other_user_role} (expected one of: {privileged_roles})"
+                print(f"❌ Private WebSocket rejected: {caller_role} can only chat with admin, got {other_user_role}")
+                await websocket.send_json({"type": "error", "error": error_msg})
+                await asyncio.sleep(0.1)  # Give time for message to be sent
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                return
+        else:
+            # Other roles not allowed
+            error_msg = f"Private chat not available for your role: {caller_role}"
+            print(f"❌ Private WebSocket rejected: {error_msg}")
+            await websocket.send_json({"type": "error", "error": error_msg})
+            await asyncio.sleep(0.1)  # Give time for message to be sent
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        # Get project_id and agreement_id from ticket if provided
+        # CRITICAL: Always normalize ticket_id to full ticket_id from database to ensure consistent group_id
+        # This ensures both admin and client use the same group_id regardless of ticket_id format
+        project_id = None
+        agreement_id = None
+        resolved_ticket_id = ticket_id  # Start with provided ticket_id
+        if ticket_id:
+            try:
+                ticket_service = TicketService()
+                ticket_data = None
+                
+                # First, try to get ticket by full ID
+                try:
+                    ticket_data = ticket_service.repo.get_ticket(ticket_id)
+                except:
+                    pass
+                
+                # If not found, try searching in user's tickets (handles partial IDs like last 8 chars)
+                if not ticket_data:
+                    try:
+                        all_tickets = ticket_service.list_tickets(caller)
+                        for ticket in all_tickets:
+                            ticket_full_id = ticket.get("ticket_id", "")
+                            # Match exact or if provided ticket_id is last 8 chars (case-insensitive)
+                            ticket_id_upper = ticket_id.upper()
+                            ticket_full_upper = ticket_full_id.upper()
+                            if ticket_full_id == ticket_id or ticket_full_upper.endswith(ticket_id_upper):
+                                ticket_data = ticket
+                                break
+                    except Exception as e:
+                        print(f"⚠️ Could not list tickets for user: {e}")
+                
+                # CRITICAL: For admin users, also search ALL tickets if not found in user's list
+                # This ensures admin can find tickets even if not directly assigned
+                if not ticket_data and _is_privileged(caller):
+                    try:
+                        all_tickets = ticket_service.repo.get_all_tickets()
+                        ticket_id_upper = ticket_id.upper()
+                        for ticket in all_tickets:
+                            ticket_full_id = ticket.get("ticket_id", "")
+                            ticket_full_upper = ticket_full_id.upper()
+                            # Match exact or if provided ticket_id is last 8 chars (case-insensitive)
+                            if ticket_full_id == ticket_id or ticket_full_upper.endswith(ticket_id_upper):
+                                ticket_data = ticket
+                                print(f"📋 Found ticket in all tickets (admin access): {ticket_full_id}")
+                                break
+                    except Exception as e:
+                        print(f"⚠️ Could not search all tickets: {e}")
+                
+                # CRITICAL: Always use full ticket_id from database if found
+                # This ensures consistent group_id regardless of input format
+                if ticket_data:
+                    resolved_ticket_id = ticket_data.get("ticket_id")
+                    if not resolved_ticket_id:
+                        resolved_ticket_id = ticket_id  # Fallback to provided
+                    project_id = ticket_data.get("project_id")
+                    agreement_id = ticket_data.get("agreement_id")
+                    print(f"📋 Normalized ticket_id: {ticket_id} -> {resolved_ticket_id} (project_id={project_id}, agreement_id={agreement_id})")
+                else:
+                    print(f"⚠️ Ticket not found. Using provided ticket_id as-is: {ticket_id}")
+                    resolved_ticket_id = ticket_id
+            except Exception as e:
+                print(f"⚠️ Could not fetch ticket data: {e}")
+                traceback.print_exc()
+                # CRITICAL: Still use provided ticket_id to ensure chat separation
+                resolved_ticket_id = ticket_id
+                print(f"📋 Using provided ticket_id for group_id (resolution failed): {resolved_ticket_id}")
+        else:
+            print(f"⚠️ No ticket_id provided - messages will be in general private chat (not dispute-specific)")
+
+        # Generate consistent group_id (include ticket_id to separate chats by dispute)
+        # IMPORTANT: Always include ticket_id if provided, even if resolution failed
+        chat_service = ChatService()
+        group_id = chat_service._generate_private_group_id(caller_id, other_user_id_str, resolved_ticket_id)
+        print(f"✅ Private chat group_id: {group_id} (ticket_id={resolved_ticket_id})")
+        print(f"👤 Connection details: caller_id={caller_id}, other_user_id={other_user_id_str}, caller_role={caller_role}")
+        print(f"🔑 Group ID generation: sorted([{caller_id}, {other_user_id_str}]) = {sorted([str(caller_id), str(other_user_id_str)])}")
+
+        # Register connection with in-memory manager
+        await websocket_manager.connect(websocket, caller_id, group_id)
+        
+        # Log current connections in this group after connection
+        async with websocket_manager._lock:
+            group_connections = len(websocket_manager.groups.get(group_id, set()))
+            print(f"📊 Total connections in group {group_id}: {group_connections}")
+            # List all connections in this group
+            for ws in websocket_manager.groups.get(group_id, set()):
+                meta = websocket_manager._ws_meta.get(ws, {})
+                print(f"   - Connected user: {meta.get('user_id')} in group: {meta.get('group_id')}")
+
+        # Send last N messages (filtered by ticket_id if provided)
+        # IMPORTANT: Use resolved_ticket_id to ensure we only get messages for this specific dispute
+        try:
+            print(f"📜 Fetching private chat history: caller_id={caller_id}, other_user_id={other_user_id_str}, ticket_id={resolved_ticket_id}")
+            history = chat_service.get_private_chat_history(caller_id, other_user_id_str, limit=100, ticket_id=resolved_ticket_id)
+            print(f"📨 Found {len(history)} messages in history for this dispute")
+            
+            # Send history messages one by one with error handling
+            sent_count = 0
+            for h in history:
+                try:
+                    # Ensure message is JSON-serializable
+                    if "_id" in h:
+                        h["id"] = str(h["_id"])
+                        h.pop("_id", None)
+                    
+                    # CRITICAL: Convert all datetime objects to timestamps
+                    from datetime import datetime
+                    if "created_at" in h and isinstance(h["created_at"], datetime):
+                        h["timestamp"] = h["created_at"].isoformat() + "Z"
+                        h["created_at"] = int(h["created_at"].timestamp())
+                    if "updated_at" in h and isinstance(h["updated_at"], datetime):
+                        h["updated_at"] = int(h["updated_at"].timestamp())
+                    
+                    # Remove any other datetime objects that might exist
+                    for key, value in list(h.items()):
+                        if isinstance(value, datetime):
+                            h[key] = value.isoformat() + "Z"
+                    
+                    await websocket.send_json({"type": "history", "payload": h})
+                    sent_count += 1
+                except Exception as e:
+                    print(f"⚠️ Error sending history message: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    # Continue with next message instead of failing completely
+                    continue
+            
+            print(f"✅ Sent {sent_count}/{len(history)} history messages")
+        except Exception as e:
+            print(f"❌ ERROR fetching/sending chat history: {e}")
+            traceback.print_exc()
+            # Don't fail the connection - just log the error and continue
+            # Send error message to client
+            try:
+                await websocket.send_json({"type": "error", "error": "Failed to load chat history. Please refresh."})
+            except:
+                pass
+
+        # Main loop
+        while True:
+            data = await websocket.receive_json()
+            content = (data.get("content") or "").strip()
+            if not content:
+                await websocket.send_json({"error": "Message cannot be empty"})
+                continue
+
+            # Save message - SIMPLIFIED: Just like group chat
+            meta = {}
+            if resolved_ticket_id:
+                meta["ticket_id"] = resolved_ticket_id
+            if project_id:
+                meta["project_id"] = project_id
+            if agreement_id:
+                meta["agreement_id"] = agreement_id
+            
+            # Save message using the connection's group_id (same as group chat pattern)
+            saved = chat_service.log_chat(
+                group_type="private",
+                request_id=None,
+                group_id=group_id,  # Use the SAME group_id as the connection
+                sender_user=caller,
+                content=content,
+                meta=meta
+            )
+            
+            # Broadcast to group - EXACTLY like group chat
+            payload = {
+                "type": "message",
+                "payload": {
+                    "group_type": "private",
+                    "group_id": group_id,
+                    "message": saved,
+                }
+            }
+            
+            # Simple broadcast to group - just like agreement/project chat
+            await websocket_manager.send_to_group(group_id, payload)
+
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        traceback.print_exc()
+        try:
+            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+        except Exception:
+            pass
+    finally:
+        await websocket_manager.disconnect(websocket)

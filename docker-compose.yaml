@@ -15,6 +15,10 @@ services:
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://begiggle.keydraft.com,https://www.begiggle.keydraft.com,http://begiggle.keydraft.com,http://www.begiggle.keydraft.com}
     volumes:
       - .misc/logger:/app/logger/
+      # Mount Google credentials (optional - can also use secrets)
+      - ./service_account.json:/app/service_account.json:ro
+      - ./credentials.json:/app/credentials.json:ro
+      - ./token.json:/app/token.json:ro
     networks:
       - backend_net
 

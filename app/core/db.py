@@ -29,4 +29,4 @@ def get_audit_collection(collection_name: str):
 # --- Run check on import (startup) ---
 if not check_db_connection():
     # You can choose: either exit app or just warn
-    print("⚠️ MongoDB is not reachable. Please check your connection settings.")
+    print("WARNING: MongoDB is not reachable. Please check your connection settings.")

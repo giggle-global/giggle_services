@@ -20,7 +20,7 @@ class EmailService:
     def __init__(self, provider: Optional[str] = None):
         self.provider = (provider or config.get("email_provider") or "smtp").lower()
         # Log email provider configuration on initialization for debugging
-        logger.info("📧 EmailService initialized with provider: %s", self.provider)
+        logger.info("EmailService initialized with provider: %s", self.provider)
         
         # Validate configuration on initialization
         if self.provider == "smtp":

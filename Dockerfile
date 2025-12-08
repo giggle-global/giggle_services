@@ -11,6 +11,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the FastAPI app into the container
 COPY app/. /app/app/
 
+# Google credentials are provided via volumes in docker-compose.yaml
+# DO NOT copy credentials into the image for security reasons
+# Use volumes to mount them at runtime instead
+
 # Expose the FastAPI port
 EXPOSE 8000
 

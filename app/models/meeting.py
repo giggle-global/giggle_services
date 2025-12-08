@@ -33,6 +33,12 @@ class MeetingUpdate(BaseModel):
     scheduled_time: Optional[int] = None
     duration_minutes: Optional[int] = Field(None, ge=15, le=480)
     status: Optional[MeetingStatus] = None
+    google_meet_link: Optional[str] = None
+
+
+class MeetingLinkUpdate(BaseModel):
+    """Model for updating meeting link only"""
+    google_meet_link: str = Field(..., description="Google Meet link URL")
 
 
 class MeetingOut(BaseModel):

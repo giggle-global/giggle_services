@@ -22,6 +22,7 @@ class MeetingService:
         self.agreement_repo = AgreementRepository()
         self.google_calendar = GoogleCalendarService()
     
+    
     def create_meeting(
         self,
         payload: MeetingCreate,
@@ -71,33 +72,35 @@ class MeetingService:
             meet_link = None
             calendar_event_id = None
             
-            # Try to create Google Calendar event, but don't fail if it doesn't work
+            # Try to create Google Calendar event with Google Meet link
             try:
-                if self.google_calendar.service and attendees:
-                    google_event = self.google_calendar.create_meeting(
-                        title=payload.title,
-                        description=payload.description or f"Meeting for {agreement.get('title', 'Agreement')}",
-                        start_time=start_time,
-                        end_time=end_time,
-                        attendees=attendees,
-                        timezone=payload.timezone
-                    )
-                    
-                    if google_event:
-                        meet_link = google_event.get("meet_link")
-                        calendar_event_id = google_event.get("event_id")
-                        logger.info("Google Calendar event created: %s", calendar_event_id)
+                if self.google_calendar.service:
+                    if not attendees:
+                        logger.warning("No attendees provided. Creating meeting without Google Calendar event.")
                     else:
-                        logger.warning("Failed to create Google Calendar event, proceeding without Meet link")
+                        google_event = self.google_calendar.create_meeting(
+                            title=payload.title,
+                            description=payload.description or f"Meeting for {agreement.get('title', 'Agreement')}",
+                            start_time=start_time,
+                            end_time=end_time,
+                            attendees=attendees,
+                            timezone=payload.timezone
+                        )
+                        
+                        if google_event and google_event.get("meet_link"):
+                            meet_link = google_event.get("meet_link")
+                            calendar_event_id = google_event.get("event_id")
+                            logger.info("Google Calendar event created with Meet link: %s", calendar_event_id)
+                        else:
+                            raise Exception("Google Calendar event was created but no Meet link was returned")
                 else:
-                    if not self.google_calendar.service:
-                        logger.warning("Google Calendar service not initialized, proceeding without Meet link")
-                    elif not attendees:
-                        logger.warning("No attendees provided, proceeding without Meet link")
+                    logger.warning("Google Calendar service not initialized. Meeting will be created without Meet link. Please configure Google Calendar API or add link manually.")
             except Exception as e:
-                # Log the error but continue with meeting creation
-                logger.error("Error creating Google Calendar event: %s. Proceeding without Meet link.", str(e))
+                # Log the error but continue with meeting creation (allow manual link addition)
+                error_msg = str(e)
+                logger.error("Error creating Google Calendar event: %s. Meeting will be created without Meet link. Please add it manually.", error_msg)
                 logger.exception("Full exception details:")
+                # Don't raise exception - allow meeting creation to continue so user can add link manually
             
             # Create meeting in database
             meeting_data = {
@@ -108,7 +111,7 @@ class MeetingService:
                 "duration_minutes": payload.duration_minutes,
                 "timezone": payload.timezone,
                 "status": MeetingStatus.SCHEDULED.value,
-                "google_meet_link": meet_link,
+                "google_meet_link": meet_link,  # Will be None if Google Calendar failed
                 "google_calendar_event_id": calendar_event_id,
                 "client": client,
                 "freelancer": freelancer,
@@ -116,7 +119,9 @@ class MeetingService:
             }
             
             meeting = self.repo.create(meeting_data)
-            logger.info("Meeting created: %s for agreement: %s", meeting.get("meeting_id"), payload.agreement_id)
+            meeting_id = meeting.get("meeting_id")
+            
+            logger.info("Meeting created: %s for agreement: %s", meeting_id, payload.agreement_id)
             
             return meeting
             
@@ -315,5 +320,51 @@ class MeetingService:
         else:
             # Return all upcoming meetings if no filter
             return self.repo.get_upcoming_meetings(limit=50)
+    
+    def update_meeting_link(
+        self,
+        meeting_id: str,
+        meet_link: str,
+        updated_by: str
+    ) -> Dict[str, Any]:
+        """Update meeting link manually"""
+        try:
+            meeting = self.repo.get_by_id(meeting_id)
+            if not meeting:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "Meeting not found")
+            
+            # Verify user is part of the agreement
+            if updated_by not in [
+                meeting.get("client", {}).get("user_id"),
+                meeting.get("freelancer", {}).get("user_id")
+            ]:
+                raise HTTPException(
+                    status.HTTP_403_FORBIDDEN,
+                    "You are not authorized to update this meeting"
+                )
+            
+            # Validate link format (basic validation)
+            if not meet_link.startswith(("http://", "https://")):
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    "Invalid meeting link format. Must be a valid URL."
+                )
+            
+            # Update meeting link
+            updated_meeting = self.repo.update(meeting_id, {"google_meet_link": meet_link})
+            if not updated_meeting:
+                raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to update meeting link")
+            
+            logger.info("Meeting link updated: %s by %s", meeting_id, updated_by)
+            return updated_meeting
+            
+        except HTTPException:
+            raise
+        except PyMongoError as e:
+            logger.exception("Database error updating meeting link: %s", e)
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to update meeting link")
+        except Exception as e:
+            logger.exception("Error updating meeting link: %s", e)
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to update meeting link")
 
 

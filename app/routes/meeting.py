@@ -3,7 +3,7 @@ Meeting routes for Google Meet integration
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Body, Query
 from typing import Dict, Any, List, Optional
-from app.models.meeting import MeetingCreate, MeetingUpdate, MeetingOut, MeetingFilter
+from app.models.meeting import MeetingCreate, MeetingUpdate, MeetingOut, MeetingFilter, MeetingLinkUpdate
 from app.services.meeting import MeetingService
 from app.core.keycloak import get_current_user
 from app.schemas.response import ok, APIResponse
@@ -144,5 +144,23 @@ def cancel_meeting(
     except Exception as e:
         logger.exception("Error cancelling meeting: %s", e)
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to cancel meeting")
+
+
+@router.put("/{meeting_id}/link", response_model=APIResponse[MeetingOut])
+def update_meeting_link(
+    meeting_id: str,
+    payload: MeetingLinkUpdate,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    svc: MeetingService = Depends(get_meeting_service)
+):
+    """Update meeting link manually"""
+    try:
+        meeting = svc.update_meeting_link(meeting_id, payload.google_meet_link, current_user["user_id"])
+        return ok(meeting, "Meeting link updated successfully")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error updating meeting link: %s", e)
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to update meeting link")
 
 

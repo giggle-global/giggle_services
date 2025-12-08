@@ -42,6 +42,7 @@ if not config:
     config["aws_access_key"] = os.environ["AWS_ACCESS_KEY"]
     config["aws_secret_key"] = os.environ["AWS_SECRET_KEY"]
     config["aws_region"] = os.environ["AWS_REGION"]
+    config["aws_bucket"] = os.environ.get("AWS_BUCKET", "")
 
     # Optional integrations
     config["openai_api_key"] = os.environ.get("OPENAI_API_KEY")

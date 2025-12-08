@@ -32,14 +32,14 @@ class ChatRepository:
     Collection document structure (example):
     {
         "_id": ObjectId(...),
-        "group_type": "project" | "agreement",
-        "group_id": "<project_id or agreement_id>",
+        "group_type": "project" | "agreement" | "private",
+        "group_id": "<project_id or agreement_id or private::user1_id::user2_id>",
         "sender_id": "<user_id>",
         "sender_role": "<role>",
         "sender_name": "<first last>",
         "content": "<text>",
         "seen_by": ["user_id1", "user_id2"],     # optional
-        "meta": { ... },                         # optional extra data
+        "meta": { ... },                         # optional extra data (ticket_id, project_id, agreement_id for private chats)
         "created_at": ISODate,
         "updated_at": ISODate
     }
@@ -64,8 +64,10 @@ class ChatRepository:
             q = {"group_type": "project", "group_id": request_id}
         elif group_type == "agreement":
             q = {"group_type": "agreement", "group_id": request_id}
+        elif group_type == "private":
+            q = {"group_type": "private", "group_id": request_id}
         else:
-            raise ValueError("Invalid group_type, must be 'project' or 'agreement'")
+            raise ValueError("Invalid group_type, must be 'project', 'agreement', or 'private'")
         # Return most recent `limit` messages, ordered ascending by created_at (older -> newer)
         if before_iso:
             # allow client pagination; messages older than given timestamp
