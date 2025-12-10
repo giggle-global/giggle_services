@@ -528,6 +528,24 @@ class UserService:
             logger.exception("Error banning user_id=%s", user_id)
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to ban user")
 
+    def unban_user(self, user_id: str) -> Dict[str, Any]:
+        if not user_id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "user_id is required")
+        try:
+            user = self.user_repo.get_user_by_id(user_id)
+            if not user:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found.")
+            if user.get("status") != "BANNED":
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, "User is not banned.")
+            result = self.user_repo.unban_user(user_id)
+            logger.info("User unbanned: user_id=%s", user_id)
+            return result
+        except HTTPException:
+            raise
+        except Exception:
+            logger.exception("Error unbanning user_id=%s", user_id)
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to unban user")
+
     def create_root_user(self) -> Dict[str, Any]:
         """Idempotent super admin bootstrap."""
         root_email = config.user_name

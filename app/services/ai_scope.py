@@ -17,6 +17,7 @@ from app.models.ai_scope import (
     ScopeQA,
     ScopeQuestionRequest,
     ScopeQuestionResponse,
+    ScopeSuggestionUpdate,
     ScopeSuggestion,
     ScopeSuggestionRequest,
     ScopeSuggestionResponse,
@@ -244,6 +245,31 @@ class AIScopeService:
         return ScopeSuggestionResponse(suggestion=suggestion)
 
     # ------------------------------------------------------------------ #
+    # Suggestion Update (inline edits)
+    # ------------------------------------------------------------------ #
+    def update_suggestion(self, payload: ScopeSuggestionUpdate) -> ScopeSuggestionResponse:
+        """
+        Apply client-side edits to an existing suggestion object without regenerating from AI.
+        """
+        suggestion = payload.suggestion
+
+        # Apply partial updates
+        if payload.scope_summary is not None:
+            suggestion.scope_summary = payload.scope_summary
+        if payload.content_sections is not None:
+            suggestion.content_sections = payload.content_sections
+        if payload.key_features is not None:
+            suggestion.key_features = payload.key_features
+        if payload.tone is not None:
+            suggestion.tone = payload.tone
+        if payload.recommended_budget is not None:
+            suggestion.recommended_budget = payload.recommended_budget
+        if payload.suggested_timeline_weeks is not None:
+            suggestion.suggested_timeline_weeks = payload.suggested_timeline_weeks
+
+        return ScopeSuggestionResponse(suggestion=suggestion)
+
+    # ------------------------------------------------------------------ #
     # Confirmation & Matching
     # ------------------------------------------------------------------ #
     def confirm_scope(
@@ -294,6 +320,10 @@ class AIScopeService:
             timeline_weeks=timeline_weeks,
             required_location=location_dict if location_dict else None,
             location_preference=location_preference,
+            scope_summary=suggestion.scope_summary,
+            content_sections=suggestion.content_sections,
+            key_features=suggestion.key_features,
+            tone=suggestion.tone,
         )
 
         created_project = self.project_service.create(project_payload, current_user=current_user)

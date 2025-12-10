@@ -206,6 +206,20 @@ def ban_user(user_id: str, ban_request: BanUserRequest, current_user: Dict[str, 
     return ok(message="User has been banned", data=None, status_code=status.HTTP_200_OK)
 
 
+@router.patch("/unban/{user_id}", response_model=APIResponse[None])
+def unban_user(user_id: str, current_user: Dict[str, Any] = Depends(get_current_user), svc: UserService = Depends(get_user_service)):
+    logger.debug(f"Unban requested by user_id={current_user.get('user_id')} target={user_id}")
+    if current_user["role"] != "SA":
+        logger.warning("Non-SA attempted to unban user.")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only super admin can unban users")
+    if not user_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "User ID is required to unban a user")
+    
+    svc.unban_user(user_id)
+    logger.info(f"User unbanned: user_id={user_id}")
+    return ok(message="User has been unbanned", data=None, status_code=status.HTTP_200_OK)
+
+
 @router.get("/skills")
 def get_skills(
     current_user: Dict[str, Any] = Depends(get_current_user), ssc: SkillService = Depends(get_skill_service)

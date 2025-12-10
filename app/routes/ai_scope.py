@@ -10,6 +10,7 @@ from app.models.ai_scope import (
     ScopeConfirmResponse,
     ScopeQuestionRequest,
     ScopeQuestionResponse,
+    ScopeSuggestionUpdate,
     ScopeSuggestionRequest,
     ScopeSuggestionResponse,
 )
@@ -51,6 +52,21 @@ def scope_suggestion(
     """Generate scope summary, content plan, and budget recommendation."""
     response = svc.generate_suggestion(payload)
     return ok(data=response, message="Scope recommendation generated")
+
+
+@router.post(
+    "/suggestion/update",
+    response_model=APIResponse[ScopeSuggestionResponse],
+    status_code=status.HTTP_200_OK,
+)
+def scope_suggestion_update(
+    payload: ScopeSuggestionUpdate,
+    svc: AIScopeService = Depends(get_ai_scope_service),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """Apply inline edits to an existing suggestion (no AI regeneration)."""
+    response = svc.update_suggestion(payload)
+    return ok(data=response, message="Scope suggestion updated")
 
 
 @router.post(

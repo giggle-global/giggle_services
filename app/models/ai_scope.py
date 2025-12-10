@@ -91,6 +91,16 @@ class ScopeSuggestionResponse(BaseModel):
     suggestion: ScopeSuggestion
 
 
+class ScopeSuggestionUpdate(BaseModel):
+    """Partial update payload for an existing suggestion."""
+
+    suggestion: ScopeSuggestion
+    scope_summary: Optional[str] = None
+    content_sections: Optional[List[str]] = None
+    key_features: Optional[List[str]] = None
+    tone: Optional[str] = None
+    recommended_budget: Optional[Dict[str, Any]] = None
+    suggested_timeline_weeks: Optional[int] = None
 class ScopeConfirmRequest(BaseModel):
     """Payload to confirm the suggestion and spin up a project."""
 

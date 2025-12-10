@@ -168,6 +168,25 @@ class UserRepository:
         if result.matched_count == 0:
             raise HTTPException(404, "User not found.")
         return None
+
+    def unban_user(self, user_id: str) -> dict:
+        """
+        Restore a banned user to ACTIVE and clear ban metadata.
+        """
+        result = self.collection.update_one(
+            {"user_id": user_id},
+            {
+                "$set": {
+                    "status": "ACTIVE",
+                    "audit_log.updated_at": datetime.now(timezone.utc),
+                    "audit_log.updated_by": "system",
+                },
+                "$unset": {"ban_reason": ""},
+            },
+        )
+        if result.matched_count == 0:
+            raise HTTPException(404, "User not found.")
+        return None
     
     def delete_user(self, user_id: str) -> dict:
         result = self.collection.update_one(

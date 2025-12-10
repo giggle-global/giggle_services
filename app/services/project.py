@@ -27,6 +27,10 @@ class ProjectService:
             "timeline_weeks",
             "required_location",
             "location_preference",
+            "scope_summary",
+            "content_sections",
+            "key_features",
+            "tone",
         )
         for field in optional_fields:
             value = getattr(payload, field, None)

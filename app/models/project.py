@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional, Dict
 from enum import Enum
+from typing import List
 
 class ProjectStatus(str, Enum):
     enabled = "enabled"
@@ -36,6 +37,11 @@ class ProjectBase(BaseModel):
         example="same_city",
         description="How strict the location requirement is"
     )
+    # AI scope fields (optional)
+    scope_summary: Optional[str] = Field(None, description="AI generated scope summary")
+    content_sections: Optional[List[str]] = Field(None, description="AI recommended content/deliverables")
+    key_features: Optional[List[str]] = Field(None, description="AI recommended key features")
+    tone: Optional[str] = Field(None, description="Suggested tone/style")
 
 class ProjectCreate(ProjectBase):
     pass
