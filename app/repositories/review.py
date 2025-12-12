@@ -159,3 +159,12 @@ class ReviewRepository:
     def count_reviews_for_project(self, project_id: str) -> int:
         """Count the number of reviews for a specific project"""
         return self.collection.count_documents({"project_id": project_id})
+    
+    def has_review_for_agreement(self, gig_id: str, client_id: str, freelancer_id: str) -> bool:
+        """Check if a review exists for a specific agreement (gig_id) between client and freelancer"""
+        count = self.collection.count_documents({
+            "gig_id": gig_id,
+            "client_id": client_id,
+            "freelancer_id": freelancer_id
+        })
+        return count > 0

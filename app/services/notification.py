@@ -148,7 +148,7 @@ class NotificationService:
             user_id=freelancer_id,
             notification_type=NotificationType.REQUEST_RECEIVED,
             title="New Project Request",
-            message=f"{client_name} has sent you a request for the project: {project_title}",
+            message=f"You have received a new request for the project: {project_title}",
             data={
                 "request_id": request_id,
                 "project_id": project_id,
@@ -287,7 +287,7 @@ class NotificationService:
             user_id=client_id,
             notification_type=NotificationType.REQUEST_REJECTED,
             title="Request Rejected",
-            message=f"{freelancer_name} has rejected your request for the project: {project_title}",
+            message=f"Your request for the project: {project_title} has been rejected",
             data={
                 "request_id": request_id,
                 "project_id": project_id,
@@ -354,11 +354,33 @@ class NotificationService:
             user_id=recipient_id,
             notification_type=NotificationType.AGREEMENT_CREATED,
             title="New Agreement Created",
-            message=f"{creator_name} has created a new agreement: {agreement_title}",
+            message=f"A new agreement has been created: {agreement_title}",
             data={
                 "agreement_id": agreement_id,
                 "project_id": project_id,
                 "creator_name": creator_name,
+                "agreement_title": agreement_title
+            },
+            link=f"/agreement?agreement_id={agreement_id}",
+            send_email=True
+        )
+
+    def notify_agreement_updated(
+        self,
+        recipient_id: str,
+        agreement_title: str,
+        agreement_id: str,
+        project_id: str
+    ):
+        """Notify recipient when an agreement is updated (without names)"""
+        return self.create_notification(
+            user_id=recipient_id,
+            notification_type=NotificationType.AGREEMENT_UPDATED,
+            title="Agreement Updated",
+            message=f"The agreement has been updated: {agreement_title}",
+            data={
+                "agreement_id": agreement_id,
+                "project_id": project_id,
                 "agreement_title": agreement_title
             },
             link=f"/agreement?agreement_id={agreement_id}",

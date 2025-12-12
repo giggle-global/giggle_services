@@ -3,7 +3,9 @@ from typing import Dict, Any, List
 from app.models.milestones import MilestoneCreate, MilestoneInDB, MilestoneUpdate, MilestoneStatus
 from app.repositories.milestones import MilestoneRepository
 from app.repositories.agreements import AgreementRepository
+from app.repositories.review import ReviewRepository
 from app.services.notification import NotificationService
+from app.models.notification import NotificationType
 from fastapi import HTTPException, status
 from pymongo.errors import PyMongoError
 from datetime import datetime, date
@@ -15,6 +17,7 @@ class MilestoneService:
     def __init__(self):
         self.milestone_repo = MilestoneRepository()
         self.agreement_repo = AgreementRepository()
+        self.review_repo = ReviewRepository()
         self.notification_service = NotificationService()
 
     @staticmethod
@@ -174,7 +177,7 @@ class MilestoneService:
             "rate": rate
         })
 
-        # if all milestones completed with payment received -> set agreement Completed
+        # if all milestones completed with payment received -> check for review before setting agreement Completed
         def _is_fully_completed(m):
             """Check if milestone is completed with payment received"""
             s = m.get("status")
@@ -184,7 +187,41 @@ class MilestoneService:
 
         all_fully_completed = True if len(milestones) > 0 and all(_is_fully_completed(m) for m in milestones) else False
         if all_fully_completed:
-            self.agreement_repo.update(ms["agreement_id"], {"status": "Completed"})
+            # Check if client has given review for this agreement
+            agreement = self.agreement_repo.get_by_id(ms["agreement_id"])
+            if agreement:
+                client_id = agreement.get("client", {}).get("user_id")
+                freelancer_id = agreement.get("freelancer", {}).get("user_id")
+                agreement_id = ms["agreement_id"]
+                
+                has_review = self.review_repo.has_review_for_agreement(agreement_id, client_id, freelancer_id)
+                
+                if has_review:
+                    # Client has given review, mark agreement as Completed
+                    self.agreement_repo.update(ms["agreement_id"], {"status": "Completed"})
+                else:
+                    # Client hasn't given review yet, send notifications
+                    try:
+                        # Notify client: Agreement has been done and need the review
+                        self.notification_service.create_notification(
+                            user_id=client_id,
+                            notification_type=NotificationType.AGREEMENT_UPDATED,
+                            title="Review Required",
+                            message="Agreement has been done and need the review",
+                            data={"agreement_id": agreement_id, "type": "review_required"},
+                            link=f"/client/messages?agreement={agreement_id}"
+                        )
+                        # Notify freelancer: Agreement has been done
+                        self.notification_service.create_notification(
+                            user_id=freelancer_id,
+                            notification_type=NotificationType.AGREEMENT_UPDATED,
+                            title="Agreement Completed",
+                            message="Agreement has been done",
+                            data={"agreement_id": agreement_id, "type": "agreement_done"},
+                            link=f"/freelancer/messages?agreement={agreement_id}"
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to send notifications for agreement {agreement_id}: {e}")
 
         return updated_ms
 
@@ -463,7 +500,7 @@ class MilestoneService:
                     "start_date": self._to_epoch(datetime.utcnow())
                 })
 
-        # Check if all milestones are completed and payment received -> set agreement Completed
+        # Check if all milestones are completed and payment received -> check for review before setting agreement Completed
         # Refresh milestones list to get the updated status
         milestones = self.milestone_repo.list_for_agreement(ms["agreement_id"])
         def _is_fully_completed(m):
@@ -475,6 +512,40 @@ class MilestoneService:
 
         all_fully_completed = True if len(milestones) > 0 and all(_is_fully_completed(m) for m in milestones) else False
         if all_fully_completed:
-            self.agreement_repo.update(ms["agreement_id"], {"status": "Completed"})
+            # Check if client has given review for this agreement
+            agreement = self.agreement_repo.get_by_id(ms["agreement_id"])
+            if agreement:
+                client_id = agreement.get("client", {}).get("user_id")
+                freelancer_id = agreement.get("freelancer", {}).get("user_id")
+                agreement_id = ms["agreement_id"]
+                
+                has_review = self.review_repo.has_review_for_agreement(agreement_id, client_id, freelancer_id)
+                
+                if has_review:
+                    # Client has given review, mark agreement as Completed
+                    self.agreement_repo.update(ms["agreement_id"], {"status": "Completed"})
+                else:
+                    # Client hasn't given review yet, send notifications
+                    try:
+                        # Notify client: Agreement has been done and need the review
+                        self.notification_service.create_notification(
+                            user_id=client_id,
+                            notification_type=NotificationType.AGREEMENT_UPDATED,
+                            title="Review Required",
+                            message="Agreement has been done and need the review",
+                            data={"agreement_id": agreement_id, "type": "review_required"},
+                            link=f"/client/messages?agreement={agreement_id}"
+                        )
+                        # Notify freelancer: Agreement has been done
+                        self.notification_service.create_notification(
+                            user_id=freelancer_id,
+                            notification_type=NotificationType.AGREEMENT_UPDATED,
+                            title="Agreement Completed",
+                            message="Agreement has been done",
+                            data={"agreement_id": agreement_id, "type": "agreement_done"},
+                            link=f"/freelancer/messages?agreement={agreement_id}"
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to send notifications for agreement {agreement_id}: {e}")
 
         return self.milestone_repo.get_by_id(milestone_id)

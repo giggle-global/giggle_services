@@ -121,8 +121,8 @@ class LocationInfo(BaseModel):
 
 class ContactInfo(BaseModel):
     linkedin: Optional[str] = Field(None, example="https://linkedin.com/in/johndoe")
+    website: Optional[str] = Field(None, example="https://example.com")
     timezone: Optional[str] = Field(None, example="UTC+05:30")
-    available_time: Optional[str] = Field(None, example="10:00am - 06:30pm")
     secondary_phone: Optional[str] = Field(None, example="+919812345678")
     secondary_email: Optional[EmailStr] = Field(None, example="alt@example.com")
 

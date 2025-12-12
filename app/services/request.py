@@ -12,7 +12,7 @@ from app.models.request import RequestCreate, RequestUpdate, RequestOut, Request
 logger = logging.getLogger(__name__)
 
 # Maximum number of requests a client can send overall
-MAX_REQUESTS_PER_CLIENT = 10
+MAX_REQUESTS_PER_CLIENT = 5
 
 
 class RequestService:
@@ -56,7 +56,7 @@ class RequestService:
         if not project_details:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Project not found or not associated with client")
 
-        # Check total request limit (10 requests overall per client)
+        # Check total request limit (5 requests overall per client)
         try:
             total_requests = self.repo.count_total_requests_by_client(client_id)
             if total_requests >= MAX_REQUESTS_PER_CLIENT:
@@ -81,7 +81,7 @@ class RequestService:
             created = self.repo.create_request(client_id, freelancer_id, client.get("first_name"), client.get("last_name"), freelancer.get("first_name"), freelancer.get("last_name"), project_id, project_name=project_details.get("title"))
             logger.info("Request created: id=%s client=%s freelancer=%s", getattr(created, "id", None), client_id, freelancer_id)
             
-            # Check if this request reached the limit (10/10) and send notification to client
+            # Check if this request reached the limit (5/5) and send notification to client
             try:
                 new_total_requests = self.repo.count_total_requests_by_client(client_id)
                 if new_total_requests == MAX_REQUESTS_PER_CLIENT:

@@ -319,6 +319,56 @@ class AgreementService:
         update_payload["freelancer_accepted_version"] = False
 
         updated = self.repo.update(agreement_id, update_payload)
+        
+        # Send notification to the other party when agreement is updated
+        try:
+            from app.services.notification import NotificationService
+            notification_service = NotificationService()
+            
+            client_id = ag["client"]["user_id"]
+            freelancer_id = ag["freelancer"]["user_id"]
+            agreement_title = ag.get("title", "Agreement")
+            project_id = ag.get("project_id")
+            current_user_id = user.get("user_id")
+            
+            # Notify the other party (not the one who made the update)
+            if current_user_id == client_id:
+                # Client updated, notify freelancer
+                notification_service.notify_agreement_updated(
+                    recipient_id=freelancer_id,
+                    agreement_title=agreement_title,
+                    agreement_id=agreement_id,
+                    project_id=project_id
+                )
+                logger.info("Agreement update notification sent to freelancer: %s for agreement: %s", freelancer_id, agreement_id)
+            elif current_user_id == freelancer_id:
+                # Freelancer updated, notify client
+                notification_service.notify_agreement_updated(
+                    recipient_id=client_id,
+                    agreement_title=agreement_title,
+                    agreement_id=agreement_id,
+                    project_id=project_id
+                )
+                logger.info("Agreement update notification sent to client: %s for agreement: %s", client_id, agreement_id)
+            # If admin updated, notify both parties
+            elif user.get("role") == "SA":
+                notification_service.notify_agreement_updated(
+                    recipient_id=client_id,
+                    agreement_title=agreement_title,
+                    agreement_id=agreement_id,
+                    project_id=project_id
+                )
+                notification_service.notify_agreement_updated(
+                    recipient_id=freelancer_id,
+                    agreement_title=agreement_title,
+                    agreement_id=agreement_id,
+                    project_id=project_id
+                )
+                logger.info("Agreement update notification sent to both parties for agreement: %s", agreement_id)
+        except Exception as e:
+            logger.warning("Failed to send agreement update notification (agreement still updated): %s", e)
+            # Continue even if notification fails - agreement is already updated
+        
         return updated
 
     def cancel_agreement(self, agreement_id: str, user: Dict[str, Any], reason: Optional[str] = None):
