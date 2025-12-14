@@ -32,6 +32,7 @@ from app.routes import otp
 from app.routes import notification
 from app.routes import meeting
 from app.routes import storage
+from app.routes import linkedin
 from app.core.scheduler import milestone_scheduler
 import time
 
@@ -303,6 +304,7 @@ app.include_router(otp.router)
 app.include_router(notification.router)
 app.include_router(meeting.router)
 app.include_router(storage.router)
+app.include_router(linkedin.router)
 
 
 user_service = UserService()
