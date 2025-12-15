@@ -40,3 +40,31 @@ class ProjectRepository:
             query["background_industry"] = background
         cursor = self.collection.find(query, {"_id": 0}).sort("created_at", -1).limit(limit)
         return list(cursor)
+
+    def find_recent_projects(self, hours: int = 24, limit: int = 20) -> List[Dict[str, Any]]:
+        """Find projects created within the last N hours, only enabled projects
+        Note: Projects are stored with UTC timestamps, but we calculate the cutoff
+        based on IST (UTC+5:30) to match user expectations in India.
+        """
+        from datetime import datetime, timedelta, timezone
+        # IST is UTC+5:30
+        ist_offset = timedelta(hours=5, minutes=30)
+        ist_timezone = timezone(ist_offset)
+        
+        # Get current time in IST
+        now_ist = datetime.now(ist_timezone)
+        
+        # Calculate cutoff time in IST (N hours ago)
+        cutoff_ist = now_ist - timedelta(hours=hours)
+        
+        # Convert IST cutoff time back to UTC for database query
+        # Since created_at is stored in UTC, we need to convert the IST cutoff to UTC
+        cutoff_utc = cutoff_ist.astimezone(timezone.utc)
+        cutoff_time = int(cutoff_utc.timestamp())
+        
+        query = {
+            "status": "enabled",
+            "created_at": {"$exists": True, "$gte": cutoff_time}
+        }
+        cursor = self.collection.find(query, {"_id": 0}).sort("created_at", -1).limit(limit)
+        return list(cursor)

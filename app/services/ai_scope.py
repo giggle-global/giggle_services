@@ -309,6 +309,10 @@ class AIScopeService:
         }
         location_preference = location_pref_map.get(payload.location_preference, "anywhere")
 
+        # Extract budget min/max from suggestion to preserve original AI-generated range
+        budget_min = budget_object.get("min")
+        budget_max = budget_object.get("max")
+        
         project_payload = ProjectCreate(
             title=payload.project_title or suggestion.scope_summary[:60],
             platform="Web/Mobile",
@@ -324,6 +328,8 @@ class AIScopeService:
             content_sections=suggestion.content_sections,
             key_features=suggestion.key_features,
             tone=suggestion.tone,
+            budget_min=float(budget_min) if budget_min is not None else None,
+            budget_max=float(budget_max) if budget_max is not None else None,
         )
 
         created_project = self.project_service.create(project_payload, current_user=current_user)

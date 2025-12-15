@@ -229,11 +229,20 @@ async def ws_project(request_id: str, websocket: WebSocket, token: Optional[str]
             await websocket.send_json({"error": "Request has no associated project"})
             await websocket.close()
             return
-        project_details = project_service.get(project_id)
-        if not project_details:
-            await websocket.send_json({"error": "Project not found"})
-            await websocket.close()
-            return
+        
+        # Get project details - handle HTTPException if project not found
+        # Note: We allow chat to work even if project doesn't exist, as long as request exists
+        project_details = None
+        try:
+            project_details = project_service.get(project_id)
+            print(f"✅ Project found: {project_id}")
+        except HTTPException as e:
+            print(f"⚠️ Project not found: {project_id}, but allowing chat to continue with request_id")
+            # Don't close connection - allow chat to work even without project
+            # The project might have been deleted but chat history should still be accessible
+        except Exception as e:
+            print(f"⚠️ Error getting project: {project_id}, error: {str(e)}, but allowing chat to continue")
+            # Don't close connection - allow chat to work even if project lookup fails
 
         # If caller is not privileged, make sure they are part of the project participants
         if not _is_privileged(caller):
@@ -258,9 +267,21 @@ async def ws_project(request_id: str, websocket: WebSocket, token: Optional[str]
         chat_service = ChatService()
 
         # Send last N messages
-        history = chat_service.get_chat_history("project", project_id, limit=100)
-        for h in history:
-            await websocket.send_json({"type": "history", "payload": h})
+        try:
+            history = chat_service.get_chat_history("project", project_id, limit=100)
+            print(f"📜 Retrieved {len(history)} history messages for project {project_id}")
+            for h in history:
+                try:
+                    await websocket.send_json({"type": "history", "payload": h})
+                except Exception as send_error:
+                    print(f"❌ Error sending history message: {send_error}")
+                    traceback.print_exc()
+                    raise
+        except Exception as history_error:
+            print(f"❌ Error getting/sending chat history: {history_error}")
+            traceback.print_exc()
+            await websocket.send_json({"error": f"Failed to load chat history: {str(history_error)}"})
+            raise
 
         # Main loop
         while True:
@@ -283,15 +304,26 @@ async def ws_project(request_id: str, websocket: WebSocket, token: Optional[str]
             await websocket_manager.send_to_group(f"project::{project_id}", payload)
 
     except WebSocketDisconnect:
+        print("🔌 Project WebSocket disconnected normally")
         pass
     except Exception as e:
+        error_msg = f"Project WebSocket error: {str(e)}"
+        print(f"❌ {error_msg}")
         traceback.print_exc()
         try:
-            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
-        except Exception:
-            pass
+            # Try to send error message to client before closing
+            try:
+                await websocket.send_json({"error": error_msg, "type": "error"})
+            except:
+                pass  # If we can't send, just close
+            await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason=error_msg)
+        except Exception as close_error:
+            print(f"❌ Error closing Project WebSocket: {close_error}")
     finally:
-        await websocket_manager.disconnect(websocket)
+        try:
+            await websocket_manager.disconnect(websocket)
+        except Exception as disconnect_error:
+            print(f"❌ Error disconnecting Project WebSocket from manager: {disconnect_error}")
 
 
 @router.websocket("/ws/agreement/{agreement_id}")

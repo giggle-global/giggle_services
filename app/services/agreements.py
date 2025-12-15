@@ -313,10 +313,27 @@ class AgreementService:
             update_payload["platform_fee_amount"] = platform_fee_amount
             update_payload["freelancer_net_amount"] = freelancer_net_amount
 
-        # Reset both acceptance flags when agreement is updated (new version created)
-        # Both parties need to accept the new version after any update
-        update_payload["client_accepted_version"] = False
-        update_payload["freelancer_accepted_version"] = False
+        # Track who updated the agreement
+        current_user_id = user.get("user_id")
+        client_id = ag["client"]["user_id"]
+        freelancer_id = ag["freelancer"]["user_id"]
+        update_payload["last_updated_by"] = current_user_id
+        
+        # Reset acceptance flags when agreement is updated (new version created)
+        # The updater implicitly accepts their own version (auto-accept)
+        # Only the other party needs to explicitly accept
+        if current_user_id == client_id:
+            # Client updated: auto-accept for client, reset freelancer's acceptance
+            update_payload["client_accepted_version"] = True
+            update_payload["freelancer_accepted_version"] = False
+        elif current_user_id == freelancer_id:
+            # Freelancer updated: auto-accept for freelancer, reset client's acceptance
+            update_payload["freelancer_accepted_version"] = True
+            update_payload["client_accepted_version"] = False
+        else:
+            # Admin updated: reset both flags (admin doesn't auto-accept)
+            update_payload["client_accepted_version"] = False
+            update_payload["freelancer_accepted_version"] = False
 
         updated = self.repo.update(agreement_id, update_payload)
         
@@ -464,6 +481,14 @@ class AgreementService:
         
         if not (is_client or is_freelancer):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Not authorized to accept agreement version")
+        
+        # Prevent accepting your own version if you updated it (updating = implicit acceptance)
+        last_updated_by = ag.get("last_updated_by")
+        if accepted and last_updated_by and user["user_id"] == last_updated_by:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "You cannot accept your own version. Updating the agreement automatically accepts it for you."
+            )
         
         # Cannot unaccept if either party has already signed
         if not accepted and (ag.get("client_signed") or ag.get("freelancer_signed")):

@@ -191,6 +191,7 @@ class AgreementInDB(BaseModel):
     created_by: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+    last_updated_by: Optional[str] = None  # Track who last updated the agreement
     cancelled_reason: Optional[str] = None
     exported_pdf_url: Optional[str] = None
     draft: bool = True

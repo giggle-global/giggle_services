@@ -15,6 +15,13 @@ class ThemeEnum(str, Enum):
     DARK = "DARK"
 
 
+class AvailabilityEnum(str, Enum):
+    """Freelancer availability based on hours per week"""
+    LOW = "low"  # max 10hr/wk
+    MEDIUM = "medium"  # 10-30hr/wk
+    IMMEDIATE = "immediate"  # 30+hr/wk
+
+
 class NotificationService(BaseModel):
     email: bool = Field(False, example=True)
     # sms: bool = Field(False, example=False)
@@ -166,10 +173,12 @@ class UserUpdate(BaseModel):
     payment_information: Optional[PaymentInformation] = None
     skill_set: Optional[List[str]] = Field(None, example=["Python", "FastAPI", "MongoDB"])
 
-    # Freelancer-specific fields for matching algorithm
+    # Location and matching fields (available for both client and freelancer)
     location_info: Optional[LocationInfo] = None
+    # Freelancer-specific fields for matching algorithm
     interested_industries: Optional[List[str]] = Field(None, example=["F&B", "Healthcare", "E-commerce"])
     ongoing_gigs_count: Optional[int] = Field(0, example=2, description="Number of active gigs")
+    availability: Optional[AvailabilityEnum] = Field(None, example=AvailabilityEnum.MEDIUM.value, description="Freelancer availability: low (max 10hr/wk), medium (10-30hr/wk), immediate (30+hr/wk)")
     
     #client-specific fields
     contact_info: Optional[ContactInfo] = None
@@ -204,7 +213,8 @@ class UserUpdate(BaseModel):
                     "theme": "LIGHT",
                     "timezone": "UTC+05:30",
                     "currency": "INR"
-                }
+                },
+                "availability": "medium"
             }
         }
 

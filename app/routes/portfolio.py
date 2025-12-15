@@ -1,10 +1,14 @@
 # app/routes/portfolio.py
 from fastapi import APIRouter, Depends, Query, status, HTTPException
 from typing import Dict, Any, Optional
+import logging
 from app.core.keycloak import get_current_user
 from app.schemas.response import APIResponse, ok
 from app.models.portfolio import ProjectCreate, ProjectUpdate
 from app.services.portfolio import PortfolioService
+from app.services.user import UserService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
 
@@ -26,10 +30,42 @@ def list_projects(
     current_user: Dict[str, Any] = Depends(get_current_user),
     svc: PortfolioService = Depends(get_portfolio_service),
 ):
-    # Allow super admin to view any user's portfolio; others can only view their own
+    requester_role = current_user.get("role")
     requested_user_id = user_id or current_user.get("user_id")
-    if user_id and current_user.get("role") != "SA":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed to view this portfolio")
+    
+    # If viewing someone else's portfolio, check permissions
+    if user_id and user_id != current_user.get("user_id"):
+        # Super Admin can view any portfolio
+        if requester_role == "SA":
+            pass  # Allow
+        # Clients can view freelancer portfolios
+        elif requester_role == "CL":
+            # Verify the target user is a freelancer
+            user_svc = UserService()
+            target_user = user_svc.get_user(user_id=user_id)
+            if target_user.get("role") != "FL" or target_user.get("status") != "ACTIVE":
+                logger.warning(
+                    "Client attempted to view unauthorized portfolio. requester=%s target_role=%s target_status=%s",
+                    current_user.get("user_id"),
+                    target_user.get("role"),
+                    target_user.get("status")
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN, 
+                    detail="Clients can only view active freelancer portfolios"
+                )
+        else:
+            # Others can only view their own portfolio
+            logger.warning(
+                "Unauthorized portfolio access attempt. requester_role=%s requester=%s target=%s",
+                requester_role,
+                current_user.get("user_id"),
+                user_id
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail="Not allowed to view this portfolio"
+            )
 
     projects = svc.list_for_user(requested_user_id, limit, skip)
     return ok(projects, "Projects fetched", status_code=status.HTTP_200_OK)

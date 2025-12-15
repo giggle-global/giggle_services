@@ -42,6 +42,9 @@ class ProjectBase(BaseModel):
     content_sections: Optional[List[str]] = Field(None, description="AI recommended content/deliverables")
     key_features: Optional[List[str]] = Field(None, description="AI recommended key features")
     tone: Optional[str] = Field(None, description="Suggested tone/style")
+    # Budget range fields (optional) - stores original AI-generated budget range
+    budget_min: Optional[float] = Field(None, description="Original minimum budget from AI suggestion")
+    budget_max: Optional[float] = Field(None, description="Original maximum budget from AI suggestion")
 
 class ProjectCreate(ProjectBase):
     pass
@@ -62,3 +65,4 @@ class ProjectOut(ProjectBase):
     id: str
     status: ProjectStatus = ProjectStatus.enabled
     has_review: Optional[bool] = Field(None, description="Flag indicating if project has received a review")
+    created_at: Optional[int] = Field(None, description="Unix timestamp when project was created")

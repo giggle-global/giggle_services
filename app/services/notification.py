@@ -263,7 +263,7 @@ class NotificationService:
             user_id=client_id,
             notification_type=NotificationType.REQUEST_ACCEPTED,
             title="Request Accepted",
-            message=f"{freelancer_name} has accepted your request for the project: {project_title}",
+            message=f"Your request has been accepted for the project: {project_title}",
             data={
                 "request_id": request_id,
                 "project_id": project_id,
