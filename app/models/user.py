@@ -73,6 +73,7 @@ class UserBase(BaseModel):
     kyc: Optional[bool] = Field(False, example=True)
     first_intro_done: Optional[bool] = Field(False, example=True)
     email_verified: bool = Field(False, example=True)
+    phone_verified: bool = Field(False, example=True)
 
 
 class UserCreate(UserBase):
@@ -132,6 +133,10 @@ class ContactInfo(BaseModel):
     timezone: Optional[str] = Field(None, example="UTC+05:30")
     secondary_phone: Optional[str] = Field(None, example="+919812345678")
     secondary_email: Optional[EmailStr] = Field(None, example="alt@example.com")
+    linkedin_verified: bool = Field(False, example=True)
+    linkedin_profile_id: Optional[str] = Field(None, example="abcd1234")
+    linkedin_vanity: Optional[str] = Field(None, example="johndoe")
+    linkedin_verified_at: Optional[int] = Field(None, example=1700000000)
 
 class CompanyContactInfo(BaseModel):
     contact_person: Optional[str] = Field(None, example="Jane Doe")

@@ -11,6 +11,7 @@ OTP_CODE_LENGTH = 4
 class OTPPurpose(str, Enum):
     SIGNUP = "signup"
     PASSWORD_RESET = "password_reset"
+    PHONE_VERIFY = "phone_verify"
 
 
 class OTPVerificationBase(BaseModel):

@@ -130,7 +130,7 @@
 # app/router/chat_router.py
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query, HTTPException
 from starlette import status
-from typing import Optional
+from typing import Optional, Dict, Any
 from app.services.chat import ChatService, WebSocketManager
 from app.services.request import RequestService
 from app.services.user import UserService
@@ -138,6 +138,7 @@ from app.core.keycloak import get_current_user, _validate_token_and_get_user
 from app.services.project import ProjectService
 from app.services.agreements import AgreementService
 from app.services.ticket import TicketService
+from app.schemas.response import APIResponse, ok
 import traceback
 import asyncio
 
@@ -751,3 +752,80 @@ async def ws_private(
             pass
     finally:
         await websocket_manager.disconnect(websocket)
+
+
+# HTTP endpoints for unread message counts
+@router.get("/chat/unread-count", response_model=APIResponse[Dict[str, Any]])
+def get_unread_counts(
+    group_type: str = Query(..., description="Type of chat: 'project', 'agreement', or 'private'"),
+    group_id: str = Query(..., description="Group ID (project_id, agreement_id, or private chat group_id)"),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Get unread message count for a specific chat group"""
+    try:
+        chat_service = ChatService()
+        user_id = current_user.get("user_id")
+        count = chat_service.get_unseen_count(group_type, group_id, user_id)
+        return ok(
+            data={"group_type": group_type, "group_id": group_id, "unread_count": count},
+            message=f"Unread count: {count}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching unread count: {str(e)}"
+        )
+
+
+@router.post("/chat/mark-read", response_model=APIResponse[Dict[str, Any]])
+def mark_messages_as_read(
+    group_type: str = Query(..., description="Type of chat: 'project', 'agreement', or 'private'"),
+    group_id: str = Query(..., description="Group ID (project_id, agreement_id, or private chat group_id)"),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Mark all messages in a chat group as read for the current user"""
+    try:
+        chat_service = ChatService()
+        user_id = current_user.get("user_id")
+        marked_count = chat_service.mark_seen(group_type, group_id, user_id)
+        return ok(
+            data={"group_type": group_type, "group_id": group_id, "marked_count": marked_count},
+            message=f"Marked {marked_count} messages as read"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error marking messages as read: {str(e)}"
+        )
+
+
+@router.get("/chat/unread-counts/batch", response_model=APIResponse[Dict[str, int]])
+def get_batch_unread_counts(
+    groups: str = Query(..., description="Comma-separated list of group_type:group_id pairs (e.g., 'project:proj1,agreement:agr1')"),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Get unread counts for multiple chat groups at once"""
+    try:
+        chat_service = ChatService()
+        user_id = current_user.get("user_id")
+        counts = {}
+        
+        # Parse groups string: "type1:id1,type2:id2,..."
+        group_pairs = [pair.strip() for pair in groups.split(",") if pair.strip()]
+        for pair in group_pairs:
+            if ":" not in pair:
+                continue
+            group_type, group_id = pair.split(":", 1)
+            count = chat_service.get_unseen_count(group_type.strip(), group_id.strip(), user_id)
+            # Use group_id as key for easy lookup
+            counts[group_id.strip()] = count
+        
+        return ok(
+            data=counts,
+            message=f"Retrieved unread counts for {len(counts)} groups"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching batch unread counts: {str(e)}"
+        )

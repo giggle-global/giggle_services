@@ -35,6 +35,25 @@ class UserRepository:
     def _attach_defaults(self, user: Optional[dict]) -> Optional[dict]:
         if user is not None and "email_verified" not in user:
             user["email_verified"] = False
+        if user is not None and "phone_verified" not in user:
+            user["phone_verified"] = False
+        if user is not None:
+            contact_info = user.get("contact_info") or {}
+            # Only reset LinkedIn verification if there's no profile_id (meaning OAuth never succeeded)
+            # If profile_id exists, keep verification status even if URL is missing (vanityName not available from API)
+            if not contact_info.get("linkedin_profile_id"):
+                # No OAuth profile_id means never verified - clear all LinkedIn fields
+                contact_info["linkedin_verified"] = False
+                contact_info.pop("linkedin_profile_id", None)
+                contact_info.pop("linkedin_vanity", None)
+                contact_info.pop("linkedin_verified_at", None)
+            else:
+                # OAuth succeeded (profile_id exists) - preserve verification status
+                # If linkedin_verified is not set but profile_id exists, set it to True (verification succeeded)
+                if "linkedin_verified" not in contact_info:
+                    contact_info["linkedin_verified"] = True
+                # Otherwise, preserve whatever value is there (True or False)
+            user["contact_info"] = contact_info
         
         # Convert first_edit_date to IST if it exists (MongoDB stores as UTC)
         if user and "first_edit_date" in user and user["first_edit_date"]:
@@ -114,19 +133,56 @@ class UserRepository:
     #     return self.get_user_by_id(user_id)
     
     def update_user(self, user_id: str, update_payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        logger.info(f"[DEBUG] update_user called for user_id: {user_id}")
+        logger.info(f"[DEBUG] update_payload: {update_payload}")
 
         update_payload["audit_log.updated_at"] = datetime.now(timezone.utc)
         update_payload["audit_log.updated_by"] = user_id
 
+        # Special handling for contact_info - merge with existing if it's a dict
+        # Also handle null values in nested objects for unsetting fields
+        if "contact_info" in update_payload and isinstance(update_payload["contact_info"], dict):
+            existing_user = self.get_user_by_id(user_id)
+            existing_contact_info = existing_user.get("contact_info") or {} if existing_user else {}
+            
+            # Merge existing with new, new values take precedence
+            merged_contact_info = {**existing_contact_info, **update_payload["contact_info"]}
+            
+            # Extract null values from nested contact_info for $unset
+            unset_contact_fields = []
+            for key, value in update_payload["contact_info"].items():
+                if value is None:
+                    unset_contact_fields.append(f"contact_info.{key}")
+                    # Remove from merged so it doesn't get set to null
+                    merged_contact_info.pop(key, None)
+            
+            update_payload["contact_info"] = merged_contact_info
+            logger.info(f"[DEBUG] Merged contact_info: {merged_contact_info}")
+            if unset_contact_fields:
+                logger.info(f"[DEBUG] Fields to unset in contact_info: {unset_contact_fields}")
+                # Store unset fields separately to add to unset_ops later
+                update_payload["_unset_contact_fields"] = unset_contact_fields
+
         # build $set and $unset based on presence of keys and explicit None values
         set_ops = {}
         unset_ops = {}
+        
+        # Handle unset fields from contact_info first
+        if "_unset_contact_fields" in update_payload:
+            for field_path in update_payload.pop("_unset_contact_fields"):
+                unset_ops[field_path] = ""
+        
         for k, v in update_payload.items():
             if v is None:
                 unset_ops[k] = ""   # remove fields explicitly set to null
             else:
                 set_ops[k] = v
+
+        logger.info(f"[DEBUG] set_ops: {set_ops}")
+        logger.info(f"[DEBUG] unset_ops: {unset_ops}")
 
         update_clause = {}
         if set_ops:
@@ -138,13 +194,18 @@ class UserRepository:
             # nothing to do
             return self.get_user_by_id(user_id)
 
+        logger.info(f"[DEBUG] MongoDB update_clause: {update_clause}")
         result = self.collection.update_one({"user_id": user_id}, update_clause)
+        logger.info(f"[DEBUG] MongoDB update result - matched: {result.matched_count}, modified: {result.modified_count}")
 
         if result.matched_count == 0:
+            logger.error(f"[DEBUG] No user found with user_id: {user_id}")
             return None
 
         # Return fresh document
-        return self.get_user_by_id(user_id)
+        updated_user = self.get_user_by_id(user_id)
+        logger.info(f"[DEBUG] Updated user contact_info: {updated_user.get('contact_info') if updated_user else 'None'}")
+        return updated_user
     
     def update_user_skills(self, user_id: str, skills_payload: list) -> dict:
         """

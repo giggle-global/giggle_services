@@ -101,6 +101,27 @@ class OTPService:
                   </body>
                 </html>
             """
+        elif purpose == OTPPurpose.PHONE_VERIFY:
+            subject = "Giggle – Verify Your Phone"
+            body_text = (
+                f"We received a request to verify the phone number associated with {email}.\n\n"
+                f"Your verification code is {otp_code}. It expires in {ttl_minutes} minutes.\n"
+                "If you didn’t request this, you can safely ignore this email."
+            )
+            body_html = f"""
+                <html>
+                  <body style="font-family: Arial, sans-serif; color: #0f172a;">
+                    <h2 style="color:#2563eb;">Verify your phone</h2>
+                    <p>Hi there,</p>
+                    <p>Use the code below to verify your phone number for <strong>{email}</strong>.</p>
+                    <p style="font-size: 18px; letter-spacing: 6px; font-weight: bold; color: #111827;">
+                      {otp_code}
+                    </p>
+                    <p>This code expires in <strong>{ttl_minutes} minutes</strong>. If you didn’t request this, you can ignore this email.</p>
+                    <p style="margin-top:24px;">Thanks,<br/>Giggle Support</p>
+                  </body>
+                </html>
+            """
         else:
             subject = "Giggle – Verify Your Email"
             body_text = (

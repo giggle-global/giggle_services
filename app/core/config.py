@@ -66,6 +66,12 @@ if not config:
     config["rabbitmq_password"] = os.environ.get("RABBITMQ_PASSWORD", "guest")
     config["rabbitmq_vhost"] = os.environ.get("RABBITMQ_VHOST", "/")
 
+    # LinkedIn OAuth (optional)
+    config["linkedin_client_id"] = os.environ.get("LINKEDIN_CLIENT_ID", "")
+    config["linkedin_client_secret"] = os.environ.get("LINKEDIN_CLIENT_SECRET", "")
+    config["linkedin_redirect_uri"] = os.environ.get("LINKEDIN_REDIRECT_URI", "")
+    config["linkedin_scopes"] = os.environ.get("LINKEDIN_SCOPES", "openid profile email")
+
     config = dotdict(config)
 
 # Log email configuration status (without sensitive data)
