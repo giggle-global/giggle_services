@@ -307,6 +307,13 @@ class ChatService:
     def get_unseen_count(self, group_type: str, group_id: str, user_id: str) -> int:
         return self.repo.get_unseen_count(group_type, group_id, user_id)
 
+    def get_unseen_conversation_count_for_user(self, user_id: str) -> int:
+        """
+        Return the number of distinct conversations (group_type + group_id)
+        that have at least one unseen message for the given user.
+        """
+        return self.repo.get_unseen_conversation_count_for_user(user_id)
+
     def _generate_private_group_id(self, user1_id: str, user2_id: str, ticket_id: Optional[str] = None) -> str:
         """
         Generate consistent group_id for private chat by sorting user IDs.

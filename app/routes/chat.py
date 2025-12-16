@@ -829,3 +829,25 @@ def get_batch_unread_counts(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error fetching batch unread counts: {str(e)}"
         )
+
+
+@router.get("/chat/unread-conversations-count", response_model=APIResponse[Dict[str, int]])
+def get_unread_conversations_count(
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Get the number of distinct conversations that have unread messages for the current user.
+    """
+    try:
+        chat_service = ChatService()
+        user_id = current_user.get("user_id")
+        count = chat_service.get_unseen_conversation_count_for_user(user_id)
+        return ok(
+            data={"count": count},
+            message=f"Unread conversations: {count}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching unread conversations count: {str(e)}"
+        )
