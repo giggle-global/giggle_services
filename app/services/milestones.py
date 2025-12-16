@@ -4,6 +4,8 @@ from app.models.milestones import MilestoneCreate, MilestoneInDB, MilestoneUpdat
 from app.repositories.milestones import MilestoneRepository
 from app.repositories.agreements import AgreementRepository
 from app.repositories.review import ReviewRepository
+from app.repositories.project import ProjectRepository
+from app.repositories.portfolio import PortfolioRepository
 from app.services.notification import NotificationService
 from app.models.notification import NotificationType
 from fastapi import HTTPException, status
@@ -19,6 +21,8 @@ class MilestoneService:
         self.agreement_repo = AgreementRepository()
         self.review_repo = ReviewRepository()
         self.notification_service = NotificationService()
+        self.project_repo = ProjectRepository()
+        self.portfolio_repo = PortfolioRepository()
 
     @staticmethod
     def _to_epoch(ts: datetime) -> int:
@@ -199,6 +203,51 @@ class MilestoneService:
                 if has_review:
                     # Client has given review, mark agreement as Completed
                     self.agreement_repo.update(ms["agreement_id"], {"status": "Completed"})
+
+                    # Also auto-create/update freelancer portfolio entry for this project
+                    try:
+                        project_id = agreement.get("project_id")
+                        freelancer_id = freelancer_id
+                        project = None
+                        project_name = None
+                        if project_id:
+                            try:
+                                project = self.project_repo.find_by_id(project_id)
+                                if project:
+                                    project_name = project.get("title") or project.get("project_title")
+                            except Exception:
+                                project = None
+                                project_name = None
+
+                        if freelancer_id and project_id and project:
+                            description = (
+                                project.get("scope_summary")
+                                or project.get("description")
+                                or ""
+                            )
+                            technologies = project.get("key_features") or []
+                            cover_image = project.get("cover_image")
+
+                            portfolio_payload = {
+                                "title": project_name or "Project",
+                                "description": description,
+                                "technologies": technologies,
+                                "github_link": None,
+                                "portfolio_link": None,
+                                "cover_image": cover_image,
+                            }
+
+                            self.portfolio_repo.upsert_auto_project_from_source(
+                                user_id=freelancer_id,
+                                source_project_id=project_id,
+                                base_payload=portfolio_payload,
+                            )
+                    except Exception as portfolio_err:
+                        logger.warning(
+                            "Failed to upsert portfolio entry from milestones for agreement %s: %s",
+                            agreement_id,
+                            portfolio_err,
+                        )
                 else:
                     # Client hasn't given review yet, send notifications
                     try:
@@ -209,7 +258,8 @@ class MilestoneService:
                             title="Review Required",
                             message="Agreement has been done and need the review",
                             data={"agreement_id": agreement_id, "type": "review_required"},
-                            link=f"/client/messages?agreement={agreement_id}"
+                            # Client messages page with agreement context
+                            link=f"/client/gig?agreement_id={agreement_id}"
                         )
                         # Notify freelancer: Agreement has been done
                         self.notification_service.create_notification(
@@ -218,7 +268,8 @@ class MilestoneService:
                             title="Agreement Completed",
                             message="Agreement has been done",
                             data={"agreement_id": agreement_id, "type": "agreement_done"},
-                            link=f"/freelancer/messages?agreement={agreement_id}"
+                            # Freelancer messages page with agreement context
+                            link=f"/freelancer/gig?agreement_id={agreement_id}"
                         )
                     except Exception as e:
                         logger.warning(f"Failed to send notifications for agreement {agreement_id}: {e}")
@@ -534,7 +585,7 @@ class MilestoneService:
                             title="Review Required",
                             message="Agreement has been done and need the review",
                             data={"agreement_id": agreement_id, "type": "review_required"},
-                            link=f"/client/messages?agreement={agreement_id}"
+                            link=f"/client/milestone?agreement_id={agreement_id}"
                         )
                         # Notify freelancer: Agreement has been done
                         self.notification_service.create_notification(
@@ -543,7 +594,7 @@ class MilestoneService:
                             title="Agreement Completed",
                             message="Agreement has been done",
                             data={"agreement_id": agreement_id, "type": "agreement_done"},
-                            link=f"/freelancer/messages?agreement={agreement_id}"
+                            link=f"/freelancer/gig?agreement_id={agreement_id}"
                         )
                     except Exception as e:
                         logger.warning(f"Failed to send notifications for agreement {agreement_id}: {e}")

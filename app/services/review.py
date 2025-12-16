@@ -7,6 +7,7 @@ from app.repositories.user import UserRepository
 from app.repositories.agreements import AgreementRepository
 from app.repositories.project import ProjectRepository
 from app.repositories.milestones import MilestoneRepository
+from app.repositories.portfolio import PortfolioRepository
 from app.models.review import ReviewCreate, ReviewUpdate, ReviewOut, RoleEnum
 from app.models.milestones import MilestoneStatus
 from app.services.notification import NotificationService
@@ -21,6 +22,7 @@ class ReviewService:
         self.agreement_repo = AgreementRepository()
         self.project_repo = ProjectRepository()
         self.milestone_repo = MilestoneRepository()
+        self.portfolio_repo = PortfolioRepository()
         self.notification_service = NotificationService()
 
     def create_review(self, review_in: ReviewCreate, current_user: dict) -> dict:
@@ -64,13 +66,15 @@ class ReviewService:
             if agreement:
                 freelancer_id = agreement.get("freelancer", {}).get("user_id")
                 if freelancer_id:
+                    # When freelancer receives a review, route them to the milestone
+                    # view for this agreement so they can see the review details.
                     self.notification_service.create_notification(
                         user_id=freelancer_id,
                         notification_type=NotificationType.AGREEMENT_UPDATED,
                         title="Review Received",
                         message="Client has given a review for the agreement",
                         data={"agreement_id": review_in.gig_id, "type": "review_received"},
-                        link=f"/freelancer/messages?agreement={review_in.gig_id}"
+                        link=f"/freelancer/milestone?agreement_id={review_in.gig_id}",
                     )
         except Exception as e:
             logger.warning(f"Failed to send notification to freelancer after review creation: {e}")
@@ -92,7 +96,8 @@ class ReviewService:
             logger.warning(f"Failed to update has_review flag for project {project_id}: {e}")
     
     def _check_and_complete_agreement(self, agreement_id: str) -> None:
-        """Check if all milestones are completed with payment received, and if so, mark agreement as Completed and notify freelancer"""
+        """Check if all milestones are completed with payment received, and if so,
+        mark agreement as Completed and notify both client and freelancer."""
         try:
             # Get agreement
             agreement = self.agreement_repo.get_by_id(agreement_id)
@@ -104,7 +109,7 @@ class ReviewService:
             if agreement.get("status") == "Completed":
                 return
             
-            # Get all milestones for this agreement
+            # Get all milestones for this agreementl
             milestones = self.milestone_repo.list_for_agreement(agreement_id)
             if not milestones or len(milestones) == 0:
                 return
@@ -121,7 +126,110 @@ class ReviewService:
             
             if all_fully_completed:
                 # All milestones are completed with payment received, mark agreement as Completed
-                self.agreement_repo.update(agreement_id, {"status": "Completed"})
+                updated_agreement = self.agreement_repo.update(agreement_id, {"status": "Completed"})
+
+                # Send completion notifications to both parties.
+                # Use the freshly-updated agreement data if available, otherwise fall back
+                # to the previously-fetched agreement document.
+                try:
+                    ag = updated_agreement or agreement
+                    client_id = ag.get("client", {}).get("user_id")
+                    freelancer_id = ag.get("freelancer", {}).get("user_id")
+
+                    # Resolve project and name for contextual notification text
+                    project = None
+                    project_name = None
+                    project_id = ag.get("project_id")
+                    if project_id:
+                        try:
+                            project = self.project_repo.find_by_id(project_id)
+                            if project:
+                                project_name = project.get("title") or project.get("project_title")
+                        except Exception:
+                            project = None
+                            project_name = None
+
+                    # Notify client that the agreement is fully completed
+                    if client_id:
+                        self.notification_service.create_notification(
+                            user_id=client_id,
+                            notification_type=NotificationType.AGREEMENT_COMPLETED,
+                            title="Agreement Completed",
+                            message=(
+                                f'Work for project "{project_name}" has been fully completed.'
+                                if project_name
+                                else "Work for this project has been fully completed."
+                            ),
+                            data={
+                                "agreement_id": agreement_id,
+                                "project_id": project_id,
+                                "project_name": project_name,
+                                "type": "agreement_completed",
+                            },
+                            # Client messages page with agreement context
+                            link=f"/client/messages?agreement_id={agreement_id}",
+                        )
+
+                    # Notify freelancer that the agreement is fully completed
+                    if freelancer_id:
+                        self.notification_service.create_notification(
+                            user_id=freelancer_id,
+                            notification_type=NotificationType.AGREEMENT_COMPLETED,
+                            title="Agreement Completed",
+                            message=(
+                                f'Work for project "{project_name}" has been fully completed.'
+                                if project_name
+                                else "Work for this project has been fully completed."
+                            ),
+                            data={
+                                "agreement_id": agreement_id,
+                                "project_id": project_id,
+                                "project_name": project_name,
+                                "type": "agreement_completed",
+                            },
+                            # Freelancer messages page with agreement context
+                            link=f"/freelancer/messages?agreement_id={agreement_id}",
+                        )
+
+                    # Auto-create or update freelancer portfolio entry for this project
+                    try:
+                        if freelancer_id and project_id and project:
+                            description = (
+                                project.get("scope_summary")
+                                or project.get("description")
+                                or ""
+                            )
+                            technologies = project.get("key_features") or []
+                            cover_image = project.get("cover_image")
+
+                            portfolio_payload = {
+                                "title": project_name or "Project",
+                                "description": description,
+                                "technologies": technologies,
+                                "github_link": None,
+                                "portfolio_link": None,
+                                "cover_image": cover_image,
+                            }
+
+                            self.portfolio_repo.upsert_auto_project_from_source(
+                                user_id=freelancer_id,
+                                source_project_id=project_id,
+                                base_payload=portfolio_payload,
+                            )
+                    except Exception as portfolio_err:
+                        # Do not fail completion if portfolio upsert fails
+                        logger.warning(
+                            "Failed to upsert portfolio entry for agreement %s: %s",
+                            agreement_id,
+                            portfolio_err,
+                        )
+                except Exception as notif_err:
+                    # Do not fail review flow if notifications cannot be sent
+                    logger.warning(
+                        "Failed to send agreement completion notifications for %s: %s",
+                        agreement_id,
+                        notif_err,
+                    )
         except Exception as e:
             # Log error but don't fail the review creation
             logger.warning(f"Failed to check and complete agreement {agreement_id}: {e}")

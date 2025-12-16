@@ -69,6 +69,102 @@ class PortfolioRepository:
         """Alias for find_by_user (for matching algorithm compatibility)"""
         return self.find_by_user(user_id)
 
+    def find_one_by_user_and_source_project(
+        self,
+        user_id: str,
+        source_project_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Find a single portfolio entry for a given user that was auto-created
+        from a specific project (source_project_id). Used for idempotent
+        upsert when agreements are completed.
+        """
+        try:
+            doc = self.col.find_one(
+                {
+                    "user_id": user_id,
+                    "source_project_id": source_project_id,
+                    "status": {"$ne": "deleted"},
+                }
+            )
+            return self._to_out(doc)
+        except PyMongoError:
+            logger.exception(
+                "Mongo error fetching portfolio by user_id=%s and source_project_id=%s",
+                user_id,
+                source_project_id,
+            )
+            raise
+
+    def upsert_auto_project_from_source(
+        self,
+        user_id: str,
+        source_project_id: str,
+        base_payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        Idempotently create or update a portfolio project for a freelancer
+        based on a source project (from the main projects collection).
+
+        - Ensures at most one active portfolio entry per (user_id, source_project_id)
+        - Updates core fields (title, description, technologies, links, cover_image)
+        """
+        try:
+            existing = self.col.find_one(
+                {
+                    "user_id": user_id,
+                    "source_project_id": source_project_id,
+                    "status": {"$ne": "deleted"},
+                }
+            )
+
+            now = datetime.utcnow()
+            if existing:
+                update_fields = {
+                    "title": base_payload.get("title", existing.get("title")),
+                    "description": base_payload.get(
+                        "description", existing.get("description")
+                    ),
+                    "technologies": base_payload.get(
+                        "technologies", existing.get("technologies")
+                    ),
+                    "github_link": base_payload.get(
+                        "github_link", existing.get("github_link")
+                    ),
+                    "portfolio_link": base_payload.get(
+                        "portfolio_link", existing.get("portfolio_link")
+                    ),
+                    "cover_image": base_payload.get(
+                        "cover_image", existing.get("cover_image")
+                    ),
+                    "updated_at": now,
+                }
+                update_fields = jsonable_encoder(update_fields)
+                self.col.update_one({"id": existing.get("id")}, {"$set": update_fields})
+                doc = self.col.find_one({"id": existing.get("id")})
+                return self._to_out(doc)
+
+            # Create new entry
+            payload = base_payload.copy()
+            payload["id"] = uuid.uuid4().hex
+            payload["user_id"] = user_id
+            payload["source_project_id"] = source_project_id
+            payload.setdefault("status", "active")
+            payload.setdefault("created_at", now)
+            payload.setdefault("updated_at", now)
+
+            payload = jsonable_encoder(payload)
+            self.col.insert_one(payload)
+            doc = self.col.find_one({"id": payload["id"]})
+            return self._to_out(doc)
+        except PyMongoError:
+            logger.exception(
+                "Mongo error upserting auto portfolio project for user_id=%s source_project_id=%s",
+                user_id,
+                source_project_id,
+            )
+            raise
+
     def get_by_id(self, project_id: str) -> Optional[Dict[str, Any]]:
         try:
             doc = self.col.find_one({"id": project_id})

@@ -3,6 +3,7 @@ Notification Service - Handles creating and sending notifications
 Uses RabbitMQ for async message processing
 """
 import logging
+import json
 from typing import Dict, Any, Optional
 from app.repositories.notification import NotificationRepository
 from app.repositories.user import UserRepository
@@ -44,6 +45,33 @@ class NotificationService:
             }
             
             notification = self.repo.create(notification_data)
+
+            # region agent log: debug notification creation (hypothesis H1 - stale/incorrect links)
+            try:
+                debug_payload = {
+                    "sessionId": "debug-session",
+                    "runId": "pre-fix",
+                    "hypothesisId": "H1",
+                    "location": "notification.py:create_notification",
+                    "message": "Notification created",
+                    "data": {
+                        "notification_id": notification.get("notification_id"),
+                        "user_id": user_id,
+                        "type": notification_type.value,
+                        "link": link,
+                    },
+                    "timestamp": __import__("time").time(),
+                }
+                with open(
+                    r"c:\Users\Admin\OneDrive\Desktop\Giggle__ - Copy\.cursor\debug.log",
+                    "a",
+                    encoding="utf-8",
+                ) as f:
+                    f.write(json.dumps(debug_payload) + "\n")
+            except Exception:
+                # Never break main flow for logging
+                pass
+            # endregion agent log
             
             # Publish to RabbitMQ for async processing
             try:
@@ -59,6 +87,8 @@ class NotificationService:
                     NotificationType.MILESTONE_PAYMENT_REMINDER: "milestone",
                     NotificationType.MILESTONE_PAYMENT_CONFIRMED: "milestone",
                     NotificationType.AGREEMENT_CREATED: "general",
+                    NotificationType.AGREEMENT_UPDATED: "general",
+                    NotificationType.AGREEMENT_COMPLETED: "general",
                     NotificationType.AGREEMENT_SIGN_REMINDER: "general",
                     NotificationType.DISPUTE_RAISED: "dispute",
                     NotificationType.DISPUTE_RESOLVED: "dispute",
@@ -143,7 +173,13 @@ class NotificationService:
         request_id: str,
         project_id: str
     ):
-        """Notify freelancer when they receive a request"""
+        """Notify freelancer when they receive a request.
+
+        Frontend: Requests are handled inside the unified messages page for both
+        client and freelancer. The freelancer messages route is
+        /freelancer/messages, and the component can use request_id to focus the
+        correct thread/section.
+        """
         return self.create_notification(
             user_id=freelancer_id,
             notification_type=NotificationType.REQUEST_RECEIVED,
@@ -152,10 +188,11 @@ class NotificationService:
             data={
                 "request_id": request_id,
                 "project_id": project_id,
-                "client_name": client_name
+                "client_name": client_name,
             },
-            link=f"/freelancer/gig?request_id={request_id}",
-            send_email=True
+            # Navigate to freelancer messages page, with request context
+            link=f"/freelancer/messages?request_id={request_id}",
+            send_email=True,
         )
 
     def notify_milestone_reminder(
@@ -166,7 +203,14 @@ class NotificationService:
         agreement_id: str,
         due_date: int
     ):
-        """Notify user 24 hours before milestone due date"""
+        """Notify user 24 hours before milestone due date.
+
+        Frontend: Milestones are shown via the shared MilestoneComponent mounted
+        at /client/milestone or /freelancer/milestone. We do not encode role in
+        the link here; the messages UI or caller's role will determine which
+        route to use. For now, default to the generic milestone page, which is
+        available under both client and freelancer namespaces.
+        """
         return self.create_notification(
             user_id=user_id,
             notification_type=NotificationType.MILESTONE_REMINDER,
@@ -176,10 +220,11 @@ class NotificationService:
                 "milestone_id": milestone_id,
                 "agreement_id": agreement_id,
                 "due_date": due_date,
-                "milestone_title": milestone_title
+                "milestone_title": milestone_title,
             },
+            # Generic milestone page; role-specific layout wraps this component
             link=f"/milestone?agreement_id={agreement_id}",
-            send_email=True
+            send_email=True,
         )
 
     def notify_milestone_payment_reminder(
@@ -212,7 +257,8 @@ class NotificationService:
                 "amount": amount,
                 "currency": currency,
             },
-            link=f"/client/milestones?agreement_id={agreement_id}",
+            # Route client to gig page for this agreement
+            link=f"/client/gig?agreement_id={agreement_id}",
             send_email=True,
         )
 
@@ -246,7 +292,8 @@ class NotificationService:
                 "amount": amount,
                 "currency": currency,
             },
-            link=f"/freelancer/milestones?agreement_id={agreement_id}",
+            # Route freelancer to gig page for this agreement
+            link=f"/freelancer/gig?agreement_id={agreement_id}",
             send_email=True,
         )
 

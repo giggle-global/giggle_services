@@ -14,6 +14,7 @@ class NotificationType(str, Enum):
     MILESTONE_PAYMENT_CONFIRMED = "milestone_payment_confirmed"
     AGREEMENT_CREATED = "agreement_created"
     AGREEMENT_UPDATED = "agreement_updated"
+    AGREEMENT_COMPLETED = "agreement_completed"
     CLIENT_REQUEST_LIMIT_REACHED = "client_request_limit_reached"
     AGREEMENT_SIGN_REMINDER = "agreement_sign_reminder"
     DISPUTE_RAISED = "dispute_raised"
