@@ -81,22 +81,49 @@ class ChatRepository:
         return results
 
     def mark_seen(self, group_type: str, group_id: str, user_id: str) -> int:
-        # Add user_id to seen_by array for all messages in the group that don't yet contain it
-        res = self.col.update_many(
-            {
-                "group_type": group_type,
-                "group_id": group_id,
-                "seen_by": {"$ne": user_id}
-            },
-            {"$addToSet": {"seen_by": user_id}, "$set": {"updated_at": datetime.utcnow()}}
-        )
+        """
+        Mark all messages in a group as seen by adding user_id to seen_by array.
+        Handles both messages with existing seen_by field and legacy messages without it.
+        Only marks messages sent by others (not by the user themselves).
+        """
+        # Match messages where:
+        # 1. sender_id != user_id (only messages from others)
+        # 2. seen_by doesn't exist (legacy messages), OR
+        # 3. seen_by exists but doesn't contain user_id, OR
+        # 4. seen_by is null or empty array
+        # Use $or to match any of these conditions
+        query = {
+            "group_type": group_type,
+            "group_id": group_id,
+            "sender_id": {"$ne": user_id},  # Only mark messages from others as read
+            "$or": [
+                {"seen_by": {"$exists": False}},
+                {"seen_by": None},
+                {"seen_by": []},  # Empty array
+                {"seen_by": {"$nin": [user_id]}}  # Array exists but doesn't contain user_id
+            ]
+        }
+        
+        update = {
+            "$addToSet": {"seen_by": user_id},
+            "$set": {"updated_at": datetime.utcnow()}
+        }
+        
+        res = self.col.update_many(query, update)
         return res.modified_count
 
     def get_unseen_count(self, group_type: str, group_id: str, user_id: str) -> int:
+        """
+        Count unread messages in a specific group for a user.
+        Includes messages where seen_by doesn't exist (legacy messages).
+        """
         return self.col.count_documents({
             "group_type": group_type,
             "group_id": group_id,
-            "seen_by": {"$ne": user_id}
+            "$or": [
+                {"seen_by": {"$exists": False}},
+                {"seen_by": {"$nin": [user_id]}}
+            ]
         })
 
     def get_unseen_conversation_count_for_user(self, user_id: str) -> int:
@@ -120,7 +147,9 @@ class ChatRepository:
                     "sender_id": {"$ne": user_id},
                     "$or": [
                         {"seen_by": {"$exists": False}},
-                        {"seen_by": {"$nin": [user_id]}},
+                        {"seen_by": None},
+                        {"seen_by": []},  # Empty array
+                        {"seen_by": {"$nin": [user_id]}},  # Array exists but doesn't contain user_id
                     ],
                 }
             },

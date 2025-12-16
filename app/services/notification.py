@@ -178,7 +178,8 @@ class NotificationService:
         Frontend: Requests are handled inside the unified messages page for both
         client and freelancer. The freelancer messages route is
         /freelancer/messages, and the component can use request_id to focus the
-        correct thread/section.
+        correct thread/section. The tab=received parameter ensures it opens
+        the "Received Request" tab instead of the DM tab.
         """
         return self.create_notification(
             user_id=freelancer_id,
@@ -190,8 +191,9 @@ class NotificationService:
                 "project_id": project_id,
                 "client_name": client_name,
             },
-            # Navigate to freelancer messages page, with request context
-            link=f"/freelancer/messages?request_id={request_id}",
+            # Navigate to freelancer messages page, with request context and tab parameter
+            # tab=received opens the "Received Request" tab (tab 1) instead of DM tab (tab 0)
+            link=f"/freelancer/messages?request_id={request_id}&tab=received",
             send_email=True,
         )
 
@@ -305,7 +307,12 @@ class NotificationService:
         request_id: str,
         project_id: str
     ):
-        """Notify client when freelancer accepts their request"""
+        """Notify client when freelancer accepts their request.
+        
+        Frontend: Routes to the client messages page on the DM tab (tab 0) where
+        accepted requests are shown. The request_id parameter ensures the correct
+        request is selected.
+        """
         return self.create_notification(
             user_id=client_id,
             notification_type=NotificationType.REQUEST_ACCEPTED,
@@ -317,7 +324,9 @@ class NotificationService:
                 "freelancer_name": freelancer_name,
                 "project_title": project_title
             },
-            link=f"/client/projects?request_id={request_id}",
+            # Navigate to client messages page, DM tab (tab 0, default)
+            # No tab parameter needed since DM tab is the default
+            link=f"/client/messages?request_id={request_id}",
             send_email=True
         )
 
