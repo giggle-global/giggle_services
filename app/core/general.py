@@ -294,23 +294,48 @@ def generate_epoch_with_string(append_str):
     return result
 
 def generate_random_name() -> str:
-    """Generate a random username with two real 3-letter words (capitalized) plus two digits.
-    Example: BoxPen25, SunSea42, GemJoy89
+    """Generate a unique random username with 3+4 or 4+3 letter words plus 2-3 digits.
+    Pattern: word1word2 + digits (where word1 is 3 or 4 letters, word2 is 4 or 3 letters)
+    Examples: airtree27, skydata91, greentek308, clearnet42, cloudway517
+    
+    Note: This function performs a pre-check for uniqueness, but the final guarantee
+    is enforced by a unique database index on the username field. If a race condition
+    occurs (two requests generate the same username simultaneously), the database
+    will reject the duplicate and the user service will retry with a new username.
     """
-    # Pick two random 3-letter words
-    word1 = random.choice(three_letter_words)
-    word2 = random.choice(three_letter_words)
+    max_attempts = 100  # Prevent infinite loops
+    user_collection = database["user"]
     
-    # Capitalize first letter of each word
-    word1_capitalized = word1.capitalize()
-    word2_capitalized = word2.capitalize()
+    for attempt in range(max_attempts):
+        # Randomly choose 3+4 or 4+3 pattern
+        if random.choice([True, False]):  # 3+4 pattern
+            word1 = random.choice(three_letter_words)
+            word2 = random.choice(four_letter_words)
+        else:  # 4+3 pattern
+            word1 = random.choice(four_letter_words)
+            word2 = random.choice(three_letter_words)
+        
+        # Generate random digits (2-3 digits: 00-999)
+        num_digits = random.choice([2, 3])
+        if num_digits == 2:
+            digits = f"{random.randint(0, 99):02d}"
+        else:
+            digits = f"{random.randint(0, 999):03d}"
+        
+        # Combine: word1word2 + digits (all lowercase)
+        username = f"{word1}{word2}{digits}"
+        
+        # Pre-check if username already exists in database (optimization to avoid DB errors)
+        # Final uniqueness is guaranteed by database unique index
+        existing = user_collection.find_one({"username": username})
+        if not existing:
+            return username
     
-    # Generate two random digits (00-99)
-    two_digits = f"{random.randint(0, 99):02d}"
-    
-    # Combine: Word1Word2##
-    username = f"{word1_capitalized}{word2_capitalized}{two_digits}"
-    return username
+    # If we couldn't generate a unique username after max attempts, raise an error
+    raise HTTPException(
+        status_code=500,
+        detail="Unable to generate a unique username. Please try again."
+    )
 
 
 # Curated list of username-friendly 3-letter English words
@@ -327,7 +352,21 @@ three_letter_words = [
     'red', 'tan',
     
     # Positive descriptive words
-    'new', 'old', 'big', 'hot', 'top', 'end', 'far', 'high', 'yes', 'art', 'awe', 'fab', 'fit', 'fun', 'gem', 'joy', 'key', 'max', 'pro', 'ray', 'red', 'sky', 'sun', 'tan', 'top', 'van', 'web', 'wow', 'zen',
+    'new', 'old', 'big', 'hot', 'top', 'end', 'far', 'yes', 'art', 'awe', 'fab', 'fit', 'fun', 'gem', 'joy', 'key', 'max', 'pro', 'ray', 'red', 'sky', 'sun', 'tan', 'top', 'van', 'web', 'wow', 'zen',
+]
+
+four_letter_words = [
+    # # Tech-related
+    # 'data', 'code', 'byte', 'node', 'link', 'flow', 'tech', 'wire', 'chip', 'disk', 'file', 'line', 'mode', 'path', 'port', 'root', 'site', 'text', 'user', 'view', 'wave', 'zone', 'base', 'core', 'edge', 'grid', 'host', 'info', 'java', 'json', 'loop', 'mail', 'meta', 'name', 'page', 'pipe', 'pool', 'push', 'rest', 'rule', 'scan', 'sign', 'size', 'sort', 'span', 'star', 'step', 'stop', 'sync', 'task', 'team', 'term', 'test', 'time', 'tool', 'type', 'unit', 'vary', 'verb', 'void',
+    
+    # Nature (exactly 4 letters)
+    'tree', 'wind', 'wave', 'star', 'moon', 'lake', 'rock', 'sand', 'snow', 'rain', 'fire', 'bird', 'fish', 'deer', 'bear', 'wolf', 'lion', 'rose', 'leaf', 'seed', 'root', 'stem', 'bark', 'moss', 'fern', 'pine', 'clay', 'dirt', 'dust', 'mist', 'haze', 'hail',
+    
+    # Positive descriptive words (exactly 4 letters)
+    'cool', 'warm', 'calm', 'bold', 'fast', 'slow', 'high', 'deep', 'wide', 'long', 'tall', 'tiny', 'huge', 'vast', 'full', 'rich', 'soft', 'hard', 'weak', 'kind', 'wise', 'hope', 'love', 'play', 'game', 'bond', 'fame',
+    
+    # Action/Verb words (exactly 4 letters)
+    'flow', 'move', 'jump', 'leap', 'soar', 'sail', 'ride', 'race', 'rush', 'dash', 'roam', 'find', 'seek', 'hunt', 'lead', 'beat', 'open', 'shut', 'lock', 'make', 'work', 'play', 'rest', 'wake', 'rise', 'fall', 'drop', 'lift', 'push', 'pull', 'grab', 'toss', 'flip', 'turn', 'spin', 'bend', 'fold', 'wrap', 'bind', 'join', 'stir', 'rock', 'roll', 'slip', 'wipe', 'wash', 'soak', 'pour', 'leak', 'drip', 'snap', 'ring', 'buzz', 'roar', 'yell', 'sing', 'talk', 'chat', 'love', 'like',
 ]
 
 

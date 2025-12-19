@@ -139,6 +139,7 @@ from app.services.project import ProjectService
 from app.services.agreements import AgreementService
 from app.services.ticket import TicketService
 from app.schemas.response import APIResponse, ok
+from fastapi import HTTPException
 import traceback
 import asyncio
 
@@ -183,8 +184,12 @@ def _is_privileged(user: dict) -> bool:
 @router.websocket("/ws/project/{request_id}")
 async def ws_project(request_id: str, websocket: WebSocket, token: Optional[str] = Query(None)):
     """
-    Connect to project group chat.
+    Connect to project group chat for a specific request.
     Clients must pass ?token=<keycloak_token> in websocket URL.
+    
+    IMPORTANT: Chat is separated by request_id (not project_id) to ensure each
+    freelancer-client conversation is private, even when multiple freelancers
+    are working on the same project.
     """
     print(f"🔌 WebSocket connection attempt: request_id={request_id}, token_present={bool(token)}")
     # Accept connection first (required by WebSocket protocol)
@@ -262,15 +267,18 @@ async def ws_project(request_id: str, websocket: WebSocket, token: Optional[str]
                 return
 
         # register connection with in-memory manager
-        await websocket_manager.connect(websocket, caller["user_id"], f"project::{project_id}")
+        # Use request_id as group_id to separate chats per request (not per project)
+        # This ensures each freelancer-client conversation is private even for the same project
+        await websocket_manager.connect(websocket, caller["user_id"], f"request::{request_id}")
 
         # create chat service instance (pass your DB)
         chat_service = ChatService()
 
         # Send last N messages
+        # Use request_id as group_id to retrieve messages for this specific request only
         try:
-            history = chat_service.get_chat_history("project", project_id, limit=100)
-            print(f"📜 Retrieved {len(history)} history messages for project {project_id}")
+            history = chat_service.get_chat_history("project", request_id, limit=100)
+            print(f"📜 Retrieved {len(history)} history messages for request {request_id}")
             for h in history:
                 try:
                     await websocket.send_json({"type": "history", "payload": h})
@@ -291,18 +299,20 @@ async def ws_project(request_id: str, websocket: WebSocket, token: Optional[str]
             if not content:
                 await websocket.send_json({"error": "Message cannot be empty"}); continue
 
-            saved = chat_service.log_chat("project", request_id=request_id, group_id=project_id, sender_user=caller, content=content)
-            # broadcast to group (other participants)
+            # Use request_id as group_id to ensure messages are separated per request
+            # This prevents freelancers working on the same project from seeing each other's messages
+            saved = chat_service.log_chat("project", request_id=request_id, group_id=request_id, sender_user=caller, content=content)
+            # broadcast to group (other participants in this specific request)
             payload = {
                 "type": "message",
                 "payload": {
                     "group_type": "project",
                     "request_id": request_id,
-                    "group_id": project_id,
+                    "group_id": request_id,
                     "message": saved,
                 }
             }
-            await websocket_manager.send_to_group(f"project::{project_id}", payload)
+            await websocket_manager.send_to_group(f"request::{request_id}", payload)
 
     except WebSocketDisconnect:
         print("🔌 Project WebSocket disconnected normally")
@@ -465,12 +475,14 @@ async def ws_private(
     other_user_id: str,
     websocket: WebSocket,
     token: Optional[str] = Query(None),
-    ticket_id: Optional[str] = Query(None)
+    ticket_id: Optional[str] = Query(None),
+    agreement_id: Optional[str] = Query(None)
 ):
     """
     Connect to private chat between admin and another user (client or freelancer).
     Clients must pass ?token=<keycloak_token> in websocket URL.
     Optional: ?ticket_id=<ticket_id> to link conversation to a dispute.
+    Optional: ?agreement_id=<agreement_id> to link conversation to an agreement.
     """
     print(f"🔌 Private WebSocket connection attempt: other_user_id={other_user_id}, token_present={bool(token)}, ticket_id={ticket_id}")
     # Accept connection first (required by WebSocket protocol)
@@ -563,11 +575,11 @@ async def ws_private(
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
 
-        # Get project_id and agreement_id from ticket if provided
+        # Get project_id and agreement_id from ticket if provided, or use agreement_id directly
         # CRITICAL: Always normalize ticket_id to full ticket_id from database to ensure consistent group_id
         # This ensures both admin and client use the same group_id regardless of ticket_id format
         project_id = None
-        agreement_id = None
+        resolved_agreement_id = agreement_id  # Use provided agreement_id directly
         resolved_ticket_id = ticket_id  # Start with provided ticket_id
         if ticket_id:
             try:
@@ -619,8 +631,10 @@ async def ws_private(
                     if not resolved_ticket_id:
                         resolved_ticket_id = ticket_id  # Fallback to provided
                     project_id = ticket_data.get("project_id")
-                    agreement_id = ticket_data.get("agreement_id")
-                    print(f"📋 Normalized ticket_id: {ticket_id} -> {resolved_ticket_id} (project_id={project_id}, agreement_id={agreement_id})")
+                    # Only override agreement_id from ticket if not already provided directly
+                    if not resolved_agreement_id:
+                        resolved_agreement_id = ticket_data.get("agreement_id")
+                    print(f"📋 Normalized ticket_id: {ticket_id} -> {resolved_ticket_id} (project_id={project_id}, agreement_id={resolved_agreement_id})")
                 else:
                     print(f"⚠️ Ticket not found. Using provided ticket_id as-is: {ticket_id}")
                     resolved_ticket_id = ticket_id
@@ -631,18 +645,33 @@ async def ws_private(
                 resolved_ticket_id = ticket_id
                 print(f"📋 Using provided ticket_id for group_id (resolution failed): {resolved_ticket_id}")
         else:
-            print(f"⚠️ No ticket_id provided - messages will be in general private chat (not dispute-specific)")
+            if agreement_id:
+                print(f"📋 Using agreement_id directly: {agreement_id}")
+            else:
+                print(f"⚠️ No ticket_id or agreement_id provided - messages will be in general private chat (not dispute/agreement-specific)")
 
-        # Generate consistent group_id (include ticket_id to separate chats by dispute)
-        # IMPORTANT: Always include ticket_id if provided, even if resolution failed
+        # Generate consistent group_id (include ticket_id or agreement_id to separate chats by dispute/agreement)
+        # IMPORTANT: Always include ticket_id or agreement_id if provided, even if resolution failed
         chat_service = ChatService()
-        group_id = chat_service._generate_private_group_id(caller_id, other_user_id_str, resolved_ticket_id)
-        print(f"✅ Private chat group_id: {group_id} (ticket_id={resolved_ticket_id})")
+        group_id = chat_service._generate_private_group_id(caller_id, other_user_id_str, resolved_ticket_id, resolved_agreement_id)
+        print(f"✅ Private chat group_id: {group_id} (ticket_id={resolved_ticket_id}, agreement_id={resolved_agreement_id})")
         print(f"👤 Connection details: caller_id={caller_id}, other_user_id={other_user_id_str}, caller_role={caller_role}")
         print(f"🔑 Group ID generation: sorted([{caller_id}, {other_user_id_str}]) = {sorted([str(caller_id), str(other_user_id_str)])}")
 
         # Register connection with in-memory manager
         await websocket_manager.connect(websocket, caller_id, group_id)
+        
+        # CRITICAL: Send the actual group_id back to frontend so it can update its expected group_id
+        # This is especially important for dispute chats where ticket_id might be normalized
+        await websocket.send_json({
+            "type": "group_id",
+            "payload": {
+                "group_id": group_id,
+                "ticket_id": resolved_ticket_id,
+                "agreement_id": resolved_agreement_id
+            }
+        })
+        print(f"📤 Sent group_id to frontend: {group_id}")
         
         # Log current connections in this group after connection
         async with websocket_manager._lock:
@@ -653,12 +682,12 @@ async def ws_private(
                 meta = websocket_manager._ws_meta.get(ws, {})
                 print(f"   - Connected user: {meta.get('user_id')} in group: {meta.get('group_id')}")
 
-        # Send last N messages (filtered by ticket_id if provided)
-        # IMPORTANT: Use resolved_ticket_id to ensure we only get messages for this specific dispute
+        # Send last N messages (filtered by ticket_id or agreement_id if provided)
+        # IMPORTANT: Use resolved_ticket_id or resolved_agreement_id to ensure we only get messages for this specific dispute/agreement
         try:
-            print(f"📜 Fetching private chat history: caller_id={caller_id}, other_user_id={other_user_id_str}, ticket_id={resolved_ticket_id}")
-            history = chat_service.get_private_chat_history(caller_id, other_user_id_str, limit=100, ticket_id=resolved_ticket_id)
-            print(f"📨 Found {len(history)} messages in history for this dispute")
+            print(f"📜 Fetching private chat history: caller_id={caller_id}, other_user_id={other_user_id_str}, ticket_id={resolved_ticket_id}, agreement_id={resolved_agreement_id}")
+            history = chat_service.get_private_chat_history(caller_id, other_user_id_str, limit=100, ticket_id=resolved_ticket_id, agreement_id=resolved_agreement_id)
+            print(f"📨 Found {len(history)} messages in history for this {'dispute' if resolved_ticket_id else 'agreement' if resolved_agreement_id else 'conversation'}")
             
             # Send history messages one by one with error handling
             sent_count = 0
@@ -681,6 +710,10 @@ async def ws_private(
                     for key, value in list(h.items()):
                         if isinstance(value, datetime):
                             h[key] = value.isoformat() + "Z"
+                    
+                    # Ensure group_id is included in history payload for frontend filtering
+                    if "group_id" not in h:
+                        h["group_id"] = group_id
                     
                     await websocket.send_json({"type": "history", "payload": h})
                     sent_count += 1
@@ -710,14 +743,38 @@ async def ws_private(
                 await websocket.send_json({"error": "Message cannot be empty"})
                 continue
 
+            # CRITICAL: Check if this is the first message in this private chat
+            # Only admin can send the first message; client/freelancer must wait for admin to initiate
+            privileged_roles = {"admin", "SA", "customer_care", "support"}
+            is_caller_admin = caller_role in privileged_roles
+            
+            if not is_caller_admin:
+                # Non-admin user trying to send message - check if admin has sent at least one message
+                check_query = {
+                    "group_type": "private",
+                    "group_id": group_id,
+                    "sender_id": other_user_id_str  # Check if admin (other_user) has sent a message
+                }
+                admin_message_count = chat_service.repo.col.count_documents(check_query)
+                
+                if admin_message_count == 0:
+                    # Admin hasn't sent first message yet - reject this message
+                    error_msg = "You cannot initiate a private chat. Please wait for admin to send the first message."
+                    print(f"🚫 Rejecting message from non-admin: caller_id={caller_id}, group_id={group_id}, admin_message_count={admin_message_count}")
+                    await websocket.send_json({
+                        "type": "error",
+                        "error": error_msg
+                    })
+                    continue  # Skip saving this message
+
             # Save message - SIMPLIFIED: Just like group chat
             meta = {}
             if resolved_ticket_id:
                 meta["ticket_id"] = resolved_ticket_id
             if project_id:
                 meta["project_id"] = project_id
-            if agreement_id:
-                meta["agreement_id"] = agreement_id
+            if resolved_agreement_id:
+                meta["agreement_id"] = resolved_agreement_id
             
             # Save message using the connection's group_id (same as group chat pattern)
             saved = chat_service.log_chat(
@@ -729,18 +786,31 @@ async def ws_private(
                 meta=meta
             )
             
-            # Broadcast to group - EXACTLY like group chat
+            # CRITICAL: Ensure saved message includes group_id for frontend filtering
+            if "group_id" not in saved:
+                saved["group_id"] = group_id
+            
+            # For private chat, send only to the other user (not broadcast to group)
             payload = {
                 "type": "message",
                 "payload": {
                     "group_type": "private",
-                    "group_id": group_id,
-                    "message": saved,
+                    "group_id": group_id,  # CRITICAL: Include group_id for frontend filtering
+                    "message": saved,  # Saved message also has group_id
                 }
             }
             
-            # Simple broadcast to group - just like agreement/project chat
-            await websocket_manager.send_to_group(group_id, payload)
+            # CRITICAL: Send to the other user specifically (private chat pattern)
+            # This ensures messages are only sent to the intended recipient, not broadcast
+            print(f"📤 Sending private message to user_id={other_user_id_str} with group_id={group_id}")
+            print(f"📤 Message content: {content[:50]}...")
+            print(f"📤 Caller: {caller_id}, Recipient: {other_user_id_str}")
+            
+            await websocket_manager.send_to_user(other_user_id_str, payload, target_group_id=group_id)
+            
+            # Also echo back to sender so they see their own message
+            print(f"📤 Echoing message back to sender: {caller_id}")
+            await websocket.send_json(payload)
 
     except WebSocketDisconnect:
         pass
@@ -754,11 +824,110 @@ async def ws_private(
         await websocket_manager.disconnect(websocket)
 
 
+# HTTP endpoint to check if admin has sent first message in private chat
+@router.get("/chat/private/has-admin-message", response_model=APIResponse[Dict[str, Any]])
+def check_admin_has_sent_message(
+    other_user_id: str = Query(..., description="The other user ID (admin or client/freelancer)"),
+    ticket_id: Optional[str] = Query(None, description="Ticket ID for dispute chat"),
+    agreement_id: Optional[str] = Query(None, description="Agreement ID for agreement chat"),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Check if admin has sent at least one message in a private chat.
+    Returns true if admin has sent a message, false otherwise.
+    This is used to determine if the admin chat tabs should be visible to client/freelancer.
+    """
+    try:
+        caller_id = str(current_user.get("user_id"))
+        caller_role = current_user.get("role")
+        other_user_id_str = str(other_user_id)
+        
+        # Determine which user is admin
+        privileged_roles = {"admin", "SA", "customer_care", "support"}
+        is_caller_admin = caller_role in privileged_roles
+        
+        # Get the admin user ID (the one who should have sent first message)
+        user_service = UserService()
+        other_user = user_service.get_user(other_user_id_str)
+        if not other_user:
+            raise HTTPException(status_code=404, detail="Other user not found")
+        
+        other_user_role = other_user.get("role")
+        is_other_admin = other_user_role in privileged_roles
+        
+        # Determine admin_id and non_admin_id
+        if is_caller_admin:
+            admin_id = caller_id
+            non_admin_id = other_user_id_str
+        elif is_other_admin:
+            admin_id = other_user_id_str
+            non_admin_id = caller_id
+        else:
+            # Neither is admin - shouldn't happen for private chats, but handle gracefully
+            return ok(data={"has_admin_message": False}, message="Neither user is admin")
+        
+        # Normalize ticket_id if provided
+        resolved_ticket_id = ticket_id
+        if ticket_id:
+            try:
+                ticket_service = TicketService()
+                ticket_data = None
+                try:
+                    ticket_data = ticket_service.repo.get_ticket(ticket_id)
+                except:
+                    pass
+                
+                if not ticket_data and _is_privileged(current_user):
+                    try:
+                        all_tickets = ticket_service.repo.get_all_tickets()
+                        ticket_id_upper = ticket_id.upper()
+                        for ticket in all_tickets:
+                            ticket_full_id = ticket.get("ticket_id", "")
+                            ticket_full_upper = ticket_full_id.upper()
+                            if ticket_full_id == ticket_id or ticket_full_upper.endswith(ticket_id_upper):
+                                ticket_data = ticket
+                                break
+                    except:
+                        pass
+                
+                if ticket_data:
+                    resolved_ticket_id = ticket_data.get("ticket_id") or ticket_id
+            except:
+                resolved_ticket_id = ticket_id
+        
+        # Generate group_id
+        chat_service = ChatService()
+        group_id = chat_service._generate_private_group_id(admin_id, non_admin_id, resolved_ticket_id, agreement_id)
+        
+        # Check if admin has sent at least one message in this chat
+        query = {
+            "group_type": "private",
+            "group_id": group_id,
+            "sender_id": admin_id
+        }
+        
+        has_message = chat_service.repo.col.count_documents(query) > 0
+        
+        print(f"🔍 Check admin message: admin_id={admin_id}, non_admin_id={non_admin_id}, group_id={group_id}, has_message={has_message}")
+        
+        return ok(
+            data={"has_admin_message": has_message, "group_id": group_id},
+            message="Admin message check completed"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error checking admin message: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error checking admin message: {str(e)}")
+
+
 # HTTP endpoints for unread message counts
 @router.get("/chat/unread-count", response_model=APIResponse[Dict[str, Any]])
 def get_unread_counts(
     group_type: str = Query(..., description="Type of chat: 'project', 'agreement', or 'private'"),
-    group_id: str = Query(..., description="Group ID (project_id, agreement_id, or private chat group_id)"),
+    group_id: str = Query(..., description="Group ID (request_id for project chats, agreement_id for agreement chats, or private chat group_id)"),
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """Get unread message count for a specific chat group"""
@@ -780,7 +949,7 @@ def get_unread_counts(
 @router.post("/chat/mark-read", response_model=APIResponse[Dict[str, Any]])
 def mark_messages_as_read(
     group_type: str = Query(..., description="Type of chat: 'project', 'agreement', or 'private'"),
-    group_id: str = Query(..., description="Group ID (project_id, agreement_id, or private chat group_id)"),
+    group_id: str = Query(..., description="Group ID (request_id for project chats, agreement_id for agreement chats, or private chat group_id)"),
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """Mark all messages in a chat group as read for the current user"""
@@ -801,7 +970,7 @@ def mark_messages_as_read(
 
 @router.get("/chat/unread-counts/batch", response_model=APIResponse[Dict[str, int]])
 def get_batch_unread_counts(
-    groups: str = Query(..., description="Comma-separated list of group_type:group_id pairs (e.g., 'project:proj1,agreement:agr1')"),
+    groups: str = Query(..., description="Comma-separated list of group_type:group_id pairs (e.g., 'project:request_id1,agreement:agr1'). For project chats, use request_id as group_id."),
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """Get unread counts for multiple chat groups at once"""

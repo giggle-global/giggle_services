@@ -385,7 +385,7 @@ class UserService:
             "first_name", "last_name", "email", "phone_number", "bio",
             "designation", "experience_years", "experience_months", "profile_pic",
             "language_preference", "skill_set", "contact_info", "company_info", "payment_information", "notification_service", "kyc", "first_intro_done",
-            "user_settings", "location_info", "interested_industries", "ongoing_gigs_count", "availability"
+            "user_settings", "location_info", "interested_industries", "ongoing_gigs_count", "availability", "is_affiliate"
         }
         update_payload = {k: v for k, v in user_data.items() if k in allowed_fields}
 
@@ -545,6 +545,22 @@ class UserService:
         except Exception:
             logger.exception("Error unbanning user_id=%s", user_id)
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to unban user")
+
+    def affiliate(self, user_id: str) -> Dict[str, Any]:
+        if not user_id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "user_id is required")
+        try:
+            user = self.user_repo.get_user_by_id(user_id)
+            if not user:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found.")
+            result = self.user_repo.affiliate(user_id)
+            logger.info("Affiliate status toggled: user_id=%s, is_affiliate=%s", user_id, result.get("is_affiliate"))
+            return result
+        except HTTPException:
+            raise
+        except Exception:
+            logger.exception("Error toggling affiliate status for user_id=%s", user_id)
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to toggle affiliate status")
 
     def create_root_user(self) -> Dict[str, Any]:
         """Idempotent super admin bootstrap."""

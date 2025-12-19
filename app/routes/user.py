@@ -220,6 +220,20 @@ def unban_user(user_id: str, current_user: Dict[str, Any] = Depends(get_current_
     return ok(message="User has been unbanned", data=None, status_code=status.HTTP_200_OK)
 
 
+@router.patch("/affiliate/{user_id}", response_model=APIResponse[Dict[str, Any]])
+def affiliate(user_id: str, current_user: Dict[str, Any] = Depends(get_current_user), svc: UserService = Depends(get_user_service)):
+    logger.debug(f"Affiliate requested by user_id={current_user.get('user_id')} target={user_id}")
+    if current_user["role"] != "SA":
+        logger.warning("Non-SA attempted to toggle affiliate status.")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only super admin can toggle affiliate status")
+    if not user_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "User ID is required to toggle affiliate status")
+    
+    updated = svc.affiliate(user_id)
+    logger.info(f"Affiliate status toggled: user_id={user_id}, is_affiliate={updated.get('is_affiliate')}")
+    return ok(data=updated, message="Affiliate status updated", status_code=status.HTTP_200_OK)
+
+
 @router.get("/skills")
 def get_skills(
     current_user: Dict[str, Any] = Depends(get_current_user), ssc: SkillService = Depends(get_skill_service)

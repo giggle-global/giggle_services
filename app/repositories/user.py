@@ -37,6 +37,8 @@ class UserRepository:
             user["email_verified"] = False
         if user is not None and "phone_verified" not in user:
             user["phone_verified"] = False
+        if user is not None and "is_affiliate" not in user:
+            user["is_affiliate"] = False
         if user is not None:
             contact_info = user.get("contact_info") or {}
             # Only reset LinkedIn verification if there's no profile_id (meaning OAuth never succeeded)
@@ -248,6 +250,33 @@ class UserRepository:
         if result.matched_count == 0:
             raise HTTPException(404, "User not found.")
         return None
+    
+    def affiliate(self, user_id: str) -> dict:
+        """
+        Toggle affiliate status for a user.
+        """
+        user = self.get_user_by_id(user_id)
+        if not user:
+            raise HTTPException(404, "User not found.")
+        
+        current_status = user.get("is_affiliate", False)
+        new_status = not current_status
+        
+        result = self.collection.update_one(
+            {"user_id": user_id},
+            {
+                "$set": {
+                    "is_affiliate": new_status,
+                    "audit_log.updated_at": datetime.now(timezone.utc),
+                    "audit_log.updated_by": "system",
+                }
+            },
+        )
+        if result.matched_count == 0:
+            raise HTTPException(404, "User not found.")
+        
+        # Return updated user
+        return self.get_user_by_id(user_id)
     
     def delete_user(self, user_id: str) -> dict:
         result = self.collection.update_one(

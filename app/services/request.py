@@ -11,8 +11,8 @@ from app.models.request import RequestCreate, RequestUpdate, RequestOut, Request
 
 logger = logging.getLogger(__name__)
 
-# Maximum number of requests a client can send overall
-MAX_REQUESTS_PER_CLIENT = 5
+# Maximum number of requests a client can send per project
+MAX_REQUESTS_PER_PROJECT = 5
 
 
 class RequestService:
@@ -56,25 +56,39 @@ class RequestService:
         if not project_details:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Project not found or not associated with client")
 
-        # Check total request limit (5 requests overall per client)
+        # Check request limit per project (5 PENDING requests per project)
         try:
-            total_requests = self.repo.count_total_requests_by_client(client_id)
-            if total_requests >= MAX_REQUESTS_PER_CLIENT:
-                logger.warning("Request limit exceeded: client=%s total_requests=%s", client_id, total_requests)
+            pending_requests = self.repo.count_pending_requests_by_client_and_project(client_id, project_id)
+            if pending_requests >= MAX_REQUESTS_PER_PROJECT:
+                logger.warning("Request limit exceeded: client=%s project=%s pending_requests=%s", client_id, project_id, pending_requests)
                 raise HTTPException(
                     status.HTTP_400_BAD_REQUEST,
-                    f"You have reached the maximum limit of {MAX_REQUESTS_PER_CLIENT} requests. You cannot send more requests."
+                    f"You have reached the maximum limit of {MAX_REQUESTS_PER_PROJECT} pending requests for this project. You cannot send more requests until some are accepted or rejected."
                 )
         except PyMongoError:
-            logger.exception("Mongo error checking total requests: client=%s", client_id)
+            logger.exception("Mongo error checking pending requests: client=%s project=%s", client_id, project_id)
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to verify request limit")
 
         try:
-            if self.repo.request_exists(client_id, freelancer_id):
-                logger.info("Duplicate request prevented: client=%s freelancer=%s", client_id, freelancer_id)
-                raise HTTPException(status.HTTP_409_CONFLICT, "Request already exists")
+            if self.repo.request_exists(client_id, freelancer_id, project_id):
+                # Get the existing request to check its status for a better error message
+                existing_request = self.repo.get_request_by_parties(project_id, freelancer_id, client_id)
+                if existing_request:
+                    status = existing_request.get("status")
+                    if status == RequestStatus.ACCEPTED.value:
+                        logger.info("Duplicate request prevented (accepted exists): client=%s freelancer=%s project=%s", client_id, freelancer_id, project_id)
+                        raise HTTPException(status.HTTP_409_CONFLICT, "You already have an accepted request with this freelancer for this project.")
+                    else:
+                        logger.info("Duplicate request prevented (pending exists): client=%s freelancer=%s project=%s", client_id, freelancer_id, project_id)
+                        raise HTTPException(status.HTTP_409_CONFLICT, "You already have a pending request to this freelancer for this project.")
+                else:
+                    logger.info("Duplicate request prevented: client=%s freelancer=%s project=%s", client_id, freelancer_id, project_id)
+                    raise HTTPException(status.HTTP_409_CONFLICT, "You have already sent a request to this freelancer for this project.")
+        except HTTPException:
+            # Re-raise HTTP exceptions (like the ones we just raised)
+            raise
         except PyMongoError:
-            logger.exception("Mongo error checking existing request: client=%s freelancer=%s", client_id, freelancer_id)
+            logger.exception("Mongo error checking existing request: client=%s freelancer=%s project=%s", client_id, freelancer_id, project_id)
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to verify request existence")
 
         try:
@@ -83,22 +97,22 @@ class RequestService:
             
             # Check if this request reached the limit (5/5) and send notification to client
             try:
-                new_total_requests = self.repo.count_total_requests_by_client(client_id)
-                if new_total_requests == MAX_REQUESTS_PER_CLIENT:
-                    # Client just reached the limit (10/10), notify the client
+                new_pending_requests = self.repo.count_pending_requests_by_client_and_project(client_id, project_id)
+                if new_pending_requests == MAX_REQUESTS_PER_PROJECT:
+                    # Client just reached the limit (5/5) for this project, notify the client
                     try:
                         from app.services.notification import NotificationService
                         notification_service = NotificationService()
                         notification_service.notify_client_request_limit_reached(
                             client_id=client_id,
-                            max_requests=MAX_REQUESTS_PER_CLIENT
+                            max_requests=MAX_REQUESTS_PER_PROJECT
                         )
-                        logger.info("Limit reached notification sent to client: %s (reached %d/%d)", client_id, new_total_requests, MAX_REQUESTS_PER_CLIENT)
+                        logger.info("Limit reached notification sent to client: %s project=%s (reached %d/%d)", client_id, project_id, new_pending_requests, MAX_REQUESTS_PER_PROJECT)
                     except Exception as e:
                         logger.warning("Failed to send limit reached notification: %s", e)
                         # Don't fail the request creation if notification fails
             except Exception as e:
-                logger.warning("Failed to check total requests after creation: %s", e)
+                logger.warning("Failed to check pending requests after creation: %s", e)
                 # Continue even if check fails
             
             # Send notification to freelancer about new request received
@@ -145,16 +159,18 @@ class RequestService:
             logger.exception("Mongo error fetching received requests: freelancer=%s", freelancer_id)
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to fetch received requests")
 
-    def get_total_request_count(self, client_id: str) -> int:
-        """Get total number of requests sent by a client (all statuses)"""
+    def get_total_request_count(self, client_id: str, project_id: str) -> int:
+        """Get number of PENDING requests sent by a client for a specific project"""
         if not client_id:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "client_id is required")
+        if not project_id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "project_id is required")
         try:
-            count = self.repo.count_total_requests_by_client(client_id)
-            logger.debug("Fetched total request count: client=%s count=%s", client_id, count)
+            count = self.repo.count_pending_requests_by_client_and_project(client_id, project_id)
+            logger.debug("Fetched pending request count: client=%s project=%s count=%s", client_id, project_id, count)
             return count
         except PyMongoError:
-            logger.exception("Mongo error fetching total request count: client=%s", client_id)
+            logger.exception("Mongo error fetching pending request count: client=%s project=%s", client_id, project_id)
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to fetch request count")
 
     # ---------- Respond ----------
@@ -296,13 +312,13 @@ class RequestService:
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to cancel request")
 
     # ---------- Utilities ----------
-    def request_exists(self, client_id: str, freelancer_id: str) -> bool:
-        if not client_id or not freelancer_id:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "client_id and freelancer_id are required")
+    def request_exists(self, client_id: str, freelancer_id: str, project_id: str) -> bool:
+        if not client_id or not freelancer_id or not project_id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "client_id, freelancer_id, and project_id are required")
         try:
-            return self.repo.request_exists(client_id, freelancer_id)
+            return self.repo.request_exists(client_id, freelancer_id, project_id)
         except PyMongoError:
-            logger.exception("Mongo error checking request existence: client=%s freelancer=%s", client_id, freelancer_id)
+            logger.exception("Mongo error checking request existence: client=%s freelancer=%s project=%s", client_id, freelancer_id, project_id)
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to check request existence")
         
     def request_get_one(self, request_id: str) -> Dict[str, Any]:

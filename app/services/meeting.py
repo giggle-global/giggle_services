@@ -6,6 +6,7 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 from app.repositories.meeting import MeetingRepository
 from app.repositories.agreements import AgreementRepository
+from app.repositories.user import UserRepository
 from app.models.meeting import MeetingCreate, MeetingUpdate, MeetingStatus, MeetingFilter
 from app.core.google_calendar import GoogleCalendarService
 from fastapi import HTTPException, status
@@ -20,6 +21,7 @@ class MeetingService:
     def __init__(self):
         self.repo = MeetingRepository()
         self.agreement_repo = AgreementRepository()
+        self.user_repo = UserRepository()
         self.google_calendar = GoogleCalendarService()
     
     
@@ -30,21 +32,66 @@ class MeetingService:
     ) -> Dict[str, Any]:
         """
         Create a new meeting with Google Meet link
+        Supports both agreement-based meetings (gig page) and direct client/freelancer meetings (messages page)
         """
         try:
-            # Get agreement to verify participants
-            agreement = self.agreement_repo.get_by_id(payload.agreement_id)
-            if not agreement:
-                raise HTTPException(status.HTTP_404_NOT_FOUND, "Agreement not found")
+            client = {}
+            freelancer = {}
+            agreement_title = "Agreement"
             
-            client = agreement.get("client", {})
-            freelancer = agreement.get("freelancer", {})
-            
-            # Verify user is part of the agreement
-            if created_by not in [client.get("user_id"), freelancer.get("user_id")]:
+            # Handle two cases: with agreement_id (gig page) or with client_id/freelancer_id (messages page)
+            if payload.agreement_id:
+                # Get agreement to verify participants (for gig page)
+                agreement = self.agreement_repo.get_by_id(payload.agreement_id)
+                if not agreement:
+                    raise HTTPException(status.HTTP_404_NOT_FOUND, "Agreement not found")
+                
+                client = agreement.get("client", {})
+                freelancer = agreement.get("freelancer", {})
+                agreement_title = agreement.get("title", "Agreement")
+                
+                # Verify user is part of the agreement
+                if created_by not in [client.get("user_id"), freelancer.get("user_id")]:
+                    raise HTTPException(
+                        status.HTTP_403_FORBIDDEN,
+                        "You are not authorized to create meetings for this agreement"
+                    )
+            elif payload.client_id and payload.freelancer_id:
+                # Get client and freelancer directly from user repository (for messages page)
+                try:
+                    client_user = self.user_repo.get_user_by_id(payload.client_id)
+                    freelancer_user = self.user_repo.get_user_by_id(payload.freelancer_id)
+                    
+                    # Format client and freelancer in the same structure as agreement
+                    client = {
+                        "user_id": client_user.get("user_id"),
+                        "email": client_user.get("email"),
+                        "first_name": client_user.get("first_name", ""),
+                        "last_name": client_user.get("last_name", ""),
+                        "name": f"{client_user.get('first_name', '')} {client_user.get('last_name', '')}".strip()
+                    }
+                    freelancer = {
+                        "user_id": freelancer_user.get("user_id"),
+                        "email": freelancer_user.get("email"),
+                        "first_name": freelancer_user.get("first_name", ""),
+                        "last_name": freelancer_user.get("last_name", ""),
+                        "name": f"{freelancer_user.get('first_name', '')} {freelancer_user.get('last_name', '')}".strip()
+                    }
+                    
+                    # Verify user is either the client or freelancer
+                    if created_by not in [payload.client_id, payload.freelancer_id]:
+                        raise HTTPException(
+                            status.HTTP_403_FORBIDDEN,
+                            "You are not authorized to create meetings for this conversation"
+                        )
+                except HTTPException as e:
+                    if e.status_code == 404:
+                        raise HTTPException(status.HTTP_404_NOT_FOUND, "Client or freelancer not found")
+                    raise
+            else:
                 raise HTTPException(
-                    status.HTTP_403_FORBIDDEN,
-                    "You are not authorized to create meetings for this agreement"
+                    status.HTTP_400_BAD_REQUEST,
+                    "Either agreement_id or both client_id and freelancer_id must be provided"
                 )
             
             # Validate scheduled time is in the future
@@ -80,7 +127,7 @@ class MeetingService:
                     else:
                         google_event = self.google_calendar.create_meeting(
                             title=payload.title,
-                            description=payload.description or f"Meeting for {agreement.get('title', 'Agreement')}",
+                            description=payload.description or f"Meeting for {agreement_title}",
                             start_time=start_time,
                             end_time=end_time,
                             attendees=attendees,
@@ -104,7 +151,7 @@ class MeetingService:
             
             # Create meeting in database
             meeting_data = {
-                "agreement_id": payload.agreement_id,
+                "agreement_id": payload.agreement_id,  # Can be None for messages page meetings
                 "title": payload.title,
                 "description": payload.description,
                 "scheduled_time": payload.scheduled_time,
@@ -121,7 +168,10 @@ class MeetingService:
             meeting = self.repo.create(meeting_data)
             meeting_id = meeting.get("meeting_id")
             
-            logger.info("Meeting created: %s for agreement: %s", meeting_id, payload.agreement_id)
+            if payload.agreement_id:
+                logger.info("Meeting created: %s for agreement: %s", meeting_id, payload.agreement_id)
+            else:
+                logger.info("Meeting created: %s for client: %s, freelancer: %s", meeting_id, payload.client_id, payload.freelancer_id)
             
             return meeting
             

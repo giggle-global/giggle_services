@@ -118,6 +118,9 @@ class TicketService:
                     project_name=project_name,
                     agreement_id=agreement_id or created.get("agreement_id"),
                     ticket_id=created.get("ticket_id"),
+                    project_id=effective_project_id if effective_project_id else None,
+                    client_id=client_id,
+                    freelancer_id=freelancer_id,
                 )
             except Exception as notif_err:
                 # Do not fail ticket creation if notification fails

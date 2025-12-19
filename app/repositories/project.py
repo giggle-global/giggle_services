@@ -41,7 +41,7 @@ class ProjectRepository:
         cursor = self.collection.find(query, {"_id": 0}).sort("created_at", -1).limit(limit)
         return list(cursor)
 
-    def find_recent_projects(self, hours: int = 24, limit: int = 20) -> List[Dict[str, Any]]:
+    def find_recent_projects(self, hours: int = 24, limit: int = 20, created_by: Optional[list[str]] = None) -> List[Dict[str, Any]]:
         """Find projects created within the last N hours, only enabled projects
         Note: Projects are stored with UTC timestamps, but we calculate the cutoff
         based on IST (UTC+5:30) to match user expectations in India.
@@ -62,9 +62,15 @@ class ProjectRepository:
         cutoff_utc = cutoff_ist.astimezone(timezone.utc)
         cutoff_time = int(cutoff_utc.timestamp())
         
-        query = {
+        query: Dict[str, Any] = {
             "status": "enabled",
             "created_at": {"$exists": True, "$gte": cutoff_time}
         }
+        if created_by:
+            # Allow both created_by and client_id matches to support legacy data
+            query["$or"] = [
+                {"created_by": {"$in": created_by}},
+                {"client_id": {"$in": created_by}},
+            ]
         cursor = self.collection.find(query, {"_id": 0}).sort("created_at", -1).limit(limit)
         return list(cursor)

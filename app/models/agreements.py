@@ -81,6 +81,7 @@ class AgreementCreate(BaseModel):
     currency: Optional[str] = Field("INR")
     start_date: int = Field(..., ge=0, example=1662505600)
     end_date: int = Field(..., ge=0, example=1665097600)
+    total_amount: Optional[float] = Field(None, ge=0, example=500000)  # Total amount (independent of milestones)
 
     project_scope: Optional[str] = None
     additional_terms: Optional[str] = None
@@ -182,8 +183,12 @@ class AgreementInDB(BaseModel):
     signatures: Dict[str, SignatureRecord] = Field(default_factory=dict)
     milestones: List[str] = Field(default_factory=list)
     total_amount: float = 0.0
+    # Client fee (applies to client payments)
+    client_fee_rate: float = 0.05  # 5% client fee
+    client_fee_amount: float = 0.0
+    client_total_amount: float = 0.0  # total_amount + client_fee_amount
     # Platform fee (applies only to freelancer payouts)
-    platform_fee_rate: float = 0.05  # 5% platform fee
+    platform_fee_rate: float = 0.10  # 10% platform fee (changed from 5%)
     platform_fee_amount: float = 0.0
     freelancer_net_amount: float = 0.0
     num_milestones: int = 0

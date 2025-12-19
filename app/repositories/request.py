@@ -25,14 +25,17 @@ class RequestRepository:
             "status": RequestStatus.PENDING.value,
             "created_at": int(datetime.utcnow().timestamp())  # epoch seconds (UTC)
         }
-        # Check for existing pending request
+        # Check for existing active request (PENDING or ACCEPTED) for the same client, freelancer, and project
+        # REJECTED and CANCELLED requests don't block new requests
         existing = self.collection.find_one({
             "client_id": client_id,
             "freelancer_id": freelancer_id,
-            "status": RequestStatus.PENDING.value
+            "project_id": project_id,
+            "status": {"$in": [RequestStatus.PENDING.value, RequestStatus.ACCEPTED.value]}
         })
         if existing:
-            raise HTTPException(400, "Request already exists and is pending.")
+            status_msg = "pending" if existing.get("status") == RequestStatus.PENDING.value else "accepted"
+            raise HTTPException(400, f"You already have a {status_msg} request to this freelancer for this project.")
         self.collection.insert_one(doc)
         return doc
 
@@ -66,7 +69,7 @@ class RequestRepository:
         print(f"Cancelled {cancelled_count} expired requests.")
         print(self.user.name)
         pipeline = [
-            {"$match": {"client_id": client_id, "status": {"$in": [RequestStatus.PENDING.value, RequestStatus.ACCEPTED.value]}}},
+            {"$match": {"client_id": client_id, "status": {"$in": [RequestStatus.PENDING.value, RequestStatus.ACCEPTED.value, RequestStatus.REJECTED.value]}}},
             {
                 "$lookup": {
                     "from": self.user.name,
@@ -151,11 +154,16 @@ class RequestRepository:
     def get_request(self, request_id: str) -> Optional[dict]:
         return self.collection.find_one({"request_id": request_id}, {"_id": 0})
     
-    def request_exists(self, client_id: str, freelancer_id: str) -> bool:
+    def request_exists(self, client_id: str, freelancer_id: str, project_id: str) -> bool:
+        """
+        Check if an active request (PENDING or ACCEPTED) already exists for the same client, freelancer, and project.
+        REJECTED and CANCELLED requests don't block new requests.
+        """
         return self.collection.count_documents({
             "client_id": client_id,
             "freelancer_id": freelancer_id,
-            "status": RequestStatus.PENDING.value
+            "project_id": project_id,
+            "status": {"$in": [RequestStatus.PENDING.value, RequestStatus.ACCEPTED.value]}
         }) > 0
     
     def count_total_requests_by_client(self, client_id: str) -> int:
@@ -168,6 +176,19 @@ class RequestRepository:
         return self.collection.count_documents({
             "client_id": client_id,
             "status": {"$in": [RequestStatus.PENDING.value, RequestStatus.ACCEPTED.value]}
+        })
+    
+    def count_pending_requests_by_client_and_project(self, client_id: str, project_id: str) -> int:
+        """
+        Count number of PENDING requests sent by a client for a specific project.
+        
+        Only PENDING requests count toward the limit. When a request is ACCEPTED or REJECTED,
+        it's no longer PENDING, so the count automatically reduces.
+        """
+        return self.collection.count_documents({
+            "client_id": client_id,
+            "project_id": project_id,
+            "status": RequestStatus.PENDING.value
         })
     
     def get_request_by_parties(self, project_id: str, freelancer_id: str, client_id: str) -> Optional[dict]:

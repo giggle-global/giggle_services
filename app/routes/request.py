@@ -63,18 +63,22 @@ def list_sent_requests(current_user: Dict[str, Any] = Depends(get_current_user),
     return ok(data=items, message="Sent requests fetched")
 
 @router.get("/count", response_model=APIResponse[Dict[str, int]])
-def get_request_count(current_user: Dict[str, Any] = Depends(get_current_user), svc: RequestService = Depends(get_request_service)):
-    """Get total request count for the current client"""
-    logger.debug(f"Get request count by user_id={current_user.get('user_id')} role={current_user.get('role')}")
+def get_request_count(
+    project_id: str = Query(..., description="Project ID to get request count for"),
+    current_user: Dict[str, Any] = Depends(get_current_user), 
+    svc: RequestService = Depends(get_request_service)
+):
+    """Get pending request count for the current client for a specific project"""
+    logger.debug(f"Get request count by user_id={current_user.get('user_id')} role={current_user.get('role')} project_id={project_id}")
     
     if current_user["role"] != "CL":
         logger.warning("Non-client attempted to view request count.")
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only clients can view request count")
     
-    from app.services.request import MAX_REQUESTS_PER_CLIENT
-    total_count = svc.get_total_request_count(current_user["user_id"])
-    logger.info(f"Request count fetched: client={current_user.get('user_id')} count={total_count}")
-    return ok(data={"count": total_count, "max": MAX_REQUESTS_PER_CLIENT}, message="Request count fetched")
+    from app.services.request import MAX_REQUESTS_PER_PROJECT
+    pending_count = svc.get_total_request_count(current_user["user_id"], project_id)
+    logger.info(f"Request count fetched: client={current_user.get('user_id')} project={project_id} count={pending_count}")
+    return ok(data={"count": pending_count, "max": MAX_REQUESTS_PER_PROJECT}, message="Request count fetched")
 
 @router.get("/received", response_model=APIResponse[List[RequestOut]])
 def list_received_requests(current_user: Dict[str, Any] = Depends(get_current_user), svc: RequestService = Depends(get_request_service)):

@@ -48,12 +48,35 @@ class GoogleCalendarService:
     def _initialize_service(self):
         """Initialize Google Calendar service"""
         try:
-            # Check if credentials file exists
+            # Check for credentials from environment variables first (production-friendly)
+            google_credentials_json = os.environ.get("GOOGLE_CREDENTIALS_JSON")
+            google_service_account_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON")
+            google_token_json = os.environ.get("GOOGLE_TOKEN_JSON")
+            
+            # Fallback to file paths if env vars not set (for local development)
             credentials_path = os.environ.get("GOOGLE_CREDENTIALS_PATH", "credentials.json")
             token_path = os.environ.get("GOOGLE_TOKEN_PATH", "token.json")
             service_account_path = os.environ.get("GOOGLE_SERVICE_ACCOUNT_PATH", "service_account.json")
             
             # In production, prefer Service Account (no user interaction needed)
+            # Try environment variable first, then file path
+            if google_service_account_json:
+                logger.info("Using Service Account from GOOGLE_SERVICE_ACCOUNT_JSON environment variable.")
+                try:
+                    import json
+                    service_account_info = json.loads(google_service_account_json)
+                    creds = service_account.Credentials.from_service_account_info(
+                        service_account_info,
+                        scopes=SCOPES
+                    )
+                    self.service = build('calendar', 'v3', credentials=creds)
+                    logger.info("Google Calendar service initialized successfully with Service Account (from env var)")
+                    return
+                except Exception as e:
+                    logger.error("Failed to initialize Service Account from env var: %s. Trying file path.", str(e))
+                    logger.exception("Service Account error details:")
+            
+            # Try service account file if env var not available
             if IS_PRODUCTION and os.path.exists(service_account_path):
                 logger.info("Production environment detected. Using Service Account for Google Calendar.")
                 try:
@@ -71,8 +94,23 @@ class GoogleCalendarService:
             # Check if we have a pre-authenticated token (works in production if token.json exists)
             creds = None
             
-            # Load existing token if available
-            if os.path.exists(token_path):
+            # Load existing token from environment variable first
+            if google_token_json:
+                try:
+                    import json
+                    token_data = json.loads(google_token_json)
+                    creds = Credentials.from_authorized_user_info(token_data, SCOPES)
+                    if not self._validate_scopes(creds):
+                        logger.warning("Token from env var has invalid scopes. Will try to create new credentials.")
+                        creds = None
+                    else:
+                        logger.info("Loaded token from GOOGLE_TOKEN_JSON environment variable.")
+                except Exception as e:
+                    logger.warning("Failed to load token from env var: %s. Trying file path.", str(e))
+                    creds = None
+            
+            # Load existing token from file if env var not available
+            if not creds and os.path.exists(token_path):
                 try:
                     creds = Credentials.from_authorized_user_file(token_path, SCOPES)
                     if not self._validate_scopes(creds):
@@ -95,43 +133,70 @@ class GoogleCalendarService:
                         creds = None
                 
                 if not creds or not creds.valid:
-                    if not os.path.exists(credentials_path):
-                        logger.warning("Google credentials file not found at %s. Meeting creation will proceed without Google Meet links.", credentials_path)
+                    # Try to load credentials from environment variable first
+                    creds_data = None
+                    if google_credentials_json:
+                        try:
+                            import json
+                            creds_data = json.loads(google_credentials_json)
+                            logger.info("Loaded credentials from GOOGLE_CREDENTIALS_JSON environment variable.")
+                        except Exception as e:
+                            logger.error("Failed to parse GOOGLE_CREDENTIALS_JSON: %s", str(e))
+                            creds_data = None
+                    
+                    # Fallback to file if env var not available
+                    if not creds_data and os.path.exists(credentials_path):
+                        try:
+                            import json
+                            with open(credentials_path, 'r') as f:
+                                creds_data = json.load(f)
+                        except Exception as e:
+                            logger.warning("Could not read credentials file: %s", str(e))
+                            creds_data = None
+                    
+                    if not creds_data:
+                        logger.warning("Google credentials not found in environment variable or file. Meeting creation will proceed without Google Meet links.")
                         self.service = None
                         return
                     
                     # Check if credentials file is for Web app or Desktop app
-                    import json
+                    is_web_app = 'web' in creds_data
+                    is_desktop_app = 'installed' in creds_data
+                    
+                    # Support both web and desktop app credentials
+                    if is_web_app and not is_desktop_app:
+                        logger.info("Web application credentials detected. Using web OAuth flow.")
+                        # For web app, we need to use a different flow, but since we have token.json,
+                        # we can skip the OAuth flow and just use the token
+                        # The token.json should already have the necessary credentials
+                        logger.info("Using existing token.json for authentication.")
+                    elif not is_desktop_app and not is_web_app:
+                        logger.error("Invalid credentials format. Expected 'web' or 'installed' key.")
+                        self.service = None
+                        return
+                    
                     try:
-                        with open(credentials_path, 'r') as f:
-                            creds_data = json.load(f)
-                        
-                        is_web_app = 'web' in creds_data
-                        is_desktop_app = 'installed' in creds_data
-                        
-                        if is_web_app and not is_desktop_app:
+                        # For web app credentials, we can't use InstalledAppFlow
+                        # Since we have token.json, we should have already loaded credentials above
+                        # If we reach here, it means token refresh failed, so we need to re-authenticate
+                        if is_web_app:
                             logger.error("=" * 80)
-                            logger.error("INVALID CREDENTIALS TYPE: Web Application detected")
+                            logger.error("WEB APP CREDENTIALS DETECTED")
                             logger.error("=" * 80)
-                            logger.error("Your credentials.json is for a 'Web application', but this code requires 'Desktop app' credentials.")
+                            logger.error("Web app credentials require a different OAuth flow.")
+                            logger.error("Since token.json exists, authentication should work via token refresh.")
+                            logger.error("If you're seeing this, the token may have expired.")
                             logger.error("")
-                            logger.error("SOLUTION: Create a new Desktop app OAuth client:")
-                            logger.error("1. Go to: https://console.cloud.google.com/apis/credentials")
-                            logger.error("2. Click 'Create Credentials' > 'OAuth client ID'")
-                            logger.error("3. Select 'Desktop app' as Application type")
-                            logger.error("4. Give it a name (e.g., 'Giggle Desktop Client')")
-                            logger.error("5. Click 'Create' and download the JSON file")
-                            logger.error("6. Replace your credentials.json with the new file")
-                            logger.error("")
-                            logger.error("The new file should have 'installed' key (not 'web')")
+                            logger.error("SOLUTION: Re-authenticate locally and update GOOGLE_TOKEN_JSON")
                             logger.error("=" * 80)
                             self.service = None
                             return
-                    except Exception as e:
-                        logger.warning("Could not validate credentials file format: %s", str(e))
-                    
-                    try:
-                        flow = InstalledAppFlow.from_client_secrets_file(credentials_path, SCOPES)
+                        
+                        # Use from_client_config instead of from_client_secrets_file when we have JSON data
+                        if google_credentials_json:
+                            flow = InstalledAppFlow.from_client_config(creds_data, SCOPES)
+                        else:
+                            flow = InstalledAppFlow.from_client_secrets_file(credentials_path, SCOPES)
                         
                         # In production, we can't use run_local_server (no browser/user interaction)
                         if IS_PRODUCTION:
@@ -195,13 +260,16 @@ class GoogleCalendarService:
                         self.service = None
                         return
                 
-                # Save credentials for next run
-                if creds:
+                # Save credentials for next run (only if using file-based token, not env var)
+                if creds and not google_token_json:
                     try:
-                        with open(token_path, 'w') as token:
-                            token.write(creds.to_json())
+                        # Only save to file if token_path is writable (local development)
+                        if not IS_PRODUCTION or os.path.exists(os.path.dirname(token_path)):
+                            with open(token_path, 'w') as token:
+                                token.write(creds.to_json())
+                            logger.info("Token saved to file. For production, consider using GOOGLE_TOKEN_JSON environment variable instead.")
                     except Exception as e:
-                        logger.warning("Failed to save token file: %s", str(e))
+                        logger.warning("Failed to save token file: %s. In production, use GOOGLE_TOKEN_JSON environment variable.", str(e))
             
             if creds and self._validate_scopes(creds):
                 self.service = build('calendar', 'v3', credentials=creds)

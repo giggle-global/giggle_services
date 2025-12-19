@@ -51,16 +51,22 @@ class AgreementService:
             if not project_check:
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, "Project not found")
 
-            # Calculate initial total_amount from milestones if provided, otherwise 0
-            initial_total = 0.0
-            if payload.milestones:
+            # Use total_amount from payload if provided, otherwise calculate from milestones (backward compatibility)
+            initial_total = payload.total_amount if payload.total_amount is not None else 0.0
+            if initial_total == 0.0 and payload.milestones:
+                # Backward compatibility: calculate from milestones if total_amount not provided
                 initial_total = sum(m.get("payment", {}).get("amount", 0.0) for m in payload.milestones)
             
             # Calculate rate from total_amount / duration_days
             rate = self._calc_rate_from_total(initial_total, duration_days)
 
-            # Calculate platform fee (5%) and freelancer net amount
-            platform_fee_rate = 0.05
+            # Calculate client fee (5%) and client total amount
+            client_fee_rate = 0.05
+            client_fee_amount = initial_total * client_fee_rate
+            client_total_amount = initial_total + client_fee_amount
+
+            # Calculate platform fee (10%) and freelancer net amount
+            platform_fee_rate = 0.10
             platform_fee_amount = initial_total * platform_fee_rate
             freelancer_net_amount = initial_total - platform_fee_amount
 
@@ -78,6 +84,9 @@ class AgreementService:
                 project_scope=payload.project_scope,
                 additional_terms=payload.additional_terms,
                 total_amount=initial_total,
+                client_fee_rate=client_fee_rate,
+                client_fee_amount=client_fee_amount,
+                client_total_amount=client_total_amount,
                 platform_fee_rate=platform_fee_rate,
                 platform_fee_amount=platform_fee_amount,
                 freelancer_net_amount=freelancer_net_amount,
@@ -91,23 +100,37 @@ class AgreementService:
 
             # optional: create initial milestones (payload.milestones expected list of dicts)
             if payload.milestones and self.milestone_service:
+                # If total_amount is set, redistribute it equally among milestones
+                if initial_total > 0:
+                    num_milestones = len(payload.milestones)
+                    amount_per_milestone = initial_total / num_milestones if num_milestones > 0 else 0.0
+                    # Update milestone amounts to divide total_amount equally
+                    for m in payload.milestones:
+                        m["payment"]["amount"] = amount_per_milestone
+                
                 for m in payload.milestones:
                     self.milestone_service.add_milestone(created["agreement_id"], m, {"user_id": created_by, "role": "client"})
 
-                # refresh computed fields (total_amount and rate will be recalculated from milestones)
+                # refresh computed fields
                 created = self.repo.get_by_id(created["agreement_id"])
-                # Recalculate total_amount and rate from actual milestones
-                total_amount = self._calc_total_from_milestones(created["agreement_id"])
-                rate = self._calc_rate_from_total(total_amount, duration_days)
-                # Recalculate platform fee and freelancer net amount based on updated total_amount
-                platform_fee_rate = 0.05
-                platform_fee_amount = total_amount * platform_fee_rate
-                freelancer_net_amount = total_amount - platform_fee_amount
+                # Keep total_amount as set (don't recalculate from milestones)
+                # Recalculate rate from total_amount/duration_days
+                rate = self._calc_rate_from_total(initial_total, duration_days)
+                # Recalculate fees based on total_amount
+                client_fee_rate = 0.05
+                client_fee_amount = initial_total * client_fee_rate
+                client_total_amount = initial_total + client_fee_amount
+                platform_fee_rate = 0.10
+                platform_fee_amount = initial_total * platform_fee_rate
+                freelancer_net_amount = initial_total - platform_fee_amount
 
                 self.repo.update(created["agreement_id"], {
-                    "total_amount": total_amount,
+                    "total_amount": initial_total,  # Keep the original total_amount
                     "rate": rate,
                     "num_milestones": len(payload.milestones),
+                    "client_fee_rate": client_fee_rate,
+                    "client_fee_amount": client_fee_amount,
+                    "client_total_amount": client_total_amount,
                     "platform_fee_rate": platform_fee_rate,
                     "platform_fee_amount": platform_fee_amount,
                     "freelancer_net_amount": freelancer_net_amount,
@@ -129,14 +152,17 @@ class AgreementService:
                 if created_by == client_id:
                     # Client created, notify freelancer
                     recipient_id = freelancer_id
+                    recipient_role = "FL"
                     creator_ref = payload.client
                 elif created_by == freelancer_id:
                     # Freelancer created, notify client
                     recipient_id = client_id
+                    recipient_role = "CL"
                     creator_ref = payload.freelancer
                 else:
                     # Admin or other role created - notify freelancer by default
                     recipient_id = freelancer_id
+                    recipient_role = "FL"
                     creator_ref = None  # Will fetch from user repo
                 
                 # Get creator name from UserRef or fetch from user repo
@@ -161,7 +187,8 @@ class AgreementService:
                     creator_name=creator_name,
                     agreement_title=payload.title,
                     agreement_id=created["agreement_id"],
-                    project_id=payload.project_id
+                    project_id=payload.project_id,
+                    recipient_role=recipient_role
                 )
                 logger.info("Notification sent to recipient: %s for agreement: %s", recipient_id, created["agreement_id"])
             except Exception as e:
@@ -252,7 +279,8 @@ class AgreementService:
                     agreement_title=agreement_title,
                     agreement_id=agreement_id,
                     project_id=project_id,
-                    other_party_name=freelancer_name
+                    other_party_name=freelancer_name,
+                    recipient_role="CL"
                 )
                 logger.info("Sign reminder notification sent to client: %s for agreement: %s", client_id, agreement_id)
             
@@ -264,7 +292,8 @@ class AgreementService:
                     agreement_title=agreement_title,
                     agreement_id=agreement_id,
                     project_id=project_id,
-                    other_party_name=client_name
+                    other_party_name=client_name,
+                    recipient_role="FL"
                 )
                 logger.info("Sign reminder notification sent to freelancer: %s for agreement: %s", freelancer_id, agreement_id)
         except Exception as e:
@@ -287,28 +316,53 @@ class AgreementService:
         if "rate" in update_payload:
             del update_payload["rate"]
 
+        # Handle total_amount update - if total_amount is being updated, redistribute milestones
+        total_amount_changed = False
+        if "total_amount" in update_payload:
+            total_amount_changed = True
+            new_total_amount = update_payload["total_amount"]
+            # Redistribute total_amount equally among all milestones
+            milestones = self.milestone_service.list_for_agreement(agreement_id)
+            num_milestones = len(milestones)
+            if new_total_amount > 0 and num_milestones > 0:
+                amount_per_milestone = new_total_amount / num_milestones
+                # Update all milestone amounts to divide total_amount equally
+                for m in milestones:
+                    payment = m.get("payment", {})
+                    payment["amount"] = amount_per_milestone
+                    self.milestone_service.milestone_repo.update(m["milestone_id"], {"payment": payment})
+
         # recompute duration_days and derived fields if dates changed
         recalc = False
         if "start_date" in update_payload or "end_date" in update_payload:
             recalc = True
 
-        if recalc:
+        if recalc or total_amount_changed:
             start = update_payload.get("start_date", ag["start_date"])
             end = update_payload.get("end_date", ag["end_date"])
             duration_days = self._calc_duration_days(start, end)
             update_payload["duration_days"] = duration_days
             
-            # Recalculate total_amount from milestones and rate from total_amount/duration_days
-            total_amount = self._calc_total_from_milestones(agreement_id)
+            # Get total_amount from update_payload or existing agreement
+            total_amount = update_payload.get("total_amount", ag.get("total_amount", 0.0))
             rate = self._calc_rate_from_total(total_amount, duration_days)
 
-            # Recalculate platform fee and freelancer net amount
-            platform_fee_rate = ag.get("platform_fee_rate", 0.05)
+            # Recalculate client fee (5%) and client total amount
+            client_fee_rate = 0.05
+            client_fee_amount = total_amount * client_fee_rate
+            client_total_amount = total_amount + client_fee_amount
+
+            # Recalculate platform fee (10%) and freelancer net amount
+            platform_fee_rate = 0.10
             platform_fee_amount = total_amount * platform_fee_rate
             freelancer_net_amount = total_amount - platform_fee_amount
 
-            update_payload["total_amount"] = total_amount
+            if total_amount_changed:
+                update_payload["total_amount"] = total_amount
             update_payload["rate"] = rate
+            update_payload["client_fee_rate"] = client_fee_rate
+            update_payload["client_fee_amount"] = client_fee_amount
+            update_payload["client_total_amount"] = client_total_amount
             update_payload["platform_fee_rate"] = platform_fee_rate
             update_payload["platform_fee_amount"] = platform_fee_amount
             update_payload["freelancer_net_amount"] = freelancer_net_amount
@@ -355,7 +409,8 @@ class AgreementService:
                     recipient_id=freelancer_id,
                     agreement_title=agreement_title,
                     agreement_id=agreement_id,
-                    project_id=project_id
+                    project_id=project_id,
+                    recipient_role="FL"
                 )
                 logger.info("Agreement update notification sent to freelancer: %s for agreement: %s", freelancer_id, agreement_id)
             elif current_user_id == freelancer_id:
@@ -364,7 +419,8 @@ class AgreementService:
                     recipient_id=client_id,
                     agreement_title=agreement_title,
                     agreement_id=agreement_id,
-                    project_id=project_id
+                    project_id=project_id,
+                    recipient_role="CL"
                 )
                 logger.info("Agreement update notification sent to client: %s for agreement: %s", client_id, agreement_id)
             # If admin updated, notify both parties
@@ -373,13 +429,15 @@ class AgreementService:
                     recipient_id=client_id,
                     agreement_title=agreement_title,
                     agreement_id=agreement_id,
-                    project_id=project_id
+                    project_id=project_id,
+                    recipient_role="CL"
                 )
                 notification_service.notify_agreement_updated(
                     recipient_id=freelancer_id,
                     agreement_title=agreement_title,
                     agreement_id=agreement_id,
-                    project_id=project_id
+                    project_id=project_id,
+                    recipient_role="FL"
                 )
                 logger.info("Agreement update notification sent to both parties for agreement: %s", agreement_id)
         except Exception as e:
@@ -497,23 +555,93 @@ class AgreementService:
                 "Cannot unaccept version after signing has started"
             )
         
-        # Update only the current user's acceptance flag
-        # Explicitly preserve the other party's acceptance status by reading current value
+        # Update acceptance flags
+        # Logic: If one party accepts the other party's version, both should become true
         update_data = {}
+        last_updated_by = ag.get("last_updated_by")
+        freelancer_id = ag["freelancer"]["user_id"]
+        client_id = ag["client"]["user_id"]
+        
         if is_client:
-            update_data["client_accepted_version"] = accepted
-            # Explicitly preserve freelancer's acceptance status from current agreement
-            # Use get() with default False to handle case where field doesn't exist
-            update_data["freelancer_accepted_version"] = ag.get("freelancer_accepted_version", False)
+            # Check if freelancer has already accepted (either explicitly or via update/auto-accept)
+            freelancer_already_accepted = ag.get("freelancer_accepted_version", False)
+            # Check if freelancer was the last updater (which means they auto-accepted)
+            freelancer_updated = last_updated_by and last_updated_by == freelancer_id
+            
+            # If client is accepting (accepting freelancer's version) and freelancer already accepted/updated, set both to true
+            if accepted and (freelancer_already_accepted or freelancer_updated):
+                update_data["client_accepted_version"] = True
+                update_data["freelancer_accepted_version"] = True
+            else:
+                # Client accepting but freelancer hasn't accepted/updated yet, or client is unaccepting
+                update_data["client_accepted_version"] = accepted
+                update_data["freelancer_accepted_version"] = freelancer_already_accepted
         elif is_freelancer:
-            update_data["freelancer_accepted_version"] = accepted
-            # Explicitly preserve client's acceptance status from current agreement
-            # Use get() with default False to handle case where field doesn't exist
-            update_data["client_accepted_version"] = ag.get("client_accepted_version", False)
+            # Check if client has already accepted (either explicitly or via update/auto-accept)
+            client_already_accepted = ag.get("client_accepted_version", False)
+            # Check if client was the last updater (which means they auto-accepted)
+            client_updated = last_updated_by and last_updated_by == client_id
+            
+            # If freelancer is accepting (accepting client's version) and client already accepted/updated, set both to true
+            if accepted and (client_already_accepted or client_updated):
+                update_data["client_accepted_version"] = True
+                update_data["freelancer_accepted_version"] = True
+            else:
+                # Freelancer accepting but client hasn't accepted/updated yet, or freelancer is unaccepting
+                update_data["freelancer_accepted_version"] = accepted
+                update_data["client_accepted_version"] = client_already_accepted
         
         logger.info(f"Updating acceptance: client={update_data.get('client_accepted_version')}, freelancer={update_data.get('freelancer_accepted_version')}")
         
         # Update with explicit preservation of the other party's status
         updated = self.repo.update(agreement_id, update_data)
         logger.info(f"Agreement {agreement_id} version acceptance updated by {user.get('user_id')}: {accepted}")
+        
+        # Send notification to the other party when version is accepted
+        if accepted:
+            try:
+                from app.services.notification import NotificationService
+                from app.repositories.user import UserRepository
+                notification_service = NotificationService()
+                user_repo = UserRepository()
+                
+                client_id = ag["client"]["user_id"]
+                freelancer_id = ag["freelancer"]["user_id"]
+                agreement_title = ag.get("title", "Agreement")
+                project_id = ag.get("project_id")
+                current_user_id = user.get("user_id")
+                
+                # Get the name of the user who accepted
+                accepting_user = user_repo.get_user_by_id(current_user_id)
+                accepting_user_name = "User"
+                if accepting_user:
+                    accepting_user_name = f"{accepting_user.get('first_name', '')} {accepting_user.get('last_name', '')}".strip() or accepting_user.get('username', 'User')
+                
+                # Notify the other party (not the one who accepted)
+                if current_user_id == client_id:
+                    # Client accepted, notify freelancer
+                    notification_service.notify_agreement_version_accepted(
+                        recipient_id=freelancer_id,
+                        accepting_party_name=accepting_user_name,
+                        agreement_title=agreement_title,
+                        agreement_id=agreement_id,
+                        project_id=project_id,
+                        recipient_role="FL"
+                    )
+                    logger.info("Agreement version acceptance notification sent to freelancer: %s for agreement: %s", freelancer_id, agreement_id)
+                elif current_user_id == freelancer_id:
+                    # Freelancer accepted, notify client
+                    notification_service.notify_agreement_version_accepted(
+                        recipient_id=client_id,
+                        accepting_party_name=accepting_user_name,
+                        agreement_title=agreement_title,
+                        agreement_id=agreement_id,
+                        project_id=project_id,
+                        recipient_role="CL"
+                    )
+                    logger.info("Agreement version acceptance notification sent to client: %s for agreement: %s", client_id, agreement_id)
+            except Exception as e:
+                logger.warning("Failed to send agreement version acceptance notification (acceptance still saved): %s", e)
+                # Continue even if notification fails - acceptance is already saved
+        
         return updated

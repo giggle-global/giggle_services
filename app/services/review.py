@@ -66,15 +66,22 @@ class ReviewService:
             if agreement:
                 freelancer_id = agreement.get("freelancer", {}).get("user_id")
                 if freelancer_id:
+                    # Get client name from agreement or full_client
+                    client_name = agreement.get("client", {}).get("name") or full_client.get("first_name", "") + " " + full_client.get("last_name", "")
+                    client_name = client_name.strip() or "Client"
+                    
+                    # Get project name from project_data
+                    project_name = project_data.get("title") or project_data.get("project_title") or "Project"
+                    
                     # When freelancer receives a review, route them to the milestone
                     # view for this agreement so they can see the review details.
                     self.notification_service.create_notification(
                         user_id=freelancer_id,
                         notification_type=NotificationType.AGREEMENT_UPDATED,
                         title="Review Received",
-                        message="Client has given a review for the agreement",
-                        data={"agreement_id": review_in.gig_id, "type": "review_received"},
-                        link=f"/freelancer/milestone?agreement_id={review_in.gig_id}",
+                        message=f"{client_name} has given a review for the project '{project_name}'",
+                        data={"agreement_id": review_in.gig_id, "type": "review_received", "client_name": client_name, "project_name": project_name},
+                        link=f"/freelancer/milestone?agreement_id={review_in.gig_id}&view_review=true",
                     )
         except Exception as e:
             logger.warning(f"Failed to send notification to freelancer after review creation: {e}")
@@ -187,8 +194,8 @@ class ReviewService:
                                 "project_name": project_name,
                                 "type": "agreement_completed",
                             },
-                            # Freelancer messages page with agreement context
-                            link=f"/freelancer/messages?agreement_id={agreement_id}",
+                            # Freelancer gig page with agreement context, navigate to archive tab
+                            link=f"/freelancer/gig?agreement_id={agreement_id}&tab=1",
                         )
 
                     # Auto-create or update freelancer portfolio entry for this project

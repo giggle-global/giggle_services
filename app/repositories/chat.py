@@ -33,7 +33,7 @@ class ChatRepository:
     {
         "_id": ObjectId(...),
         "group_type": "project" | "agreement" | "private",
-        "group_id": "<project_id or agreement_id or private::user1_id::user2_id>",
+        "group_id": "<request_id for project chats, agreement_id for agreement chats, or private::user1_id::user2_id for private chats>",
         "sender_id": "<user_id>",
         "sender_role": "<role>",
         "sender_name": "<first last>",
@@ -43,6 +43,9 @@ class ChatRepository:
         "created_at": ISODate,
         "updated_at": ISODate
     }
+    
+    Note: For project chats, group_id is request_id (not project_id) to ensure each
+    freelancer-client conversation is private even when multiple freelancers work on the same project.
     """
 
     def __init__(self):

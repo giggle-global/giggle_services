@@ -55,12 +55,22 @@ class MilestoneService:
         # update agreement's milestone list and recalc totals
         self.agreement_repo.add_milestone(agreement_id, created.get("milestone_id"))
 
-        milestones = self.milestone_repo.list_for_agreement(agreement_id)
-        # Calculate total_amount from sum of milestone payments
-        total_amount = sum(m.get("payment", {}).get("amount", 0.0) for m in milestones)
-        
-        # Get agreement to calculate rate
+        # Get agreement to get total_amount
         ag = self.agreement_repo.get_by_id(agreement_id)
+        total_amount = ag.get("total_amount", 0.0)
+        
+        milestones = self.milestone_repo.list_for_agreement(agreement_id)
+        num_milestones = len(milestones)
+        
+        # Redistribute total_amount equally among all milestones
+        if total_amount > 0 and num_milestones > 0:
+            amount_per_milestone = total_amount / num_milestones
+            # Update all milestone amounts to divide total_amount equally
+            for m in milestones:
+                payment = m.get("payment", {})
+                payment["amount"] = amount_per_milestone
+                self.milestone_repo.update(m["milestone_id"], {"payment": payment})
+        
         duration_days = ag.get("duration_days", 0)
         if duration_days <= 0:
             # Calculate duration_days if not set
@@ -73,10 +83,24 @@ class MilestoneService:
         # Calculate rate from total_amount / duration_days
         rate = (total_amount / duration_days) if duration_days > 0 else 0.0
         
+        # Recalculate fees based on total_amount
+        client_fee_rate = ag.get("client_fee_rate", 0.05)
+        client_fee_amount = total_amount * client_fee_rate
+        client_total_amount = total_amount + client_fee_amount
+        platform_fee_rate = ag.get("platform_fee_rate", 0.10)
+        platform_fee_amount = total_amount * platform_fee_rate
+        freelancer_net_amount = total_amount - platform_fee_amount
+        
         self.agreement_repo.update(agreement_id, {
-            "num_milestones": len(milestones),
-            "total_amount": total_amount,
-            "rate": rate
+            "num_milestones": num_milestones,
+            "total_amount": total_amount,  # Keep total_amount unchanged
+            "rate": rate,
+            "client_fee_rate": client_fee_rate,
+            "client_fee_amount": client_fee_amount,
+            "client_total_amount": client_total_amount,
+            "platform_fee_rate": platform_fee_rate,
+            "platform_fee_amount": platform_fee_amount,
+            "freelancer_net_amount": freelancer_net_amount,
         })
 
         return created
@@ -158,11 +182,21 @@ class MilestoneService:
 
         # recompute agreement summary
         milestones = self.milestone_repo.list_for_agreement(ms["agreement_id"]) or []
-        # Calculate total_amount from sum of milestone payments
-        total_amount = sum(m.get("payment", {}).get("amount", 0.0) for m in milestones)
         
-        # Get agreement to calculate rate
+        # Get agreement to get total_amount (don't recalculate from milestones)
         ag = self.agreement_repo.get_by_id(ms["agreement_id"])
+        total_amount = ag.get("total_amount", 0.0)
+        
+        # Redistribute total_amount equally among all milestones
+        num_milestones = len(milestones)
+        if total_amount > 0 and num_milestones > 0:
+            amount_per_milestone = total_amount / num_milestones
+            # Update all milestone amounts to divide total_amount equally
+            for m in milestones:
+                payment = m.get("payment", {})
+                payment["amount"] = amount_per_milestone
+                self.milestone_repo.update(m["milestone_id"], {"payment": payment})
+        
         duration_days = ag.get("duration_days", 0)
         if duration_days <= 0:
             # Calculate duration_days if not set
@@ -175,10 +209,24 @@ class MilestoneService:
         # Calculate rate from total_amount / duration_days
         rate = (total_amount / duration_days) if duration_days > 0 else 0.0
         
+        # Recalculate fees based on total_amount
+        client_fee_rate = ag.get("client_fee_rate", 0.05)
+        client_fee_amount = total_amount * client_fee_rate
+        client_total_amount = total_amount + client_fee_amount
+        platform_fee_rate = ag.get("platform_fee_rate", 0.10)
+        platform_fee_amount = total_amount * platform_fee_rate
+        freelancer_net_amount = total_amount - platform_fee_amount
+        
         self.agreement_repo.update(ms["agreement_id"], {
-            "num_milestones": len(milestones),
-            "total_amount": total_amount,
-            "rate": rate
+            "num_milestones": num_milestones,
+            "total_amount": total_amount,  # Keep total_amount unchanged
+            "rate": rate,
+            "client_fee_rate": client_fee_rate,
+            "client_fee_amount": client_fee_amount,
+            "client_total_amount": client_total_amount,
+            "platform_fee_rate": platform_fee_rate,
+            "platform_fee_amount": platform_fee_amount,
+            "freelancer_net_amount": freelancer_net_amount,
         })
 
         # if all milestones completed with payment received -> check for review before setting agreement Completed
@@ -302,8 +350,19 @@ class MilestoneService:
             # use $pull and recompute
             self.agreement_repo.col.update_one({"agreement_id": ag["agreement_id"]}, {"$pull": {"milestones": milestone_id}})
             milestones = self.milestone_repo.list_for_agreement(ag["agreement_id"])
-            # Calculate total_amount from sum of milestone payments
-            total_amount = sum(m.get("payment", {}).get("amount", 0.0) for m in milestones)
+            
+            # Get total_amount from agreement (don't recalculate from milestones)
+            total_amount = ag.get("total_amount", 0.0)
+            num_milestones = len(milestones)
+            
+            # Redistribute total_amount equally among remaining milestones
+            if total_amount > 0 and num_milestones > 0:
+                amount_per_milestone = total_amount / num_milestones
+                # Update all milestone amounts to divide total_amount equally
+                for m in milestones:
+                    payment = m.get("payment", {})
+                    payment["amount"] = amount_per_milestone
+                    self.milestone_repo.update(m["milestone_id"], {"payment": payment})
             
             # Get duration_days from agreement
             duration_days = ag.get("duration_days", 0)
@@ -318,10 +377,24 @@ class MilestoneService:
             # Calculate rate from total_amount / duration_days
             rate = (total_amount / duration_days) if duration_days > 0 else 0.0
             
+            # Recalculate fees based on total_amount
+            client_fee_rate = ag.get("client_fee_rate", 0.05)
+            client_fee_amount = total_amount * client_fee_rate
+            client_total_amount = total_amount + client_fee_amount
+            platform_fee_rate = ag.get("platform_fee_rate", 0.10)
+            platform_fee_amount = total_amount * platform_fee_rate
+            freelancer_net_amount = total_amount - platform_fee_amount
+            
             self.agreement_repo.update(ag["agreement_id"], {
-                "num_milestones": len(milestones),
-                "total_amount": total_amount,
-                "rate": rate
+                "num_milestones": num_milestones,
+                "total_amount": total_amount,  # Keep total_amount unchanged
+                "rate": rate,
+                "client_fee_rate": client_fee_rate,
+                "client_fee_amount": client_fee_amount,
+                "client_total_amount": client_total_amount,
+                "platform_fee_rate": platform_fee_rate,
+                "platform_fee_amount": platform_fee_amount,
+                "freelancer_net_amount": freelancer_net_amount,
             })
         return {"deleted": deleted}
 
@@ -373,6 +446,24 @@ class MilestoneService:
         updated_ok = self.milestone_repo.update(milestone_id, update_data)
         if not updated_ok:
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to verify milestone")
+
+        # Notify freelancer that client has verified the milestone
+        try:
+            milestone_title = ms.get("title", "Milestone")
+            agreement_id = ms["agreement_id"]
+            project_title = ag.get("title")
+            freelancer_id = ag.get("freelancer", {}).get("user_id")
+            
+            if freelancer_id:
+                self.notification_service.notify_milestone_verified(
+                    freelancer_id=freelancer_id,
+                    milestone_title=milestone_title,
+                    milestone_id=milestone_id,
+                    agreement_id=agreement_id,
+                    project_title=project_title,
+                )
+        except Exception as notify_err:
+            logger.warning("Failed to send milestone verified notification for milestone %s: %s", milestone_id, notify_err)
 
         # Notify client to send payment after verification
         try:
@@ -431,6 +522,24 @@ class MilestoneService:
         updated_ok = self.milestone_repo.update(milestone_id, update_data)
         if not updated_ok:
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to complete milestone")
+
+        # Notify client that freelancer has completed the milestone work
+        try:
+            milestone_title = ms.get("title", "Milestone")
+            agreement_id = ms["agreement_id"]
+            project_title = ag.get("title")
+            client_id = ag.get("client", {}).get("user_id")
+            
+            if client_id:
+                self.notification_service.notify_milestone_work_completed(
+                    client_id=client_id,
+                    milestone_title=milestone_title,
+                    milestone_id=milestone_id,
+                    agreement_id=agreement_id,
+                    project_title=project_title,
+                )
+        except Exception as notify_err:
+            logger.warning("Failed to send milestone work completed notification for milestone %s: %s", milestone_id, notify_err)
 
         return self.milestone_repo.get_by_id(milestone_id)
 
@@ -537,6 +646,38 @@ class MilestoneService:
         if payment_data:
             payment_data["payment_released"] = True
             self.milestone_repo.update(milestone_id, {"payment": payment_data})
+
+        # Send milestone completed notifications to both client and freelancer
+        try:
+            milestone_title = ms.get("title", "Milestone")
+            agreement_id = ms["agreement_id"]
+            project_title = ag.get("title")
+            client_id = ag.get("client", {}).get("user_id")
+            freelancer_id = ag.get("freelancer", {}).get("user_id")
+            
+            # Notify client that milestone is completed
+            if client_id:
+                self.notification_service.notify_milestone_completed(
+                    user_id=client_id,
+                    milestone_title=milestone_title,
+                    milestone_id=milestone_id,
+                    agreement_id=agreement_id,
+                    project_title=project_title,
+                    recipient_role="CL",
+                )
+            
+            # Notify freelancer that milestone is completed
+            if freelancer_id:
+                self.notification_service.notify_milestone_completed(
+                    user_id=freelancer_id,
+                    milestone_title=milestone_title,
+                    milestone_id=milestone_id,
+                    agreement_id=agreement_id,
+                    project_title=project_title,
+                    recipient_role="FL",
+                )
+        except Exception as notify_err:
+            logger.warning("Failed to send milestone completed notifications for milestone %s: %s", milestone_id, notify_err)
 
         # Move to next milestone if available
         milestones = self.milestone_repo.list_for_agreement(ms["agreement_id"])

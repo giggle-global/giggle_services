@@ -26,7 +26,10 @@ def get_recent_projects(
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """Get projects created within the last N hours (default 24 hours)"""
-    return ok(data=svc.get_recent_projects(hours=hours, limit=limit), message="Recent projects fetched")
+    return ok(
+        data=svc.get_recent_projects(hours=hours, limit=limit, current_user=current_user),
+        message="Recent projects fetched"
+    )
 
 @router.get("/", response_model=APIResponse[List[ProjectOut]])
 def list_projects(

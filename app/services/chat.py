@@ -121,20 +121,30 @@ class WebSocketManager:
         conns = []
         async with self._lock:
             # Find websockets for this user, optionally filtered by group_id
+            print(f"🔍 send_to_user: Looking for user_id={user_id}, target_group_id={target_group_id}")
             for ws, meta in self._ws_meta.items():
-                if meta.get("user_id") == user_id:
+                meta_user_id = meta.get("user_id")
+                meta_group_id = meta.get("group_id")
+                if meta_user_id == user_id:
                     # If target_group_id is specified, only send to that group
                     if target_group_id:
-                        if meta.get("group_id") == target_group_id:
+                        if meta_group_id == target_group_id:
+                            print(f"   ✅ Found matching connection: user_id={meta_user_id}, group_id={meta_group_id}")
                             conns.append(ws)
+                        else:
+                            print(f"   ⚠️ Skipping connection - group_id mismatch: user_id={meta_user_id}, group_id={meta_group_id} (expected {target_group_id})")
                     else:
                         # If no target_group_id, send to all user's connections (backward compatibility)
+                        print(f"   ✅ Found connection (no group filter): user_id={meta_user_id}, group_id={meta_group_id}")
                         conns.append(ws)
         
+        print(f"📤 Sending to {len(conns)} connection(s) for user_id={user_id}")
         for ws in conns:
             try:
                 await ws.send_json(payload)
-            except Exception:
+                print(f"   ✅ Successfully sent to connection")
+            except Exception as e:
+                print(f"   ❌ Failed to send to connection: {e}")
                 to_remove.append(ws)
         
         if to_remove:
@@ -314,16 +324,19 @@ class ChatService:
         """
         return self.repo.get_unseen_conversation_count_for_user(user_id)
 
-    def _generate_private_group_id(self, user1_id: str, user2_id: str, ticket_id: Optional[str] = None) -> str:
+    def _generate_private_group_id(self, user1_id: str, user2_id: str, ticket_id: Optional[str] = None, agreement_id: Optional[str] = None) -> str:
         """
         Generate consistent group_id for private chat by sorting user IDs.
         If ticket_id is provided, include it to separate chats by dispute.
+        If agreement_id is provided, include it to separate chats by agreement.
         This ensures both users see the same conversation regardless of who initiated,
-        and each dispute has its own separate private chat.
+        and each dispute/agreement has its own separate private chat.
         """
         sorted_ids = sorted([str(user1_id), str(user2_id)])
         if ticket_id:
             return f"private::{sorted_ids[0]}::{sorted_ids[1]}::ticket::{ticket_id}"
+        if agreement_id:
+            return f"private::{sorted_ids[0]}::{sorted_ids[1]}::agreement::{agreement_id}"
         return f"private::{sorted_ids[0]}::{sorted_ids[1]}"
 
     def log_private_chat(
@@ -339,8 +352,9 @@ class ChatService:
         """
         Save private chat message between admin and another user (client or freelancer).
         If ticket_id is provided, the chat will be separated by dispute.
+        If agreement_id is provided, the chat will be separated by agreement.
         """
-        group_id = self._generate_private_group_id(admin_id, other_user_id, ticket_id)
+        group_id = self._generate_private_group_id(admin_id, other_user_id, ticket_id, agreement_id)
         meta = {}
         if ticket_id:
             meta["ticket_id"] = ticket_id
@@ -358,14 +372,16 @@ class ChatService:
             meta=meta
         )
 
-    def get_private_chat_history(self, user1_id: str, user2_id: str, limit: int = 100, ticket_id: Optional[str] = None):
+    def get_private_chat_history(self, user1_id: str, user2_id: str, limit: int = 100, ticket_id: Optional[str] = None, agreement_id: Optional[str] = None):
         """
         Get private chat history between two users.
         If ticket_id is provided, returns history for that specific dispute only.
+        If agreement_id is provided, returns history for that specific agreement only.
         FIXED: Also fetches messages with different ticket_id formats to handle mismatches.
         """
-        group_id = self._generate_private_group_id(user1_id, user2_id, ticket_id)
-        print(f"🔍 get_private_chat_history: user1={user1_id}, user2={user2_id}, ticket_id={ticket_id}, group_id={group_id}")
+        # Generate group_id - prioritize ticket_id over agreement_id if both are provided
+        group_id = self._generate_private_group_id(user1_id, user2_id, ticket_id, agreement_id)
+        print(f"🔍 get_private_chat_history: user1={user1_id}, user2={user2_id}, ticket_id={ticket_id}, agreement_id={agreement_id}, group_id={group_id}")
         
         # First, try to get messages with exact group_id
         query = {"group_type": "private", "group_id": group_id}
@@ -374,11 +390,13 @@ class ChatService:
         
         history = self.get_chat_history("private", group_id, limit=limit)
         
-        # CRITICAL FIX: If ticket_id is provided, ONLY fetch messages for that specific ticket
-        # Only check for alternative formats if we have very few messages (handles ticket_id format mismatch)
-        if ticket_id and len(history) < 5:
+        # CRITICAL FIX: If ticket_id or agreement_id is provided, ONLY fetch messages for that specific ticket/agreement
+        # Only check for alternative formats if we have very few messages (handles ticket_id/agreement_id format mismatch)
+        if (ticket_id or agreement_id) and len(history) < 5:
             try:
-                print(f"⚠️ Few messages found ({len(history)}) for ticket_id={ticket_id}. Checking for messages with different ticket_id formats for THIS ticket only...")
+                filter_type = 'ticket_id' if ticket_id else 'agreement_id'
+                filter_value = ticket_id or agreement_id
+                print(f"⚠️ Few messages found ({len(history)}) for {filter_type}={filter_value}. Checking for messages with different formats for THIS {filter_type} only...")
                 
                 sorted_ids = sorted([str(user1_id), str(user2_id)])
                 base_pattern = f"private::{sorted_ids[0]}::{sorted_ids[1]}"
@@ -386,113 +404,152 @@ class ChatService:
                 # Escape special regex characters in the pattern
                 escaped_pattern = re.escape(base_pattern)
                 
-                # CRITICAL: Only match messages that contain THIS ticket_id (case-insensitive)
-                # Match patterns like: private::user1::user2::ticket::TICKET_ID (any case variation)
-                ticket_id_upper = ticket_id.upper()
-                ticket_pattern = f"{escaped_pattern}::ticket::.*{re.escape(ticket_id_upper)}"
+                # Build alternative query based on whether we're looking for ticket_id or agreement_id
+                if ticket_id:
+                    # CRITICAL: Only match messages that contain THIS ticket_id (case-insensitive)
+                    # Match patterns like: private::user1::user2::ticket::TICKET_ID (any case variation)
+                    ticket_id_upper = ticket_id.upper()
+                    ticket_pattern = f"{escaped_pattern}::ticket::.*{re.escape(ticket_id_upper)}"
+                    
+                    alternative_query = {
+                        "group_type": "private",
+                        "$or": [
+                            # Match group_id with this ticket_id (case-insensitive)
+                            {"group_id": {"$regex": ticket_pattern, "$options": "i"}},
+                            # OR match meta.ticket_id field (case-insensitive)
+                            {"meta.ticket_id": {"$regex": f"^{re.escape(ticket_id_upper)}$", "$options": "i"}}
+                        ]
+                    }
+                elif agreement_id:
+                    # CRITICAL: Only match messages that contain THIS agreement_id
+                    # Match patterns like: private::user1::user2::agreement::AGREEMENT_ID
+                    agreement_pattern = f"{escaped_pattern}::agreement::.*{re.escape(agreement_id)}"
+                    
+                    alternative_query = {
+                        "group_type": "private",
+                        "$or": [
+                            # Match group_id with this agreement_id
+                            {"group_id": {"$regex": agreement_pattern, "$options": "i"}},
+                            # OR match meta.agreement_id field
+                            {"meta.agreement_id": agreement_id}
+                        ]
+                    }
+                else:
+                    alternative_query = None
                 
-                # Also check meta.ticket_id field as fallback
-                alternative_query = {
-                    "group_type": "private",
-                    "$or": [
-                        # Match group_id with this ticket_id (case-insensitive)
-                        {"group_id": {"$regex": ticket_pattern, "$options": "i"}},
-                        # OR match meta.ticket_id field (case-insensitive)
-                        {"meta.ticket_id": {"$regex": f"^{re.escape(ticket_id_upper)}$", "$options": "i"}}
-                    ]
-                }
-                
-                alternative_messages = list(self.repo.col.find(alternative_query).sort("created_at", DESCENDING).limit(limit))
-                print(f"🔍 Found {len(alternative_messages)} messages with alternative ticket_id formats for THIS ticket only")
-                
-                # Merge and deduplicate messages - ONLY include messages for THIS ticket
-                existing_ids = {msg.get("id") or str(msg.get("_id", "")) for msg in history}
-                for alt_msg in alternative_messages:
-                    try:
-                        # CRITICAL: Double-check this message is for the correct ticket
-                        # Check both group_id and meta.ticket_id
-                        alt_group_id = alt_msg.get("group_id", "")
-                        alt_meta_ticket = alt_msg.get("meta", {}).get("ticket_id", "")
-                        
-                        # Verify this message belongs to the requested ticket
-                        ticket_id_match = False
-                        if ticket_id_upper in alt_group_id.upper():
-                            ticket_id_match = True
-                        elif alt_meta_ticket and alt_meta_ticket.upper() == ticket_id_upper:
-                            ticket_id_match = True
-                        elif alt_meta_ticket and ticket_id_upper in alt_meta_ticket.upper():
-                            ticket_id_match = True
-                        
-                        if not ticket_id_match:
-                            print(f"   ⚠️ Skipping message - ticket_id mismatch: group_id={alt_group_id}, meta.ticket_id={alt_meta_ticket}")
+                if alternative_query:
+                    alternative_messages = list(self.repo.col.find(alternative_query).sort("created_at", DESCENDING).limit(limit))
+                    filter_type = 'ticket_id' if ticket_id else 'agreement_id'
+                    print(f"🔍 Found {len(alternative_messages)} messages with alternative {filter_type} formats for THIS {filter_type} only")
+                    
+                    # Merge and deduplicate messages - ONLY include messages for THIS ticket/agreement
+                    existing_ids = {msg.get("id") or str(msg.get("_id", "")) for msg in history}
+                    for alt_msg in alternative_messages:
+                        try:
+                            # CRITICAL: Double-check this message is for the correct ticket/agreement
+                            alt_group_id = alt_msg.get("group_id", "")
+                            alt_meta = alt_msg.get("meta", {})
+                            alt_meta_ticket = alt_meta.get("ticket_id", "")
+                            alt_meta_agreement = alt_meta.get("agreement_id", "")
+                            
+                            # Verify this message belongs to the requested ticket/agreement
+                            matches = False
+                            if ticket_id:
+                                ticket_id_upper = ticket_id.upper()
+                                if ticket_id_upper in alt_group_id.upper():
+                                    matches = True
+                                elif alt_meta_ticket and alt_meta_ticket.upper() == ticket_id_upper:
+                                    matches = True
+                                elif alt_meta_ticket and ticket_id_upper in alt_meta_ticket.upper():
+                                    matches = True
+                            elif agreement_id:
+                                if agreement_id in alt_group_id:
+                                    matches = True
+                                elif alt_meta_agreement == agreement_id:
+                                    matches = True
+                            
+                            if not matches:
+                                print(f"   ⚠️ Skipping message - {filter_type} mismatch: group_id={alt_group_id}, meta={alt_meta}")
+                                continue
+                            
+                            alt_id = alt_msg.get("id") or str(alt_msg.get("_id", ""))
+                            if alt_id not in existing_ids:
+                                # Convert datetime to timestamp if needed
+                                if "created_at" in alt_msg:
+                                    if isinstance(alt_msg["created_at"], datetime):
+                                        alt_msg["timestamp"] = self._utc_to_iso(alt_msg["created_at"])
+                                        alt_msg["created_at"] = int(alt_msg["created_at"].timestamp())
+                                    elif isinstance(alt_msg["created_at"], (int, float)):
+                                        alt_msg["created_at"] = int(alt_msg["created_at"])
+                                        alt_msg["timestamp"] = self._utc_to_iso(datetime.utcfromtimestamp(alt_msg["created_at"]))
+                                    else:
+                                        # Fallback: use current time
+                                        now = datetime.utcnow()
+                                        alt_msg["timestamp"] = self._utc_to_iso(now)
+                                        alt_msg["created_at"] = int(now.timestamp())
+                                
+                                # Convert updated_at if present
+                                if "updated_at" in alt_msg and isinstance(alt_msg["updated_at"], datetime):
+                                    alt_msg["updated_at"] = int(alt_msg["updated_at"].timestamp())
+                                
+                                # Remove any other datetime objects that might exist
+                                for key, value in list(alt_msg.items()):
+                                    if isinstance(value, datetime) and key not in ["created_at", "updated_at"]:
+                                        alt_msg[key] = value.isoformat() + "Z"
+                                
+                                # Add id field
+                                if "_id" in alt_msg:
+                                    alt_msg["id"] = str(alt_msg["_id"])
+                                    alt_msg.pop("_id", None)
+                                
+                                history.append(alt_msg)
+                                existing_ids.add(alt_id)
+                        except Exception as e:
+                            print(f"⚠️ Error processing alternative message: {e}")
+                            import traceback
+                            traceback.print_exc()
                             continue
-                        
-                        alt_id = alt_msg.get("id") or str(alt_msg.get("_id", ""))
-                        if alt_id not in existing_ids:
-                            # Convert datetime to timestamp if needed
-                            if "created_at" in alt_msg:
-                                if isinstance(alt_msg["created_at"], datetime):
-                                    alt_msg["timestamp"] = self._utc_to_iso(alt_msg["created_at"])
-                                    alt_msg["created_at"] = int(alt_msg["created_at"].timestamp())
-                                elif isinstance(alt_msg["created_at"], (int, float)):
-                                    alt_msg["created_at"] = int(alt_msg["created_at"])
-                                    alt_msg["timestamp"] = self._utc_to_iso(datetime.utcfromtimestamp(alt_msg["created_at"]))
-                                else:
-                                    # Fallback: use current time
-                                    now = datetime.utcnow()
-                                    alt_msg["timestamp"] = self._utc_to_iso(now)
-                                    alt_msg["created_at"] = int(now.timestamp())
-                            
-                            # Convert updated_at if present
-                            if "updated_at" in alt_msg and isinstance(alt_msg["updated_at"], datetime):
-                                alt_msg["updated_at"] = int(alt_msg["updated_at"].timestamp())
-                            
-                            # Remove any other datetime objects that might exist
-                            for key, value in list(alt_msg.items()):
-                                if isinstance(value, datetime) and key not in ["created_at", "updated_at"]:
-                                    alt_msg[key] = value.isoformat() + "Z"
-                            
-                            # Add id field
-                            if "_id" in alt_msg:
-                                alt_msg["id"] = str(alt_msg["_id"])
-                                alt_msg.pop("_id", None)
-                            
-                            history.append(alt_msg)
-                            existing_ids.add(alt_id)
-                    except Exception as e:
-                        print(f"⚠️ Error processing alternative message: {e}")
-                        import traceback
-                        traceback.print_exc()
-                        continue
-                
-                # Sort by created_at
-                history.sort(key=lambda x: x.get("created_at", 0))
-                print(f"📬 Total messages after merging: {len(history)}")
+                    
+                    # Sort by created_at
+                    history.sort(key=lambda x: x.get("created_at", 0))
+                    print(f"📬 Total messages after merging: {len(history)}")
             except Exception as e:
                 print(f"⚠️ Error fetching alternative messages (non-critical): {e}")
                 import traceback
                 traceback.print_exc()
                 # Continue with original history - this is a fallback, so don't fail
         
-        # CRITICAL: Filter to ensure ONLY messages for this specific ticket are returned
-        # This prevents showing messages from other tickets
-        if ticket_id:
-            ticket_id_upper = ticket_id.upper()
+        # CRITICAL: Filter to ensure ONLY messages for this specific ticket/agreement are returned
+        # This prevents showing messages from other tickets/agreements
+        if ticket_id or agreement_id:
             filtered_history = []
+            ticket_id_upper = ticket_id.upper() if ticket_id else None
+            agreement_id_str = agreement_id if agreement_id else None
             for msg in history:
                 msg_group_id = msg.get("group_id", "")
                 msg_meta_ticket = msg.get("meta", {}).get("ticket_id", "")
+                msg_meta_agreement = msg.get("meta", {}).get("agreement_id", "")
                 
-                # Include message if it matches this ticket_id
-                if ticket_id_upper in msg_group_id.upper() or \
-                   (msg_meta_ticket and msg_meta_ticket.upper() == ticket_id_upper) or \
-                   (msg_meta_ticket and ticket_id_upper in msg_meta_ticket.upper()):
+                # Include message if it matches this ticket_id or agreement_id
+                matches = False
+                if ticket_id_upper:
+                    if ticket_id_upper in msg_group_id.upper() or \
+                       (msg_meta_ticket and msg_meta_ticket.upper() == ticket_id_upper) or \
+                       (msg_meta_ticket and ticket_id_upper in msg_meta_ticket.upper()):
+                        matches = True
+                if agreement_id_str and not matches:
+                    if agreement_id_str == msg_meta_agreement:
+                        matches = True
+                
+                if matches:
                     filtered_history.append(msg)
                 else:
-                    print(f"   ⚠️ Filtered out message - wrong ticket: group_id={msg_group_id}, meta.ticket_id={msg_meta_ticket}")
+                    print(f"   ⚠️ Filtered out message - wrong ticket/agreement: group_id={msg_group_id}, meta.ticket_id={msg_meta_ticket}, meta.agreement_id={msg_meta_agreement}")
             
             history = filtered_history
-            print(f"📬 After ticket_id filtering: {len(history)} messages for ticket_id={ticket_id}")
+            filter_type = 'ticket_id' if ticket_id else 'agreement_id' if agreement_id else 'none'
+            filter_value = ticket_id or agreement_id
+            print(f"📬 After {filter_type} filtering: {len(history)} messages for {filter_type}={filter_value}")
         
         print(f"📬 Retrieved {len(history)} messages for group_id={group_id}")
         

@@ -18,7 +18,9 @@ class MeetingStatus(str, Enum):
 
 class MeetingCreate(BaseModel):
     """Model for creating a meeting"""
-    agreement_id: str = Field(..., description="Agreement ID this meeting is associated with")
+    agreement_id: Optional[str] = Field(None, description="Agreement ID this meeting is associated with (optional for messages page)")
+    client_id: Optional[str] = Field(None, description="Client ID (required if agreement_id is not provided)")
+    freelancer_id: Optional[str] = Field(None, description="Freelancer ID (required if agreement_id is not provided)")
     title: str = Field(..., description="Meeting title")
     description: Optional[str] = Field(None, description="Meeting description")
     scheduled_time: int = Field(..., description="Scheduled time as Unix timestamp (UTC)")
@@ -44,7 +46,7 @@ class MeetingLinkUpdate(BaseModel):
 class MeetingOut(BaseModel):
     """Model for meeting output"""
     meeting_id: str
-    agreement_id: str
+    agreement_id: Optional[str] = None  # Optional - not required for messages page meetings
     title: str
     description: Optional[str] = None
     scheduled_time: int

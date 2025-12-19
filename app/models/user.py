@@ -74,6 +74,7 @@ class UserBase(BaseModel):
     first_intro_done: Optional[bool] = Field(False, example=True)
     email_verified: bool = Field(False, example=True)
     phone_verified: bool = Field(False, example=True)
+    is_affiliate: Optional[bool] = Field(False, example=False)
 
 
 class UserCreate(UserBase):
