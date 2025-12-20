@@ -119,51 +119,15 @@ class ChatRepository:
         """
         Count unread messages in a specific group for a user.
         Includes messages where seen_by doesn't exist (legacy messages).
+        Only counts messages sent by others, not messages sent by the user themselves.
         """
         return self.col.count_documents({
             "group_type": group_type,
             "group_id": group_id,
+            "sender_id": {"$ne": user_id},  # Only count messages from others
             "$or": [
                 {"seen_by": {"$exists": False}},
                 {"seen_by": {"$nin": [user_id]}}
             ]
         })
 
-    def get_unseen_conversation_count_for_user(self, user_id: str) -> int:
-        """
-        Count distinct **project conversations** (chats) that have at least one
-        unread incoming message for the given user.
-
-        Rules (WhatsApp-style):
-        - Only include group_type == \"project\" (ignore private/admin + agreement chats)
-        - Only count messages where:
-            * sender_id != user_id   (message from the other party)
-            * seen_by is missing OR does NOT contain user_id (treat legacy messages
-              with no seen_by as unread until the user opens the chat)
-        - Group by project_id (group_id) so each chat is counted once, no matter
-          how many unread messages are inside it.
-        """
-        pipeline = [
-            {
-                "$match": {
-                    "group_type": "project",
-                    "sender_id": {"$ne": user_id},
-                    "$or": [
-                        {"seen_by": {"$exists": False}},
-                        {"seen_by": None},
-                        {"seen_by": []},  # Empty array
-                        {"seen_by": {"$nin": [user_id]}},  # Array exists but doesn't contain user_id
-                    ],
-                }
-            },
-            {"$group": {"_id": "$group_id"}},
-            {"$count": "conversation_count"},
-        ]
-        try:
-            result = list(self.col.aggregate(pipeline))
-            if not result:
-                return 0
-            return int(result[0].get("conversation_count", 0))
-        except Exception:
-            # Fail-safe: don't break if aggregation fails
-            return 0

@@ -70,6 +70,23 @@ class AgreementService:
             platform_fee_amount = initial_total * platform_fee_rate
             freelancer_net_amount = initial_total - platform_fee_amount
 
+            # Set acceptance flags based on who created the agreement
+            # Creator auto-accepts their own version, other party needs to accept
+            client_id = payload.client.user_id
+            freelancer_id = payload.freelancer.user_id
+            client_accepted = False
+            freelancer_accepted = False
+            
+            if created_by == client_id:
+                # Client created: auto-accept for client
+                client_accepted = True
+                freelancer_accepted = False
+            elif created_by == freelancer_id:
+                # Freelancer created: auto-accept for freelancer
+                freelancer_accepted = True
+                client_accepted = False
+            # If admin created, both remain False (admin doesn't auto-accept)
+            
             doc = AgreementInDB(
                 title=payload.title,
                 description=payload.description,
@@ -93,6 +110,9 @@ class AgreementService:
                 duration_days=duration_days,
                 num_milestones=0,
                 created_by=created_by,
+                last_updated_by=created_by,  # Set creator as last updater to prevent immediate updates
+                client_accepted_version=client_accepted,
+                freelancer_accepted_version=freelancer_accepted,
                 draft=True
             ).model_dump()
 
@@ -311,6 +331,32 @@ class AgreementService:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Not authorized")
         if ag["status"] in [AgreementStatus.CANCELLED, AgreementStatus.COMPLETED]:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot update cancelled/completed agreement")
+        
+        # Prevent consecutive updates by the same user
+        # User can only update again after the other party has updated or accepted
+        current_user_id = user.get("user_id")
+        last_updated_by = ag.get("last_updated_by")
+        client_accepted = ag.get("client_accepted_version", False)
+        freelancer_accepted = ag.get("freelancer_accepted_version", False)
+        both_accepted = client_accepted and freelancer_accepted
+        
+        # Admin can always update (bypass this rule)
+        is_admin = user.get("role") == "admin"
+        
+        # If both parties have accepted, agreement is locked for signing phase
+        if both_accepted and not is_admin:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Cannot update agreement. Both parties have accepted this version. The agreement is now locked for signing."
+            )
+        
+        # Prevent same user from updating consecutively
+        # User must wait for the other party to update or accept before they can update again
+        if last_updated_by and last_updated_by == current_user_id and not is_admin:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Cannot update agreement. You have already updated this agreement. Please wait for the other party to update or accept before making another update."
+            )
 
         # Remove rate from update_payload if present (rate is calculated, not directly editable)
         if "rate" in update_payload:
