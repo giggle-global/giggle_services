@@ -313,6 +313,66 @@ async def ws_project(request_id: str, websocket: WebSocket, token: Optional[str]
                 }
             }
             await websocket_manager.send_to_group(f"request::{request_id}", payload)
+            
+            # Send unread count update to the recipient (other participant)
+            # This provides real-time unread count updates via WebSocket
+            try:
+                sender_id = str(caller.get("user_id"))
+                recipient_id = None
+                if request_details:
+                    client_id = str(request_details.get("client_id", ""))
+                    freelancer_id = str(request_details.get("freelancer_id", ""))
+                    # Determine recipient (the one who didn't send the message)
+                    if sender_id == client_id:
+                        recipient_id = freelancer_id
+                    elif sender_id == freelancer_id:
+                        recipient_id = client_id
+                
+                if recipient_id:
+                    # Calculate unread count for the recipient
+                    unread_count = chat_service.get_unseen_count("project", request_id, recipient_id)
+                    
+                    # Get last message for this conversation
+                    last_message_content = ""
+                    last_message_timestamp = ""
+                    try:
+                        # Get the most recent message by querying with descending sort
+                        from pymongo import DESCENDING
+                        query = {"group_type": "project", "group_id": request_id}
+                        last_msg_doc = chat_service.repo.col.find_one(
+                            query,
+                            sort=[("created_at", DESCENDING)]
+                        )
+                        if last_msg_doc:
+                            last_message_content = last_msg_doc.get("content", "")
+                            last_message_timestamp = last_msg_doc.get("created_at", "")
+                            # Convert datetime to ISO string if needed
+                            if last_message_timestamp and hasattr(last_message_timestamp, 'isoformat'):
+                                last_message_timestamp = last_message_timestamp.isoformat()
+                            elif last_message_timestamp:
+                                last_message_timestamp = str(last_message_timestamp)
+                    except Exception as e:
+                        print(f"⚠️ Error fetching last message: {e}")
+                    
+                    # Send unread count update to recipient via WebSocket
+                    unread_count_payload = {
+                        "type": "unread_count_update",
+                        "payload": {
+                            "group_type": "project",
+                            "group_id": request_id,
+                            "request_id": request_id,
+                            "unread_count": unread_count,
+                            "last_message": last_message_content,
+                            "last_message_timestamp": last_message_timestamp
+                        }
+                    }
+                    # Send to all recipient's active WebSocket connections (not just this conversation)
+                    await websocket_manager.send_to_user(recipient_id, unread_count_payload)
+                    print(f"📊 Sent unread count update: request_id={request_id}, recipient={recipient_id}, count={unread_count}, last_message={last_message_content[:50]}")
+            except Exception as unread_error:
+                # Don't fail message sending if unread count update fails
+                print(f"⚠️ Error sending unread count update: {unread_error}")
+                traceback.print_exc()
 
     except WebSocketDisconnect:
         print("🔌 Project WebSocket disconnected normally")
@@ -947,7 +1007,7 @@ def get_unread_counts(
 
 
 @router.post("/chat/mark-read", response_model=APIResponse[Dict[str, Any]])
-def mark_messages_as_read(
+async def mark_messages_as_read(
     group_type: str = Query(..., description="Type of chat: 'project', 'agreement', or 'private'"),
     group_id: str = Query(..., description="Group ID (request_id for project chats, agreement_id for agreement chats, or private chat group_id)"),
     current_user: Dict[str, Any] = Depends(get_current_user)
@@ -957,6 +1017,26 @@ def mark_messages_as_read(
         chat_service = ChatService()
         user_id = current_user.get("user_id")
         marked_count = chat_service.mark_seen(group_type, group_id, user_id)
+        
+        # Send unread count update via WebSocket (count should be 0 after marking as read)
+        try:
+            unread_count = chat_service.get_unseen_count(group_type, group_id, user_id)
+            unread_count_payload = {
+                "type": "unread_count_update",
+                "payload": {
+                    "group_type": group_type,
+                    "group_id": group_id,
+                    "request_id": group_id if group_type == "project" else None,
+                    "unread_count": unread_count
+                }
+            }
+            # Send to user's active WebSocket connections
+            await websocket_manager.send_to_user(str(user_id), unread_count_payload)
+            print(f"📊 Sent unread count update after mark-read: group_type={group_type}, group_id={group_id}, user={user_id}, count={unread_count}")
+        except Exception as ws_error:
+            # Don't fail the mark-read operation if WebSocket update fails
+            print(f"⚠️ Error sending unread count update via WebSocket: {ws_error}")
+        
         return ok(
             data={"group_type": group_type, "group_id": group_id, "marked_count": marked_count},
             message=f"Marked {marked_count} messages as read"
