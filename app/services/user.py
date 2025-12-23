@@ -20,6 +20,7 @@ from app.core.keycloak import (
     delete_user_in_keycloak,  # <-- implement this in your keycloak module
     get_client_access_token,
     set_user_password,
+    update_user_in_keycloak,
 )
 from app.core.config import config
 
@@ -563,7 +564,7 @@ class UserService:
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to toggle affiliate status")
 
     def create_root_user(self) -> Dict[str, Any]:
-        """Idempotent super admin bootstrap."""
+        """Idempotent super admin bootstrap. Also updates email and password if user exists."""
         root_email = config.user_name
         root_pass = config.passcode
         root_role = "SA"
@@ -573,7 +574,42 @@ class UserService:
             # check by email OR role to avoid duplicates
             existing = self.user_repo.collection.find_one({"$or": [{"email": root_email}, {"role": root_role}]})
             if existing:
-                logger.info("Root user already exists: email=%s", root_email)
+                existing_email = existing.get("email")
+                keycloak_id = existing.get("keycloak_id")
+                user_id = existing.get("user_id")
+                
+                logger.info("Root user already exists: existing_email=%s, new_email=%s", existing_email, root_email)
+                
+                if keycloak_id:
+                    try:
+                        token = get_client_access_token()
+                        
+                        # Update email in Keycloak if it changed
+                        if existing_email != root_email:
+                            logger.info("Root user email changed from %s to %s, updating in Keycloak", existing_email, root_email)
+                            update_data = {
+                                "email": root_email,
+                                "emailVerified": True
+                            }
+                            update_user_in_keycloak(token, keycloak_id, update_data)
+                            
+                            # Update email in MongoDB
+                            if user_id:
+                                self.user_repo.collection.update_one(
+                                    {"user_id": user_id},
+                                    {"$set": {"email": root_email}}
+                                )
+                                logger.info("Root user email updated in MongoDB: user_id=%s", user_id)
+                        
+                        # Always update password in Keycloak (sync with .env)
+                        set_user_password(token, keycloak_id, root_pass, temporary=False)
+                        logger.info("Root user password updated in Keycloak: email=%s", root_email)
+                    except Exception as e:
+                        logger.error("Failed to update root user in Keycloak: %s", str(e), exc_info=True)
+                        # Don't fail the startup if update fails, but log the error
+                else:
+                    logger.warning("Root user exists but has no keycloak_id, cannot update credentials")
+                
                 return {"detail": "Root user already exists."}
 
             user_id = str(uuid.uuid4())
