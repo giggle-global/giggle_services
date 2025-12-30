@@ -12,7 +12,7 @@ from app.models.request import RequestCreate, RequestUpdate, RequestOut, Request
 logger = logging.getLogger(__name__)
 
 # Maximum number of requests a client can send per project
-MAX_REQUESTS_PER_PROJECT = 5
+MAX_REQUESTS_PER_PROJECT = 10
 
 
 class RequestService:
@@ -56,7 +56,7 @@ class RequestService:
         if not project_details:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Project not found or not associated with client")
 
-        # Check request limit per project (5 PENDING requests per project)
+        # Check request limit per project (10 PENDING requests per project)
         try:
             pending_requests = self.repo.count_pending_requests_by_client_and_project(client_id, project_id)
             if pending_requests >= MAX_REQUESTS_PER_PROJECT:

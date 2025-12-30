@@ -8,6 +8,7 @@ from apscheduler.triggers.cron import CronTrigger
 from datetime import datetime, timedelta
 from app.repositories.milestones import MilestoneRepository
 from app.repositories.agreements import AgreementRepository
+from app.repositories.request import RequestRepository
 from app.services.notification import NotificationService
 from app.models.milestones import MilestoneStatus
 
@@ -18,6 +19,7 @@ class MilestoneScheduler:
         self.scheduler = BackgroundScheduler()
         self.milestone_repo = MilestoneRepository()
         self.agreement_repo = AgreementRepository()
+        self.request_repo = RequestRepository()
         self.notification_service = NotificationService()
         self._setup_jobs()
 
@@ -31,7 +33,15 @@ class MilestoneScheduler:
             name='Check milestones due in 24 hours',
             replace_existing=True
         )
-        logger.info("Milestone scheduler jobs configured - will run at the start of each hour")
+        # Run every 30 minutes to reject expired requests (pending requests older than 12 hours)
+        self.scheduler.add_job(
+            func=self._reject_expired_requests,
+            trigger=CronTrigger(minute='*/30'),  # Run every 30 minutes
+            id='reject_expired_requests',
+            name='Reject expired requests (12 hours)',
+            replace_existing=True
+        )
+        logger.info("Scheduler jobs configured - milestone reminders at start of each hour, expired requests every 30 minutes")
 
     def _check_milestone_reminders(self):
         """Check for milestones due in 24 hours and send notifications"""
@@ -122,6 +132,18 @@ class MilestoneScheduler:
             logger.info("Milestone reminder check completed")
         except Exception as e:
             logger.exception("Error in milestone reminder check: %s", e)
+
+    def _reject_expired_requests(self):
+        """Reject pending requests that are older than 12 hours"""
+        try:
+            logger.info("Running expired request rejection check...")
+            rejected_count = self.request_repo.reject_expired_requests()
+            if rejected_count > 0:
+                logger.info("Rejected %d expired requests (older than 12 hours)", rejected_count)
+            else:
+                logger.debug("No expired requests to reject")
+        except Exception as e:
+            logger.exception("Error in expired request rejection: %s", e)
 
     def start(self):
         """Start the scheduler"""

@@ -129,3 +129,34 @@ def get_request_by_parties(
     
     logger.info(f"Request found by parties: request_id={request.get('request_id')}")
     return ok(data=request, message="Request fetched")
+
+@router.post("/test/reject-expired", response_model=APIResponse[Dict[str, Any]])
+def test_reject_expired_requests(
+    hours: float = Body(0.1, embed=True, description="Hours threshold for testing (default: 0.1 = 6 minutes)"),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    svc: RequestService = Depends(get_request_service)
+):
+    """
+    TEST ENDPOINT: Manually trigger rejection of expired requests with custom time threshold.
+    Only super admin can use this endpoint for testing purposes.
+    
+    Example: Use hours=0.1 (6 minutes) to test with requests older than 6 minutes.
+    """
+    logger.debug(f"Test reject expired requests by user_id={current_user.get('user_id')} role={current_user.get('role')} hours={hours}")
+    
+    if current_user.get("role") != "SA":
+        logger.warning("Non-admin attempted to test reject expired requests.")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only super admin can use this test endpoint")
+    
+    try:
+        from app.repositories.request import RequestRepository
+        repo = RequestRepository()
+        rejected_count = repo.reject_expired_requests(hours=hours)
+        logger.info(f"Test: Rejected {rejected_count} expired requests (threshold: {hours} hours)")
+        return ok(
+            data={"rejected_count": rejected_count, "hours_threshold": hours},
+            message=f"Rejected {rejected_count} expired requests (threshold: {hours} hours)"
+        )
+    except Exception as e:
+        logger.exception("Error in test reject expired requests")
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, f"Failed to reject expired requests: {str(e)}")

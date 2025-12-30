@@ -23,7 +23,7 @@ class RequestRepository:
             "project_id": project_id,
             "project_title": project_name,
             "status": RequestStatus.PENDING.value,
-            "created_at": int(datetime.utcnow().timestamp())  # epoch seconds (UTC)
+            "created_at": int(datetime.now(timezone.utc).timestamp())  # epoch seconds (UTC)
         }
         # Check for existing active request (PENDING or ACCEPTED) for the same client, freelancer, and project
         # REJECTED and CANCELLED requests don't block new requests
@@ -42,22 +42,28 @@ class RequestRepository:
     def update_status(self, request_id: str, status: str, acting_user_id: str) -> Optional[dict]:
         result = self.collection.update_one(
             {"request_id": request_id},
-            {"$set": {"status": status, "updated_at": int(datetime.utcnow().timestamp())}}
+            {"$set": {"status": status, "updated_at": int(datetime.now(timezone.utc).timestamp())}}
         )
         if result.matched_count == 0:
             raise HTTPException(404, "Request not found.")
         return self.collection.find_one({"request_id": request_id}, {"_id": 0})
     
-    def cancel_expired_requests(self) -> int:
+    def reject_expired_requests(self, hours: float = 12.0) -> int:
         """
-        Mark all pending requests older than 24 hours as 'cancelled'.
+        Mark all pending requests older than specified hours as 'rejected'.
         Returns count of modified docs.
         Call this before listing or in endpoints that need up-to-date states.
+        
+        Args:
+            hours: Number of hours after which requests should be rejected (default: 12.0)
         """
-        cutoff = datetime.now(timezone.utc) - timedelta(days=1)
+        # created_at is stored as epoch seconds (int), so convert cutoff to epoch seconds
+        now_utc = datetime.now(timezone.utc)
+        cutoff_timestamp = int((now_utc - timedelta(hours=hours)).timestamp())
+        
         result = self.collection.update_many(
-            {"status": "pending", "created_at": {"$lte": cutoff}},
-            {"$set": {"status": "cancelled", "cancelled_at": datetime.now(timezone.utc)}}
+            {"status": RequestStatus.PENDING.value, "created_at": {"$lte": cutoff_timestamp}},
+            {"$set": {"status": RequestStatus.REJECTED.value, "updated_at": int(now_utc.timestamp())}}
         )
         return result.modified_count
 
@@ -65,8 +71,8 @@ class RequestRepository:
 
     def get_sent_requests(self, client_id: str) -> list:
         print("Fetching sent requests for client:", client_id)
-        cancelled_count = self.cancel_expired_requests()
-        print(f"Cancelled {cancelled_count} expired requests.")
+        rejected_count = self.reject_expired_requests()
+        print(f"Rejected {rejected_count} expired requests.")
         print(self.user.name)
         pipeline = [
             {"$match": {"client_id": client_id, "status": {"$in": [RequestStatus.PENDING.value, RequestStatus.ACCEPTED.value, RequestStatus.REJECTED.value]}}},
@@ -112,6 +118,8 @@ class RequestRepository:
         #        return list(self.collection.aggregate(pipeline))
 
     def get_received_requests(self, freelancer_id: str) -> list:
+        # Reject expired requests before fetching
+        self.reject_expired_requests()
         pipeline = [
             {"$match": {"freelancer_id": freelancer_id}},
             {

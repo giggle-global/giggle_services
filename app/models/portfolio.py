@@ -1,6 +1,6 @@
 # app/models/portfolio.py
-from typing import Optional, List
-from pydantic import BaseModel, Field, HttpUrl
+from typing import Optional, List, Union
+from pydantic import BaseModel, Field, HttpUrl, field_validator
 from datetime import datetime
 from enum import Enum
 
@@ -10,14 +10,16 @@ class PortfolioStatus(str, Enum):
 
 class ProjectBase(BaseModel):
     title: str = Field(..., example="E-commerce Platform")
-    description: Optional[str] = Field(None, example="Short description of the project")
-    technologies: Optional[List[str]] = Field(None, example=["React", "Node.js", "MongoDB"])
-    github_link: Optional[HttpUrl] = Field(None, example="https://github.com/username/repo")
-    portfolio_link: Optional[HttpUrl] = Field(None, example="https://my-portfolio.example.com/project")
-    cover_image: Optional[str] = Field(None, example="s3://bucket/key.png")  # store URL or S3 key  
+    description: Optional[str] = None
+    technologies: Optional[List[str]] = None
+    github_link: Optional[str] = None
+    portfolio_link: Optional[str] = None
+    cover_image: Optional[str] = None  
 
     class Config:
-       json_schema_extra= {
+        # Allow fields to be omitted from request body
+        from_attributes = True
+        json_schema_extra= {
             "example": {
                 "title": "E-commerce Platform",
                 "description": "A full-featured e-commerce platform with shopping cart and payment integration.",
@@ -45,12 +47,12 @@ class ProjectCreate(ProjectBase):
 
 
 class ProjectUpdate(BaseModel):
-    title: Optional[str]
-    description: Optional[str]
-    technologies: Optional[List[str]]
-    github_link: Optional[HttpUrl]
-    portfolio_link: Optional[HttpUrl]
-    cover_image: Optional[str]
+    title: Optional[str] = None
+    description: Optional[str] = None
+    technologies: Optional[List[str]] = None
+    github_link: Optional[str] = None
+    portfolio_link: Optional[str] = None
+    cover_image: Optional[str] = None
 
     class config:
        json_schema_extra= {

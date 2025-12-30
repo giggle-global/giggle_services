@@ -127,8 +127,30 @@ class MilestoneService:
         if user["user_id"] not in [ag["client"]["user_id"], ag["freelancer"]["user_id"]] and user.get("role") != "SA":
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Not authorized")
 
+        # Check if payment amount was explicitly provided BEFORE converting to dict
+        # This allows us to preserve custom milestone amounts
+        payment_amount_provided = False
+        try:
+            # Check if payment field exists and has an amount
+            if hasattr(update_payload, "payment"):
+                payment_obj = getattr(update_payload, "payment", None)
+                if payment_obj is not None:
+                    # Check if it's a Pydantic model or dict-like object
+                    if hasattr(payment_obj, "amount"):
+                        amount_value = getattr(payment_obj, "amount", None)
+                        if amount_value is not None:
+                            payment_amount_provided = True
+        except Exception as e:
+            print(f"Error checking payment in update_payload: {e}")
+            import traceback
+            traceback.print_exc()
+            payment_amount_provided = False
+
         # Build update dict from pydantic model — only fields provided by client
         update_data: Dict[str, Any] = update_payload.dict(exclude_unset=True)
+        
+        # Remove milestone_id if present (it's in the URL, not the update data)
+        update_data.pop("milestone_id", None)
 
         # if updating progress -> only freelancer or admin
         if "progress" in update_data:
@@ -172,7 +194,15 @@ class MilestoneService:
         # updated_ok = self.milestone_repo.update(milestone_id, {"$set": update_data})
         #
         # Option B: repo.update expects a plain dict and internally does $set:
-        updated_ok = self.milestone_repo.update(milestone_id, update_data)
+        try:
+            print(f"Updating milestone {milestone_id} with data: {update_data}")
+            updated_ok = self.milestone_repo.update(milestone_id, update_data)
+            print(f"Milestone update result: {updated_ok}")
+        except Exception as e:
+            print(f"Error updating milestone in repository: {e}")
+            import traceback
+            traceback.print_exc()
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, f"Failed to update milestone: {str(e)}")
 
         if not updated_ok:
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to update milestone")
@@ -187,15 +217,39 @@ class MilestoneService:
         ag = self.agreement_repo.get_by_id(ms["agreement_id"])
         total_amount = ag.get("total_amount", 0.0)
         
-        # Redistribute total_amount equally among all milestones
+        # Calculate num_milestones here so it's always available (used later for agreement update)
         num_milestones = len(milestones)
-        if total_amount > 0 and num_milestones > 0:
-            amount_per_milestone = total_amount / num_milestones
-            # Update all milestone amounts to divide total_amount equally
-            for m in milestones:
-                payment = m.get("payment", {})
-                payment["amount"] = amount_per_milestone
-                self.milestone_repo.update(m["milestone_id"], {"payment": payment})
+        
+        # Only redistribute total_amount equally among milestones if payment amount was NOT explicitly provided
+        # This allows custom milestone amounts to be preserved when explicitly set
+        # (payment_amount_provided was already checked above before converting to dict)
+        try:
+            if not payment_amount_provided:
+                # Redistribute total_amount equally among all milestones only if amount wasn't explicitly set
+                if total_amount > 0 and num_milestones > 0:
+                    amount_per_milestone = total_amount / num_milestones
+                    # Update all milestone amounts to divide total_amount equally
+                    for m in milestones:
+                        payment = m.get("payment", {})
+                        payment["amount"] = amount_per_milestone
+                        self.milestone_repo.update(m["milestone_id"], {"payment": payment})
+            else:
+                # Payment amount was explicitly provided - skip redistribution to preserve custom amounts
+                try:
+                    payment_data = update_data.get("payment")
+                    if isinstance(payment_data, dict):
+                        custom_amount = payment_data.get("amount")
+                    else:
+                        custom_amount = "provided (non-dict)"
+                    print(f"Skipping milestone amount redistribution - custom amount provided: {custom_amount}")
+                except Exception as e:
+                    print(f"Skipping milestone amount redistribution - custom amount provided (error getting value: {e})")
+        except Exception as e:
+            # If there's any error in the redistribution logic, log it but don't fail the update
+            print(f"Warning: Error in milestone redistribution logic: {e}")
+            import traceback
+            traceback.print_exc()
+            # Continue with the update - the milestone was already updated successfully
         
         duration_days = ag.get("duration_days", 0)
         if duration_days <= 0:
