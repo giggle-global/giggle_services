@@ -118,10 +118,9 @@ class ReviewService:
             
             # Get all milestones for this agreementl
             milestones = self.milestone_repo.list_for_agreement(agreement_id)
-            if not milestones or len(milestones) == 0:
-                return
             
-            # Check if all milestones are completed with payment received
+            # Check if all milestones are completed with payment received (if milestones exist)
+            # For agreements without milestones, consider them automatically eligible for completion
             def _is_fully_completed(m):
                 """Check if milestone is completed with payment received"""
                 s = m.get("status")
@@ -129,7 +128,9 @@ class ReviewService:
                 has_payment_received = m.get("payment_received", False)
                 return is_completed_status and has_payment_received
             
-            all_fully_completed = all(_is_fully_completed(m) for m in milestones)
+            # If there are no milestones, consider the agreement ready for completion
+            # If there are milestones, all must be fully completed
+            all_fully_completed = not milestones or len(milestones) == 0 or all(_is_fully_completed(m) for m in milestones)
             
             if all_fully_completed:
                 # All milestones are completed with payment received, mark agreement as Completed

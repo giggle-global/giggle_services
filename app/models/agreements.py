@@ -4,12 +4,19 @@ from pydantic import BaseModel, Field, EmailStr
 from typing import Optional, List, Dict
 from enum import Enum
 from datetime import datetime, date, time
-from uuid import uuid4
+import random
 
 from pydantic import field_validator
 
 def gen_id() -> str:
-    return uuid4().hex
+    """
+    Generate a unique ID starting with 'G' followed by random numbers.
+    Format: G + random 12 digits
+    Example: G123456789012
+    """
+    # Generate 12 random digits (0-9) to ensure uniqueness
+    random_digits = ''.join([str(random.randint(0, 9)) for _ in range(12)])
+    return f"G{random_digits}"
 
 class AgreementStatus(str, Enum):
     DRAFT = "Draft"

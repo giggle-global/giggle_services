@@ -28,9 +28,11 @@ class PortfolioRepository:
             "github_link": doc.get("github_link"),
             "portfolio_link": doc.get("portfolio_link"),
             "cover_image": doc.get("cover_image"),
+            "portfolio_pdf": doc.get("portfolio_pdf"),
             "status": doc.get("status"),
             "created_at": doc.get("created_at"),
             "updated_at": doc.get("updated_at"),
+            "source_project_id": doc.get("source_project_id"),  # Include source_project_id to distinguish user-given vs gig-completed portfolios
         }
 
     def create_project(self, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -136,6 +138,9 @@ class PortfolioRepository:
                     ),
                     "cover_image": base_payload.get(
                         "cover_image", existing.get("cover_image")
+                    ),
+                    "portfolio_pdf": base_payload.get(
+                        "portfolio_pdf", existing.get("portfolio_pdf")
                     ),
                     "updated_at": now,
                 }

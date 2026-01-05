@@ -14,7 +14,8 @@ class ProjectBase(BaseModel):
     technologies: Optional[List[str]] = None
     github_link: Optional[str] = None
     portfolio_link: Optional[str] = None
-    cover_image: Optional[str] = None  
+    cover_image: Optional[str] = None
+    portfolio_pdf: Optional[str] = None  
 
     class Config:
         # Allow fields to be omitted from request body
@@ -26,7 +27,8 @@ class ProjectBase(BaseModel):
                 "technologies": ["React", "Node.js", "MongoDB"],
                 "github_link": "https://github.com/username/repo",
                 "portfolio_link": "https://my-portfolio.example.com/project",
-                "cover_image": "s3://bucket/key.png"
+                "cover_image": "s3://bucket/key.png",
+                "portfolio_pdf": "s3://bucket/portfolio.pdf"
             }
         }
 
@@ -41,7 +43,8 @@ class ProjectCreate(ProjectBase):
                 "technologies": ["React", "Node.js", "MongoDB"],
                 "github_link": "https://github.com/username/repo",
                 "portfolio_link": "https://my-portfolio.example.com/project",
-                "cover_image": "s3://bucket/key.png"
+                "cover_image": "s3://bucket/key.png",
+                "portfolio_pdf": "s3://bucket/portfolio.pdf"
             }
         }
 
@@ -53,6 +56,7 @@ class ProjectUpdate(BaseModel):
     github_link: Optional[str] = None
     portfolio_link: Optional[str] = None
     cover_image: Optional[str] = None
+    portfolio_pdf: Optional[str] = None
 
     class config:
        json_schema_extra= {
@@ -62,7 +66,8 @@ class ProjectUpdate(BaseModel):
                 "technologies": ["React", "Node.js", "MongoDB"],
                 "github_link": "https://github.com/username/repo",
                 "portfolio_link": "https://my-portfolio.example.com/project",
-                "cover_image": "s3://bucket/key.png"
+                "cover_image": "s3://bucket/key.png",
+                "portfolio_pdf": "s3://bucket/portfolio.pdf"
             }
         }
 
