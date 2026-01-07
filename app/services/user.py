@@ -677,49 +677,45 @@ class UserService:
                 "total_users": total_disputes
             }
             
-            # Project Activity Chart (Monthly data for last 12 months)
+            # Project Activity Chart (All 12 months of current year, with data only for months that have occurred)
             now = datetime.utcnow()
+            current_year = now.year
             project_activity_data = {"freelancer": [], "clients": []}
             months = []
             
-            # Helper function to get month start N months ago
-            def get_month_start(months_ago: int) -> datetime:
-                """Get the start of the month N months ago"""
-                target_date = now.replace(day=1)  # Start of current month
-                for _ in range(months_ago):
-                    # Go back one month
-                    if target_date.month == 1:
-                        target_date = target_date.replace(year=target_date.year - 1, month=12)
-                    else:
-                        target_date = target_date.replace(month=target_date.month - 1)
-                return target_date
-            
-            for i in range(11, -1, -1):  # Last 12 months (11 months ago to current month)
-                month_start = get_month_start(i)
+            # Get all 12 months of the current year
+            for month_num in range(1, 13):
+                month_start = datetime(current_year, month_num, 1)
                 
                 # Calculate month end (start of next month)
-                if month_start.month == 12:
-                    month_end = datetime(month_start.year + 1, 1, 1)
+                if month_num == 12:
+                    month_end = datetime(current_year + 1, 1, 1)
                 else:
-                    month_end = datetime(month_start.year, month_start.month + 1, 1)
+                    month_end = datetime(current_year, month_num + 1, 1)
                 
                 month_name = month_start.strftime("%b").upper()
                 months.append(month_name)
                 
-                # Count agreements created in this month
-                # Both client and freelancer activity represent agreements created in that month
-                # Client activity: Agreements created (clients initiate agreements)
-                # Freelancer activity: Agreements involving freelancers (all agreements have freelancers)
-                total_agreements = agreement_collection.count_documents({
-                    "created_at": {"$gte": month_start, "$lt": month_end}
-                })
-                
-                # For now, both show the same count (total agreements created)
-                # This represents project activity from both perspectives:
-                # - Clients: How many agreements they created
-                # - Freelancers: How many agreements they're involved in
-                client_count = total_agreements
-                freelancer_count = total_agreements
+                # Only query data for months that have occurred (up to current month)
+                if month_num <= now.month:
+                    # Count agreements created in this month
+                    # Both client and freelancer activity represent agreements created in that month
+                    # Client activity: Agreements created (clients initiate agreements)
+                    # Freelancer activity: Agreements involving freelancers (all agreements have freelancers)
+                    total_agreements = agreement_collection.count_documents({
+                        "created_at": {"$gte": month_start, "$lt": month_end}
+                    })
+                    
+                    # For now, both show the same count (total agreements created)
+                    # This represents project activity from both perspectives:
+                    # - Clients: How many agreements they created
+                    # - Freelancers: How many agreements they're involved in
+                    client_count = total_agreements
+                    freelancer_count = total_agreements
+                else:
+                    # Future months get 0
+                    client_count = 0
+                    freelancer_count = 0
                 
                 project_activity_data["freelancer"].append(freelancer_count)
                 project_activity_data["clients"].append(client_count)
@@ -751,19 +747,26 @@ class UserService:
                 })
                 dispute_frequency_monthly.append(count)
             
-            # Yearly (last 12 months)
-            for i in range(11, -1, -1):
-                month_start = get_month_start(i)
+            # Yearly (all 12 months of current year, with data only for months that have occurred)
+            current_year = now.year
+            for month_num in range(1, 13):
+                month_start = datetime(current_year, month_num, 1)
                 
                 # Calculate month end (start of next month)
-                if month_start.month == 12:
-                    month_end = datetime(month_start.year + 1, 1, 1)
+                if month_num == 12:
+                    month_end = datetime(current_year + 1, 1, 1)
                 else:
-                    month_end = datetime(month_start.year, month_start.month + 1, 1)
+                    month_end = datetime(current_year, month_num + 1, 1)
                 
-                count = ticket_collection.count_documents({
-                    "timeline.0.timestamp": {"$gte": month_start, "$lt": month_end}
-                })
+                # Only query data for months that have occurred (up to current month)
+                if month_num <= now.month:
+                    count = ticket_collection.count_documents({
+                        "timeline.0.timestamp": {"$gte": month_start, "$lt": month_end}
+                    })
+                else:
+                    # Future months get 0
+                    count = 0
+                
                 dispute_frequency_yearly.append(count)
             
             return {

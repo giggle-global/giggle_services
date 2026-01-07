@@ -177,7 +177,7 @@ class NotificationService:
 
         Frontend: Requests are handled inside the unified messages page for both
         client and freelancer. The freelancer messages route is
-        /freelancer/messages, and the component can use request_id to focus the
+        /creator/messages, and the component can use request_id to focus the
         correct thread/section. The tab=received parameter ensures it opens
         the "Received Request" tab instead of the DM tab.
         """
@@ -193,7 +193,7 @@ class NotificationService:
             },
             # Navigate to freelancer messages page, with request context and tab parameter
             # tab=received opens the "Received Request" tab (tab 1) instead of DM tab (tab 0)
-            link=f"/freelancer/messages?request_id={request_id}&tab=received",
+            link=f"/creator/messages?request_id={request_id}&tab=received",
             send_email=True,
         )
 
@@ -208,10 +208,10 @@ class NotificationService:
         """Notify user 24 hours before milestone due date.
 
         Frontend: Milestones are shown via the shared MilestoneComponent mounted
-        at /client/milestone or /freelancer/milestone. We do not encode role in
+        at /owner/milestone or /creator/milestone. We do not encode role in
         the link here; the messages UI or caller's role will determine which
         route to use. For now, default to the generic milestone page, which is
-        available under both client and freelancer namespaces.
+        available under both owner and creator namespaces.
         """
         return self.create_notification(
             user_id=user_id,
@@ -262,7 +262,7 @@ class NotificationService:
                 "currency": currency,
             },
             # Route client to gig page for this agreement
-            link=f"/client/gig?agreement_id={agreement_id}",
+            link=f"/owner/gig?agreement_id={agreement_id}",
             send_email=True,
         )
 
@@ -299,7 +299,7 @@ class NotificationService:
                 "currency": currency,
             },
             # Route freelancer to gig page for this agreement
-            link=f"/freelancer/gig?agreement_id={agreement_id}",
+            link=f"/creator/gig?agreement_id={agreement_id}",
             send_email=True,
         )
 
@@ -318,9 +318,9 @@ class NotificationService:
         
         # Determine URL based on recipient role
         if recipient_role == "CL":
-            link = f"/client/gig?agreement_id={agreement_id}"
+            link = f"/owner/gig?agreement_id={agreement_id}"
         elif recipient_role == "FL":
-            link = f"/freelancer/gig?agreement_id={agreement_id}"
+            link = f"/creator/gig?agreement_id={agreement_id}"
         else:
             # Fallback to generic gig if role not provided
             link = f"/gig?agreement_id={agreement_id}"
@@ -363,7 +363,7 @@ class NotificationService:
                 "milestone_title": milestone_title,
                 "project_title": project_title,
             },
-            link=f"/client/gig?agreement_id={agreement_id}",
+            link=f"/owner/gig?agreement_id={agreement_id}",
             send_email=True,
         )
 
@@ -390,7 +390,7 @@ class NotificationService:
                 "milestone_title": milestone_title,
                 "project_title": project_title,
             },
-            link=f"/freelancer/gig?agreement_id={agreement_id}",
+            link=f"/creator/gig?agreement_id={agreement_id}",
             send_email=True,
         )
 
@@ -421,7 +421,7 @@ class NotificationService:
             },
             # Navigate to client messages page, DM tab (tab 0, default)
             # No tab parameter needed since DM tab is the default
-            link=f"/client/messages?request_id={request_id}",
+            link=f"/owner/messages?request_id={request_id}",
             send_email=True
         )
 
@@ -445,7 +445,7 @@ class NotificationService:
                 "freelancer_name": freelancer_name,
                 "project_title": project_title
             },
-            link=f"/client/messages?request_id={request_id}&tab=1",
+            link=f"/owner/messages?request_id={request_id}&tab=1",
             send_email=True
         )
 
@@ -464,7 +464,7 @@ class NotificationService:
                 "max_requests": max_requests,
                 "current_count": max_requests
             },
-            link="/client/projects",
+            link="/owner/projects",
             send_email=True
         )
 
@@ -496,9 +496,9 @@ class NotificationService:
         
         # Determine URL based on recipient role
         if recipient_role == "CL":
-            link = f"/client/gig-agreement?agreement_id={agreement_id}"
+            link = f"/owner/gig-agreement?agreement_id={agreement_id}"
         elif recipient_role == "FL":
-            link = f"/freelancer/gig-agreement?agreement_id={agreement_id}"
+            link = f"/creator/gig-agreement?agreement_id={agreement_id}"
         else:
             # Fallback to generic gig-agreement if role not provided
             link = f"/gig-agreement?agreement_id={agreement_id}"
@@ -546,9 +546,9 @@ class NotificationService:
         
         # Determine URL based on recipient role
         if recipient_role == "CL":
-            link = f"/client/gig-agreement?agreement_id={agreement_id}"
+            link = f"/owner/gig-agreement?agreement_id={agreement_id}"
         elif recipient_role == "FL":
-            link = f"/freelancer/gig-agreement?agreement_id={agreement_id}"
+            link = f"/creator/gig-agreement?agreement_id={agreement_id}"
         else:
             # Fallback to generic gig-agreement if role not provided
             link = f"/gig-agreement?agreement_id={agreement_id}"
@@ -595,9 +595,9 @@ class NotificationService:
         
         # Determine URL based on recipient role
         if recipient_role == "CL":
-            link = f"/client/gig-agreement?agreement_id={agreement_id}"
+            link = f"/owner/gig-agreement?agreement_id={agreement_id}"
         elif recipient_role == "FL":
-            link = f"/freelancer/gig-agreement?agreement_id={agreement_id}"
+            link = f"/creator/gig-agreement?agreement_id={agreement_id}"
         else:
             # Fallback to generic gig-agreement if role not provided
             link = f"/gig-agreement?agreement_id={agreement_id}"
@@ -644,9 +644,9 @@ class NotificationService:
         
         # Determine URL based on recipient role
         if recipient_role == "CL":
-            link = f"/client/gig-agreement?agreement_id={agreement_id}"
+            link = f"/owner/gig-agreement?agreement_id={agreement_id}"
         elif recipient_role == "FL":
-            link = f"/freelancer/gig-agreement?agreement_id={agreement_id}"
+            link = f"/creator/gig-agreement?agreement_id={agreement_id}"
         else:
             # Fallback to generic gig-agreement if role not provided
             link = f"/gig-agreement?agreement_id={agreement_id}"
@@ -688,9 +688,9 @@ class NotificationService:
         Roles are expressed as 'owner' (client) and 'creator' (freelancer).
         
         Routing logic:
-        - If agreement_id exists (from gig page): route to /client/gig or /freelancer/gig with agreement_id
-        - Else if project_id exists (from message page): route to /client/messages or /freelancer/messages with project_id
-        - Else: fallback to /client/messages or /freelancer/messages with ticket_id
+        - If agreement_id exists (from gig page): route to /owner/gig or /creator/gig with agreement_id
+        - Else if project_id exists (from message page): route to /owner/messages or /creator/messages with project_id
+        - Else: fallback to /owner/messages or /creator/messages with ticket_id
         """
         # Map internal roles to friendly labels
         role_map = {
@@ -738,21 +738,21 @@ class NotificationService:
         if agreement_id:
             # From gig page - route to gig page
             if recipient_role == "client":
-                link = f"/client/gig?agreement_id={agreement_id}"
+                link = f"/owner/gig?agreement_id={agreement_id}"
             else:
-                link = f"/freelancer/gig?agreement_id={agreement_id}"
+                link = f"/creator/gig?agreement_id={agreement_id}"
         elif project_id:
             # From message page - route to messages page
             if recipient_role == "client":
-                link = f"/client/messages?project_id={project_id}"
+                link = f"/owner/messages?project_id={project_id}"
             else:
-                link = f"/freelancer/messages?project_id={project_id}"
+                link = f"/creator/messages?project_id={project_id}"
         else:
             # Fallback - route to messages page with ticket_id
             if recipient_role == "client":
-                link = f"/client/messages?ticket_id={ticket_id}"
+                link = f"/owner/messages?ticket_id={ticket_id}"
             else:
-                link = f"/freelancer/messages?ticket_id={ticket_id}"
+                link = f"/creator/messages?ticket_id={ticket_id}"
 
         return self.create_notification(
             user_id=recipient_id,
@@ -807,7 +807,7 @@ class NotificationService:
                 "agreement_id": agreement_id,
                 "role": "CL",
             },
-            link=f"/client/projects?ticket_id={ticket_id}",
+            link=f"/owner/projects?ticket_id={ticket_id}",
             send_email=True,
         )
 
@@ -823,7 +823,7 @@ class NotificationService:
                 "agreement_id": agreement_id,
                 "role": "FL",
             },
-            link=f"/freelancer/gig?ticket_id={ticket_id}",
+            link=f"/creator/gig?ticket_id={ticket_id}",
             send_email=True,
         )
 

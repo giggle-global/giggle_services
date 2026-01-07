@@ -54,7 +54,7 @@ class NotificationOut(BaseModel):
                 "message": "You have received a new project request",
                 "status": "unread",
                 "data": {"request_id": "req-123", "project_id": "proj-456"},
-                "link": "/freelancer/gig",
+                "link": "/creator/gig",
                 "created_at": 1633036800,
                 "read_at": None
             }

@@ -361,7 +361,7 @@ class MilestoneService:
                             message="Agreement has been done and need the review",
                             data={"agreement_id": agreement_id, "type": "review_required"},
                             # Client messages page with agreement context
-                            link=f"/client/gig?agreement_id={agreement_id}"
+                            link=f"/owner/gig?agreement_id={agreement_id}"
                         )
                         # Notify freelancer: Agreement has been done
                         self.notification_service.create_notification(
@@ -371,7 +371,7 @@ class MilestoneService:
                             message="Agreement has been done",
                             data={"agreement_id": agreement_id, "type": "agreement_done"},
                             # Freelancer messages page with agreement context
-                            link=f"/freelancer/gig?agreement_id={agreement_id}"
+                            link=f"/creator/gig?agreement_id={agreement_id}"
                         )
                     except Exception as e:
                         logger.warning(f"Failed to send notifications for agreement {agreement_id}: {e}")
@@ -780,7 +780,7 @@ class MilestoneService:
                             title="Review Required",
                             message="Agreement has been done and need the review",
                             data={"agreement_id": agreement_id, "type": "review_required"},
-                            link=f"/client/milestone?agreement_id={agreement_id}"
+                            link=f"/owner/milestone?agreement_id={agreement_id}"
                         )
                         # Notify freelancer: Agreement has been done
                         self.notification_service.create_notification(
@@ -789,7 +789,7 @@ class MilestoneService:
                             title="Agreement Completed",
                             message="Agreement has been done",
                             data={"agreement_id": agreement_id, "type": "agreement_done"},
-                            link=f"/freelancer/gig?agreement_id={agreement_id}"
+                            link=f"/creator/gig?agreement_id={agreement_id}"
                         )
                     except Exception as e:
                         logger.warning(f"Failed to send notifications for agreement {agreement_id}: {e}")

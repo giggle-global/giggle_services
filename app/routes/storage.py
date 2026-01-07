@@ -52,6 +52,10 @@ class PortfolioPresignRequest(BaseModel):
     content_type: str
 
 
+class RegenerateUrlRequest(BaseModel):
+    s3_key: str = Field(..., description="S3 object key to generate presigned URL for")
+
+
 def _build_key(prefix: str, user_id: str, suffix: str) -> str:
     return f"uploads/{prefix}/{user_id}/{suffix}"
 
@@ -254,6 +258,60 @@ def get_portfolio_pdf_url(
         expires_in=3600,  # 1 hour
         region_name=S3_REGION,
         response_content_type="application/pdf",
+    )
+    
+    return {
+        "view_url": urls["view_url"],
+        "download_url": urls["download_url"],
+    }
+
+
+@router.post("/presign/regenerate")
+def regenerate_presigned_url(
+    payload: RegenerateUrlRequest,
+    user: Dict[str, Any] = Depends(get_current_user),
+):
+    """
+    Regenerate presigned URLs for an existing S3 object.
+    Used for chat attachments to ensure URLs never expire.
+    The key should be in the format: uploads/chat/{user_id}/{group_type}/{group_id}/{uuid}-{filename}
+    """
+    _ensure_bucket_configured()
+    
+    s3_key = payload.s3_key
+    
+    # Validate that the key is in the expected format (security check)
+    if not s3_key.startswith("uploads/chat/"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid S3 key format. Only chat attachments are supported."
+        )
+    
+    # Optional: Verify the key belongs to the current user or they have access
+    # Extract user_id from key: uploads/chat/{user_id}/...
+    key_parts = s3_key.split("/")
+    if len(key_parts) < 4:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid S3 key format"
+        )
+    
+    key_user_id = key_parts[2]  # uploads/chat/{user_id}/...
+    requester_id = user.get("user_id")
+    
+    # Allow access if: user owns the file, or user is admin
+    if key_user_id != requester_id and user.get("role") != "SA":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this file"
+        )
+    
+    # Generate fresh presigned URLs
+    urls = generate_s3_presigned_urls_for_object(
+        bucket=S3_BUCKET,
+        key=s3_key,
+        expires_in=3600,  # 1 hour
+        region_name=S3_REGION,
     )
     
     return {

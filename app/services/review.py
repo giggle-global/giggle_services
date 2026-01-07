@@ -81,7 +81,7 @@ class ReviewService:
                         title="Review Received",
                         message=f"{client_name} has given a review for the project '{project_name}'",
                         data={"agreement_id": review_in.gig_id, "type": "review_received", "client_name": client_name, "project_name": project_name},
-                        link=f"/freelancer/milestone?agreement_id={review_in.gig_id}&view_review=true",
+                        link=f"/creator/milestone?agreement_id={review_in.gig_id}&view_review=true",
                     )
         except Exception as e:
             logger.warning(f"Failed to send notification to freelancer after review creation: {e}")
@@ -175,7 +175,7 @@ class ReviewService:
                                 "type": "agreement_completed",
                             },
                             # Client messages page with agreement context
-                            link=f"/client/messages?agreement_id={agreement_id}",
+                            link=f"/owner/messages?agreement_id={agreement_id}",
                         )
 
                     # Notify freelancer that the agreement is fully completed
@@ -196,7 +196,7 @@ class ReviewService:
                                 "type": "agreement_completed",
                             },
                             # Freelancer gig page with agreement context, navigate to archive tab
-                            link=f"/freelancer/gig?agreement_id={agreement_id}&tab=1",
+                            link=f"/creator/gig?agreement_id={agreement_id}&tab=1",
                         )
 
                     # Auto-create or update freelancer portfolio entry for this project
