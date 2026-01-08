@@ -79,6 +79,13 @@ class UserService:
             # call instance method correctly (positional arg)
             try:
                 token_record = self.token_service.validate_token_for_signup(token=signup_token, target_user_role="FL")
+                referring_freelancer_id = token_record.get("generated_by")
+                referral_info = {
+                    "referred_by": referring_freelancer_id,
+                    "referred_at": datetime.now(timezone.utc),
+                    "invite_code": signup_token
+                }
+                logger.info("Freelancer signup with referral: new_freelancer=%s referred_by=%s", user.email, referring_freelancer_id)
             except HTTPException as exc:
                 logger.warning("Signup token validation failed: %s", exc.detail)
                 raise
@@ -158,34 +165,27 @@ class UserService:
                 logger.exception("Failed to roll back Keycloak user keycloak_id=%s", keycloak_id)
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to save user")
 
-        # If freelancer signup, consume the token atomically AFTER successful DB write
-        if user.role == "FL":
+        # Store referral info in user's record immediately after creation (for both clients and freelancers)
+        if referral_info and created:
             try:
-                logger.debug("Consuming signup token '%s' for new user %s", signup_token, created["user_id"])
-                consumed = self.token_service.consume_token(signup_token, created["user_id"])
-                logger.info("Signup token consumed: %s -> used_by=%s", signup_token, created["user_id"])
-            except HTTPException as exc:
-                # Token consumption failed (e.g. token raced and was consumed already).
-                # Attempt to rollback created user (best-effort) in DB and Keycloak then raise meaningful error.
-                logger.exception("Failed to consume signup token after DB create; performing rollback. token=%s", signup_token)
-                # delete from Mongo
-                try:
-                    self.user_repo.delete_user(created["user_id"])
-                    logger.info("Rolled back DB user: user_id=%s", created["user_id"])
-                except Exception:
-                    logger.exception("Failed to roll back DB user: user_id=%s", created["user_id"])
-                # delete from Keycloak
-                try:
-                    if keycloak_id:
-                        delete_user_in_keycloak(keycloak_id)
-                        logger.info("Rolled back Keycloak user after token consume failure: keycloak_id=%s", keycloak_id)
-                except Exception:
-                    logger.exception("Failed to roll back Keycloak user after token consume failure: keycloak_id=%s", keycloak_id)
-                # Give a clear client error about token
-                raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Signup token invalid or already used: {exc.detail}")
-        
+                # Convert datetime to ISO string for storage
+                referral_info_to_store = {
+                    "referred_by": referral_info["referred_by"],
+                    "referred_at": referral_info["referred_at"].isoformat() if isinstance(referral_info["referred_at"], datetime) else str(referral_info["referred_at"]),
+                    "invite_code": referral_info["invite_code"]
+                }
+                logger.info("Storing referral info for new user %s: %s", created["user_id"], referral_info_to_store)
+                self.user_repo.update_user(
+                    user_id=created["user_id"],
+                    update_payload={"referral_info": referral_info_to_store}
+                )
+                logger.info("Successfully stored referral info for new user %s", created["user_id"])
+            except Exception as e:
+                logger.exception("Failed to store referral info for new user %s: %s", created["user_id"], e)
+                # Don't fail the signup, just log the error
+
         # If client signup with referral, consume token and grant benefit to referring client
-        elif user.role == "CL" and referral_info:
+        if user.role == "CL" and referral_info:
             try:
                 signup_token = referral_info["invite_code"]
                 logger.debug("Consuming client signup token '%s' for new client %s", signup_token, created["user_id"])
@@ -259,6 +259,65 @@ class UserService:
                     logger.exception("Failed to roll back Keycloak user after token consume failure: keycloak_id=%s", keycloak_id)
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Invite code invalid or already used: {exc.detail}")
 
+        # If freelancer signup with referral, consume token and grant benefit to referring freelancer
+        elif user.role == "FL" and referral_info:
+            try:
+                signup_token = referral_info["invite_code"]
+                logger.debug("Consuming freelancer signup token '%s' for new freelancer %s", signup_token, created["user_id"])
+                consumed = self.token_service.consume_token(signup_token, created["user_id"])
+                logger.info("Freelancer signup token consumed: %s -> used_by=%s", signup_token, created["user_id"])
+                
+                # Update referring freelancer: grant referral tracking
+                try:
+                    referring_freelancer = self.user_repo.get_user_by_id(referring_freelancer_id)
+                    if referring_freelancer:
+                        # Initialize referral tracking if not exists
+                        referral_tracking = referring_freelancer.get("referral_tracking", {})
+                        referrals_made = referral_tracking.get("referrals_made", [])
+                        
+                        # Convert datetime to ISO string for storage
+                        referred_at_str = referral_info["referred_at"]
+                        if isinstance(referred_at_str, datetime):
+                            referred_at_str = referred_at_str.isoformat()
+                        elif not isinstance(referred_at_str, str):
+                            referred_at_str = str(referred_at_str)
+                        
+                        referrals_made.append({
+                            "referred_user_id": created["user_id"],
+                            "referred_at": referred_at_str,
+                            "invite_code": signup_token
+                        })
+                        
+                        # Update referral tracking
+                        referral_tracking["referrals_made"] = referrals_made
+                        referral_tracking["last_referral_at"] = referred_at_str
+                        
+                        # Update referring freelancer with referral tracking
+                        self.user_repo.update_user(
+                            user_id=referring_freelancer_id,
+                            update_payload={"referral_tracking": referral_tracking}
+                        )
+                        logger.info("Added referral tracking to referring freelancer: %s", referring_freelancer_id)
+                except Exception as e:
+                    logger.exception("Failed to add referral tracking to freelancer %s: %s", referring_freelancer_id, e)
+                    # Don't fail the signup if tracking fails, just log it
+                    
+            except HTTPException as exc:
+                # Token consumption failed - rollback
+                logger.exception("Failed to consume freelancer signup token after DB create; performing rollback. token=%s", signup_token)
+                try:
+                    self.user_repo.delete_user(created["user_id"])
+                    logger.info("Rolled back DB user: user_id=%s", created["user_id"])
+                except Exception:
+                    logger.exception("Failed to roll back DB user: user_id=%s", created["user_id"])
+                try:
+                    if keycloak_id:
+                        delete_user_in_keycloak(keycloak_id)
+                        logger.info("Rolled back Keycloak user after token consume failure: keycloak_id=%s", keycloak_id)
+                except Exception:
+                    logger.exception("Failed to roll back Keycloak user after token consume failure: keycloak_id=%s", keycloak_id)
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Invite code invalid or already used: {exc.detail}")
+
         # Remove sensitive data before returning (like passcode)
         if created and "passcode" in created:
             created.pop("passcode", None)
@@ -304,6 +363,21 @@ class UserService:
         except Exception as e:
             logger.exception("Error fetching user_id=%s", user_id)
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to fetch user")
+
+    def get_user_profile_admin(self, user_id: str) -> Dict[str, Any]:
+        """Admin method to get user profile including deleted users"""
+        if not user_id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "user_id is required")
+        try:
+            user = self.user_repo.get_user_by_id_admin(user_id)
+            if not user:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+            return user
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.exception("Error fetching user profile for admin user_id=%s", user_id)
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to fetch user profile")
 
     def list_freelancer(self) -> Any:
         try:

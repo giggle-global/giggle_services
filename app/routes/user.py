@@ -146,6 +146,36 @@ def get_profile(
     logger.info("Profile fetched for user_id=%s by requester=%s", user_id, current_user.get("user_id"))
     return ok(data=user, message="User profile fetched")
 
+@router.get("/profile/admin/{user_id}", response_model=APIResponse[Dict[str, Any]])
+def get_profile_admin(
+    user_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    svc: UserService = Depends(get_user_service)
+):
+    """Admin endpoint to fetch user profile including deleted users"""
+    logger.debug(
+        "Admin profile fetch requested by user_id=%s (role=%s) for target=%s",
+        current_user.get("user_id"),
+        current_user.get("role"),
+        user_id
+    )
+
+    requester_role = current_user.get("role")
+
+    # Only allow SA (Super Admin) to access this endpoint
+    if requester_role != "SA":
+        logger.warning(
+            "Unauthorized role attempted to access admin profile endpoint. role=%s requester=%s",
+            requester_role,
+            current_user.get("user_id")
+        )
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only super admins can access admin profile endpoint")
+
+    user = svc.get_user_profile_admin(user_id=user_id)
+
+    logger.info("Admin profile fetched for user_id=%s by requester=%s", user_id, current_user.get("user_id"))
+    return ok(data=user, message="User profile fetched (admin view)")
+
 @router.put("/", response_model=APIResponse[Dict [str, Any]])
 def update_user(update: UserUpdate, current_user: Dict[str, Any] = Depends(get_current_user), svc: UserService = Depends(get_user_service)):
     user_id = current_user.get("user_id")

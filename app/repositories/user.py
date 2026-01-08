@@ -94,6 +94,26 @@ class UserRepository:
         
         return user
     
+    def get_user_by_id_admin(self, user_id: str) -> Optional[dict]:
+        """Admin method to fetch user by ID including deleted users"""
+        user = self.collection.find_one({"user_id": user_id}, {"_id": 0})
+        user = self._attach_defaults(user)
+        if not user:
+            raise HTTPException(404, "User not found")
+        
+        # Convert first_edit_date to IST if it exists
+        if user and "first_edit_date" in user and user["first_edit_date"]:
+            first_edit = user["first_edit_date"]
+            if isinstance(first_edit, datetime):
+                # Convert to IST if it's in UTC or naive
+                if first_edit.tzinfo is None:
+                    first_edit = first_edit.replace(tzinfo=timezone.utc).astimezone(IST)
+                elif first_edit.tzinfo == timezone.utc:
+                    first_edit = first_edit.astimezone(IST)
+                user["first_edit_date"] = first_edit
+        
+        return user
+    
     def get_user_by_email(self, email: str) -> Optional[dict]:
         """Get user by email address"""
         user = self.collection.find_one({"email": email, "status": {"$in": ["ACTIVE", "BANNED"]}}, {"_id": 0})
