@@ -24,6 +24,12 @@ def get_user_service() -> UserService:
 @router.post("/send", response_model=APIResponse[dict])
 def send_otp(payload: SendOTPRequest, svc: OTPService = Depends(get_otp_service)):
     logger.debug("OTP send requested for email=%s purpose=%s", payload.email, payload.purpose)
+    
+    # If signup, check if email is already in use
+    if payload.purpose == OTPPurpose.SIGNUP:
+        user_svc = UserService()
+        user_svc._ensure_unique_email(payload.email)
+
     try:
         svc.send_otp(email=payload.email, purpose=payload.purpose)
         logger.info("OTP sent to email=%s purpose=%s", payload.email, payload.purpose)
