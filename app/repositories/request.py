@@ -73,12 +73,11 @@ class RequestRepository:
         print("Fetching sent requests for client:", client_id)
         rejected_count = self.reject_expired_requests()
         print(f"Rejected {rejected_count} expired requests.")
-        print(self.user.name)
         pipeline = [
             {"$match": {"client_id": client_id, "status": {"$in": [RequestStatus.PENDING.value, RequestStatus.ACCEPTED.value, RequestStatus.REJECTED.value]}}},
             {
                 "$lookup": {
-                    "from": self.user.name,
+                    "from": "user",
                     "localField": "client_id",
                     "foreignField": "user_id",
                     "as": "client_info",
@@ -86,7 +85,7 @@ class RequestRepository:
             },
             {
                 "$lookup": {
-                    "from": self.user.name,
+                    "from": "user",
                     "localField": "freelancer_id",
                     "foreignField": "user_id",
                     "as": "freelancer_info",
@@ -124,7 +123,7 @@ class RequestRepository:
             {"$match": {"freelancer_id": freelancer_id}},
             {
                 "$lookup": {
-                    "from": self.user.name,
+                    "from": "user",
                     "localField": "client_id",
                     "foreignField": "user_id",
                     "as": "client_info",
@@ -132,7 +131,7 @@ class RequestRepository:
             },
             {
                 "$lookup": {
-                    "from": self.user.name,
+                    "from": "user",
                     "localField": "freelancer_id",
                     "foreignField": "user_id",
                     "as": "freelancer_info",

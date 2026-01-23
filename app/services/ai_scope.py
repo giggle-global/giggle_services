@@ -186,11 +186,11 @@ class AIScopeService:
             "4. If user's expectation is too low, adjust upward and explain why in scope_summary\n"
             "5. If user's expectation is too high, suggest optimal budget and explain savings\n"
             "6. If average_budget from similar projects exists, use it as primary reference\n"
-            "7. Typical ranges vary by type:\n"
-            "   - Software/Web: Simple (₹50k-₹150k), Moderate (₹150k-₹350k), Complex (₹350k-₹800k)\n"
-            "   - Design/Creative: Simple (₹20k-₹80k), Moderate (₹80k-₹200k), Complex (₹200k-₹500k)\n"
-            "   - Writing/Content: Simple (₹10k-₹50k), Moderate (₹50k-₹150k), Complex (₹150k-₹400k)\n"
-            "   - Marketing: Simple (₹30k-₹100k), Moderate (₹100k-₹300k), Complex (₹300k-₹800k)\n\n"
+            "7. Typical ranges vary by type (reflective of current Indian freelance market):\n"
+            "   - Software/Web: Simple (₹15k-₹50k), Moderate (₹50k-₹150k), Complex (₹150k-₹300k)\n"
+            "   - Design/Creative: Simple (₹5k-₹25k), Moderate (₹25k-₹75k), Complex (₹75k-₹200k)\n"
+            "   - Writing/Content: Simple (₹3k-₹15k), Moderate (₹15k-₹50k), Complex (₹50k-₹100k)\n"
+            "   - Marketing: Simple (₹10k-₹30k), Moderate (₹30k-₹100k), Complex (₹100k-₹250k)\n\n"
             "Always provide data-driven budget recommendations with justification relevant to the project type."
         )
         messages = [

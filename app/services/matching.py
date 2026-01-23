@@ -272,8 +272,8 @@ class MatchingService:
         for portfolio in portfolios:
             # Check if portfolio has tags or description matching the background
             portfolio_str = (
-                portfolio.get("title", "") + " " + 
-                portfolio.get("description", "")
+                (portfolio.get("title") or "") + " " + 
+                (portfolio.get("description") or "")
             ).lower()
             
             if background_industry in portfolio_str:
