@@ -186,6 +186,9 @@ names = [
         {"name": "Tutoring", "category": "education", "industry": "Training & eLearning"},
         {"name": "Technical Consulting", "category": "consulting", "industry": "Consulting Services"},
         {"name": "Career Coaching", "category": "consulting", "industry": "Consulting Services"},
+        {"name": "Product Analyst", "category": "consulting", "industry": "Consulting Services"},
+        {"name": "Product Consultant", "category": "consulting", "industry": "Consulting Services"},
+        {"name": "Consultant", "category": "consulting", "industry": "Consulting Services"},
     ]
 
 class SkillService:
