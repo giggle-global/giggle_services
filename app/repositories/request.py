@@ -110,11 +110,51 @@ class RequestRepository:
                     "freelancer_profile_pic": {"$arrayElemAt": ["$freelancer_info.profile_pic", 0]},
                 }
             },
+            {
+                "$lookup": {
+                    "from": "tickets",
+                    "let": {"pid": "$project_id"},
+                    "pipeline": [
+                        {
+                            "$match": {
+                                "$expr": {"$eq": ["$project_id", "$$pid"]},
+                                "status": {"$in": ["open", "in_progress", "reopened"]}
+                            }
+                        },
+                        {"$sort": {"created_at": 1}},
+                        {"$limit": 1}
+                    ],
+                    "as": "active_tickets"
+                }
+            },
+            {
+                "$addFields": {
+                    "has_dispute": {"$gt": [{"$size": "$active_tickets"}, 0]},
+                    "dispute_timestamp": {
+                        "$cond": {
+                            "if": {"$gt": [{"$size": "$active_tickets"}, 0]},
+                            "then": {"$arrayElemAt": [{"$arrayElemAt": ["$active_tickets.timeline.timestamp", 0]}, 0]},
+                            "else": None
+                        }
+                    },
+                    "ticket_id": {
+                        "$cond": {
+                            "if": {"$gt": [{"$size": "$active_tickets"}, 0]},
+                            "then": {"$arrayElemAt": ["$active_tickets.ticket_id", 0]},
+                            "else": None
+                        }
+                    }
+                }
+            },
+            {
+                "$project": {
+                    "active_tickets": 0
+                }
+            }
         ]
         data = list(self.collection.aggregate(pipeline))
         print("Fetched profile pics for sent requests:", data)
         return data
-        #        return list(self.collection.aggregate(pipeline))
 
     def get_received_requests(self, freelancer_id: str) -> list:
         # Reject expired requests before fetching
@@ -155,6 +195,47 @@ class RequestRepository:
                     "freelancer_profile_pic": {"$arrayElemAt": ["$freelancer_info.profile_pic", 0]},
                 }
             },
+            {
+                "$lookup": {
+                    "from": "tickets",
+                    "let": {"pid": "$project_id"},
+                    "pipeline": [
+                        {
+                            "$match": {
+                                "$expr": {"$eq": ["$project_id", "$$pid"]},
+                                "status": {"$in": ["open", "in_progress", "reopened"]}
+                            }
+                        },
+                        {"$sort": {"created_at": 1}},
+                        {"$limit": 1}
+                    ],
+                    "as": "active_tickets"
+                }
+            },
+            {
+                "$addFields": {
+                    "has_dispute": {"$gt": [{"$size": "$active_tickets"}, 0]},
+                    "dispute_timestamp": {
+                        "$cond": {
+                            "if": {"$gt": [{"$size": "$active_tickets"}, 0]},
+                            "then": {"$arrayElemAt": [{"$arrayElemAt": ["$active_tickets.timeline.timestamp", 0]}, 0]},
+                            "else": None
+                        }
+                    },
+                    "ticket_id": {
+                        "$cond": {
+                            "if": {"$gt": [{"$size": "$active_tickets"}, 0]},
+                            "then": {"$arrayElemAt": ["$active_tickets.ticket_id", 0]},
+                            "else": None
+                        }
+                    }
+                }
+            },
+            {
+                "$project": {
+                    "active_tickets": 0
+                }
+            }
         ]
         return list(self.collection.aggregate(pipeline))
     

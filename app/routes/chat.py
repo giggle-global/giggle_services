@@ -513,6 +513,57 @@ async def ws_agreement(agreement_id: str, websocket: WebSocket, token: Optional[
             # broadcast to group
             await websocket_manager.send_to_group(f"agreement::{agreement_id}", payload)
 
+            # Send unread count update to the recipient (other participant) via global WebSocket
+            try:
+                sender_id = str(caller.get("user_id"))
+                recipient_id = None
+                
+                # Determine recipient (the one who didn't send the message)
+                if sender_id == str(client_id):
+                    recipient_id = str(freelancer_id)
+                elif sender_id == str(freelancer_id):
+                    recipient_id = str(client_id)
+                
+                if recipient_id:
+                    # Calculate unread count for the recipient
+                    unread_count = chat_service.get_unseen_count("agreement", agreement_id, recipient_id)
+                    
+                    # Get last message for this conversation
+                    last_message_content = ""
+                    last_message_timestamp = ""
+                    try:
+                        from pymongo import DESCENDING
+                        query = {"group_type": "agreement", "group_id": agreement_id}
+                        last_msg_doc = chat_service.repo.col.find_one(
+                            query,
+                            sort=[("created_at", DESCENDING)]
+                        )
+                        if last_msg_doc:
+                            last_message_content = last_msg_doc.get("content", "")
+                            last_message_timestamp = last_msg_doc.get("created_at", "")
+                            if last_message_timestamp and hasattr(last_message_timestamp, 'isoformat'):
+                                last_message_timestamp = last_message_timestamp.isoformat()
+                            elif last_message_timestamp:
+                                last_message_timestamp = str(last_message_timestamp)
+                    except Exception as e:
+                        print(f"⚠️ Error fetching last message for agreement: {e}")
+                    
+                    # Send unread count update to recipient via global WebSocket
+                    unread_count_payload = {
+                        "type": "unread_count_update",
+                        "payload": {
+                            "group_type": "agreement",
+                            "group_id": agreement_id,
+                            "unread_count": unread_count,
+                            "last_message": last_message_content,
+                            "last_message_timestamp": last_message_timestamp
+                        }
+                    }
+                    await websocket_manager.send_to_user(recipient_id, unread_count_payload)
+                    print(f"📊 Sent agreement unread count update: agreement_id={agreement_id}, recipient={recipient_id}, count={unread_count}")
+            except Exception as unread_error:
+                print(f"⚠️ Error sending agreement unread count update: {unread_error}")
+
     except WebSocketDisconnect:
         # normal disconnect
         pass
@@ -872,6 +923,48 @@ async def ws_private(
             print(f"📤 Echoing message back to sender: {caller_id}")
             await websocket.send_json(payload)
 
+            # Send unread count update to the recipient via global WebSocket
+            try:
+                recipient_id = other_user_id_str
+                # Calculate unread count for the recipient
+                unread_count = chat_service.get_unseen_count("private", group_id, recipient_id)
+                
+                # Get last message for this conversation
+                last_message_content = ""
+                last_message_timestamp = ""
+                try:
+                    from pymongo import DESCENDING
+                    query = {"group_type": "private", "group_id": group_id}
+                    last_msg_doc = chat_service.repo.col.find_one(
+                        query,
+                        sort=[("created_at", DESCENDING)]
+                    )
+                    if last_msg_doc:
+                        last_message_content = last_msg_doc.get("content", "")
+                        last_message_timestamp = last_msg_doc.get("created_at", "")
+                        if last_message_timestamp and hasattr(last_message_timestamp, 'isoformat'):
+                            last_message_timestamp = last_message_timestamp.isoformat()
+                        elif last_message_timestamp:
+                            last_message_timestamp = str(last_message_timestamp)
+                except Exception as e:
+                    print(f"⚠️ Error fetching last message for private chat: {e}")
+                
+                # Send unread count update to recipient via global WebSocket
+                unread_count_payload = {
+                    "type": "unread_count_update",
+                    "payload": {
+                        "group_type": "private",
+                        "group_id": group_id,
+                        "unread_count": unread_count,
+                        "last_message": last_message_content,
+                        "last_message_timestamp": last_message_timestamp
+                    }
+                }
+                await websocket_manager.send_to_user(recipient_id, unread_count_payload)
+                print(f"📊 Sent private unread count update: group_id={group_id}, recipient={recipient_id}, count={unread_count}")
+            except Exception as unread_error:
+                print(f"⚠️ Error sending private unread count update: {unread_error}")
+
     except WebSocketDisconnect:
         pass
     except Exception as e:
@@ -1078,3 +1171,57 @@ def get_batch_unread_counts(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error fetching batch unread counts: {str(e)}"
         )
+
+
+@router.websocket("/ws/notifications")
+async def ws_notifications(websocket: WebSocket, token: Optional[str] = Query(None)):
+    """
+    Global WebSocket for real-time notifications and unread count updates.
+    Connects with ?token=<keycloak_token>.
+    This enables real-time badges across the app without being in a specific chat.
+    """
+    print(f"🔌 Global Notifications WebSocket connection attempt: token_present={bool(token)}")
+    await websocket.accept()
+    try:
+        if not token:
+            print("❌ Global Notifications WebSocket rejected: No token provided")
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Token is required")
+            return
+        
+        try:
+            caller = _validate_token_and_get_user(token)
+            if not caller:
+                print("❌ Global Notifications WebSocket rejected: Invalid token")
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid token")
+                return
+            user_id = str(caller.get("user_id"))
+            print(f"✅ Global Notifications WebSocket authenticated: user_id={user_id}")
+        except Exception as e:
+            print(f"❌ Global Notifications WebSocket rejected: Auth exception - {str(e)}")
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Authentication failed")
+            return
+
+        # Register connection with manager using a generic group name for this user
+        # Any 'send_to_user' call will now find this connection
+        await websocket_manager.connect(websocket, user_id, f"global::{user_id}")
+
+        # Keep connection alive
+        while True:
+            # We don't expect messages from client here, but we need to listen
+            # to detect disconnection
+            await websocket.receive_text()
+            
+    except WebSocketDisconnect:
+        print("🔌 Global Notifications WebSocket disconnected normally")
+        pass
+    except Exception as e:
+        print(f"❌ Global Notifications WebSocket error: {str(e)}")
+        try:
+            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+        except Exception:
+            pass
+    finally:
+        try:
+            await websocket_manager.disconnect(websocket)
+        except Exception:
+            pass

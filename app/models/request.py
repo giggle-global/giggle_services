@@ -1,4 +1,5 @@
-from typing import Optional
+from typing import Optional, Union
+from datetime import datetime
 from pydantic import BaseModel, Field
 from enum import Enum
 from uuid import uuid4
@@ -60,6 +61,9 @@ class RequestOut(BaseModel):
     project_title: Optional[str] = Field(None, example="Website Development")
     client_profile_pic: Optional[str] = Field(None, example="http://example.com/profiles/user-001.jpg")
     freelancer_profile_pic: Optional[str] = Field(None, example="http://example.com/profiles/user-002.jpg")
+    has_dispute: Optional[bool] = Field(False, example=False)
+    dispute_timestamp: Optional[datetime] = Field(None, example="2024-05-20T10:00:00Z")
+    ticket_id: Optional[str] = Field(None, example="tick-12345")
 
     class Config:
        json_schema_extra= {

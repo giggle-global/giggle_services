@@ -210,6 +210,9 @@ class AgreementInDB(BaseModel):
     paused_from_status: Optional[str] = None  # Store the status before pausing
     client_accepted_version: bool = False  # Client has accepted current version
     freelancer_accepted_version: bool = False  # Freelancer has accepted current version
+    has_dispute: Optional[bool] = Field(False, example=False)
+    dispute_timestamp: Optional[datetime] = Field(None, example="2024-05-20T10:00:00Z")
+    ticket_id: Optional[str] = Field(None, example="tick-12345")
 
     class Config:
         from_attributes = True

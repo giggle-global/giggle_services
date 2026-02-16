@@ -44,8 +44,45 @@ class AgreementRepository:
                 # populate username in freelancer UserRef
                 "freelancer.username": "$freelancer_user.username"
             }},
+            # lookup active disputes
+            {
+                "$lookup": {
+                    "from": "tickets",
+                    "let": {"aid": "$agreement_id"},
+                    "pipeline": [
+                        {
+                            "$match": {
+                                "$expr": {"$eq": ["$agreement_id", "$$aid"]},
+                                "status": {"$in": ["open", "in_progress", "reopened"]}
+                            }
+                        },
+                        {"$sort": {"created_at": 1}},
+                        {"$limit": 1}
+                    ],
+                    "as": "active_tickets"
+                }
+            },
+            {
+                "$addFields": {
+                    "has_dispute": {"$gt": [{"$size": "$active_tickets"}, 0]},
+                    "dispute_timestamp": {
+                        "$cond": {
+                            "if": {"$gt": [{"$size": "$active_tickets"}, 0]},
+                            "then": {"$arrayElemAt": [{"$arrayElemAt": ["$active_tickets.timeline.timestamp", 0]}, 0]},
+                            "else": None
+                        }
+                    },
+                    "ticket_id": {
+                        "$cond": {
+                            "if": {"$gt": [{"$size": "$active_tickets"}, 0]},
+                            "then": {"$arrayElemAt": ["$active_tickets.ticket_id", 0]},
+                            "else": None
+                        }
+                    }
+                }
+            },
             # remove helper nested docs and _id
-            {"$project": {"client_user": 0, "freelancer_user": 0, "_id": 0}}
+            {"$project": {"client_user": 0, "freelancer_user": 0, "active_tickets": 0, "_id": 0}}
         ]
         results = list(self.col.aggregate(pipeline))
         return results[0] if results else None
@@ -78,8 +115,45 @@ class AgreementRepository:
                 # populate username in freelancer UserRef
                 "freelancer.username": "$freelancer_user.username"
             }},
+            # lookup active disputes
+            {
+                "$lookup": {
+                    "from": "tickets",
+                    "let": {"aid": "$agreement_id"},
+                    "pipeline": [
+                        {
+                            "$match": {
+                                "$expr": {"$eq": ["$agreement_id", "$$aid"]},
+                                "status": {"$in": ["open", "in_progress", "reopened"]}
+                            }
+                        },
+                        {"$sort": {"created_at": 1}},
+                        {"$limit": 1}
+                    ],
+                    "as": "active_tickets"
+                }
+            },
+            {
+                "$addFields": {
+                    "has_dispute": {"$gt": [{"$size": "$active_tickets"}, 0]},
+                    "dispute_timestamp": {
+                        "$cond": {
+                            "if": {"$gt": [{"$size": "$active_tickets"}, 0]},
+                            "then": {"$arrayElemAt": [{"$arrayElemAt": ["$active_tickets.timeline.timestamp", 0]}, 0]},
+                            "else": None
+                        }
+                    },
+                    "ticket_id": {
+                        "$cond": {
+                            "if": {"$gt": [{"$size": "$active_tickets"}, 0]},
+                            "then": {"$arrayElemAt": ["$active_tickets.ticket_id", 0]},
+                            "else": None
+                        }
+                    }
+                }
+            },
             # remove helper nested docs and _id if you don't want it returned
-            {"$project": {"client_user": 0, "freelancer_user": 0, "_id": 0}}
+            {"$project": {"client_user": 0, "freelancer_user": 0, "active_tickets": 0, "_id": 0}}
         ]
         return list(self.col.aggregate(pipeline))
 
