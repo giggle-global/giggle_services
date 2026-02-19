@@ -17,6 +17,8 @@ from app.models.ai_scope import (
     ScopeQA,
     ScopeQuestionRequest,
     ScopeQuestionResponse,
+    ScopeAllQuestionsResponse,
+    ScopeQuestionItem,
     ScopeSuggestionUpdate,
     ScopeSuggestion,
     ScopeSuggestionRequest,
@@ -126,6 +128,150 @@ class AIScopeService:
             sequence=sequence,
             max_questions=MAX_QUESTIONS,
             is_final=is_final,
+        )
+
+    def get_all_questions(self, payload: ScopeQuestionRequest) -> ScopeAllQuestionsResponse:
+        """Generate all questions at once for the project in a single AI call."""
+        prompt = (
+            "You are an AI discovery assistant helping clients define their project requirements for ANY type of freelance work "
+            "(software, design, writing, marketing, video, consulting, etc.).\n\n"
+            "Generate exactly 3 questions in this strict order:\n"
+            "1. (Sequence 1): What specific deliverables/outcomes they want\n"
+            "2. (Sequence 2): Timeline and deadline preferences\n"
+            "3. (Sequence 3): Budget expectations (ask for range or preference: 'tight budget', 'moderate', 'premium' - NOT exact amounts)\n\n"
+            "Adapt your questions to the project type mentioned. For example:\n"
+            "- Software/Web: features, platform, technical needs\n"
+            "- Design: style, dimensions, format, revisions\n"
+            "- Writing: word count, tone, SEO, research depth\n"
+            "- Marketing: channels, goals, audience demographics\n"
+            "- Video: length, style, editing level, deliverable format\n\n"
+            "Keep questions short, precise, and avoid yes/no questions.\n"
+            "When it makes sense, propose 3-6 SHORT answer options that a user could click on (buttons, chips, etc.). "
+            "Options should be concise phrases, not sentences.\n\n"
+            "Respond strictly with JSON using this schema:\n"
+            '{"questions": [{"question": "...", "options": ["..."], "sequence": 1}, {"question": "...", "options": ["..."], "sequence": 2}, {"question": "...", "options": ["..."], "sequence": 3}]}.\n'
+            "If you think free-text is better for a question, you MUST still return an empty list for 'options' (e.g. \"options\": [])."
+        )
+        context = {
+            "max_questions": MAX_QUESTIONS,
+            "project_hint": payload.project_hint,
+            "target_industry": payload.industry,
+            "client_background": payload.background_industry,
+        }
+        messages = [
+            {"role": "system", "content": "You are a helpful project scope assistant for any type of freelance work across all industries."},
+            {"role": "user", "content": prompt + "\nContext:\n" + json.dumps(context, ensure_ascii=False)},
+        ]
+
+        try:
+            raw_response = self._invoke_chat(messages)
+            logger.info(f"[AI] Raw OpenAI response for all questions: {raw_response[:500]}...")
+            response_json = self._safe_json(raw_response)
+            logger.info(f"[AI] Parsed JSON for all questions: {response_json}")
+            
+            questions_data = response_json.get("questions", [])
+            if not isinstance(questions_data, list):
+                logger.warning("[AI] 'questions' field was not a list; defaulting to empty list")
+                questions_data = []
+            
+            # Process and validate questions
+            questions: List[ScopeQuestionItem] = []
+            for idx, q_data in enumerate(questions_data[:MAX_QUESTIONS]):
+                if not isinstance(q_data, dict):
+                    continue
+                    
+                question_text = q_data.get("question")
+                if not question_text:
+                    continue
+                    
+                options = q_data.get("options") or []
+                if not isinstance(options, list):
+                    options = []
+                
+                # Process options for deadline questions
+                question_lower = question_text.lower()
+                is_deadline_question = (
+                    "deadline" in question_lower or
+                    "timeline" in question_lower or
+                    "when" in question_lower or
+                    "how long" in question_lower or
+                    "how soon" in question_lower
+                )
+                
+                if is_deadline_question:
+                    options = [
+                        "Open to discussion" if ("other" in opt.lower() or opt.lower() == "others")
+                        else opt
+                        for opt in options
+                    ]
+                
+                questions.append(
+                    ScopeQuestionItem(
+                        question=question_text,
+                        options=options,
+                        sequence=idx + 1,
+                    )
+                )
+            
+            # Ensure we have exactly MAX_QUESTIONS questions
+            while len(questions) < MAX_QUESTIONS:
+                # Fallback: generate individual questions if AI didn't return enough
+                if len(questions) == 0:
+                    # If no questions returned, fall back to individual generation
+                    return self._fallback_get_all_questions(payload)
+                break
+            
+        except json.JSONDecodeError as exc:
+            logger.error(f"[AI] JSON decode error: {exc}. Raw response: {raw_response if 'raw_response' in locals() else 'N/A'}")
+            # Fallback to individual question generation
+            return self._fallback_get_all_questions(payload)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception(f"[AI] Unexpected error generating all questions: {exc}")
+            # Fallback to individual question generation
+            return self._fallback_get_all_questions(payload)
+
+        return ScopeAllQuestionsResponse(
+            questions=questions,
+            max_questions=MAX_QUESTIONS,
+        )
+
+    def _fallback_get_all_questions(self, payload: ScopeQuestionRequest) -> ScopeAllQuestionsResponse:
+        """Fallback method: generate questions one by one if batch generation fails."""
+        questions: List[ScopeQuestionItem] = []
+        answers: List[ScopeQA] = []
+
+        for seq in range(1, MAX_QUESTIONS + 1):
+            if seq > 1:
+                prev_question = questions[-1]
+                generic_answer = prev_question.options[0] if prev_question.options else "To be determined"
+                answers.append(ScopeQA(question=prev_question.question, answer=generic_answer))
+
+            question_response = self.next_question(
+                ScopeQuestionRequest(
+                    answers=answers,
+                    project_hint=payload.project_hint,
+                    industry=payload.industry,
+                    background_industry=payload.background_industry,
+                )
+            )
+
+            if not question_response.question:
+                break
+
+            questions.append(
+                ScopeQuestionItem(
+                    question=question_response.question,
+                    options=question_response.options,
+                    sequence=question_response.sequence,
+                )
+            )
+
+            if question_response.is_final or len(questions) >= MAX_QUESTIONS:
+                break
+
+        return ScopeAllQuestionsResponse(
+            questions=questions,
+            max_questions=MAX_QUESTIONS,
         )
 
     # ------------------------------------------------------------------ #

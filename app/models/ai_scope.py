@@ -42,6 +42,24 @@ class ScopeQuestionResponse(BaseModel):
     is_final: bool = Field(..., description="True when the questionnaire is finished")
 
 
+class ScopeQuestionItem(BaseModel):
+    """Single question item in a batch response."""
+
+    question: str = Field(..., description="AI generated question")
+    options: List[str] = Field(
+        default_factory=list,
+        description="Optional list of AI-generated answer options for UI",
+    )
+    sequence: int = Field(..., description="1-based index of this question")
+
+
+class ScopeAllQuestionsResponse(BaseModel):
+    """Response containing all questions at once."""
+
+    questions: List[ScopeQuestionItem] = Field(..., description="All questions for the project")
+    max_questions: int = Field(..., description="Maximum number of questions")
+
+
 class SimilarProject(BaseModel):
     """Compact representation of historical projects used for benchmarking."""
 
