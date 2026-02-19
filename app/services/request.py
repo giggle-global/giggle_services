@@ -56,17 +56,17 @@ class RequestService:
         if not project_details:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Project not found or not associated with client")
 
-        # Check request limit per project (10 PENDING requests per project)
+        # Check request limit per project (10 requests per project - fixed)
         try:
-            pending_requests = self.repo.count_pending_requests_by_client_and_project(client_id, project_id)
-            if pending_requests >= MAX_REQUESTS_PER_PROJECT:
-                logger.warning("Request limit exceeded: client=%s project=%s pending_requests=%s", client_id, project_id, pending_requests)
+            total_requests = self.repo.count_total_requests_by_client_and_project(client_id, project_id)
+            if total_requests >= MAX_REQUESTS_PER_PROJECT:
+                logger.warning("Request limit exceeded: client=%s project=%s total_requests=%s", client_id, project_id, total_requests)
                 raise HTTPException(
                     status.HTTP_400_BAD_REQUEST,
-                    f"You have reached the maximum limit of {MAX_REQUESTS_PER_PROJECT} pending requests for this project. You cannot send more requests until some are accepted or rejected."
+                    f"You have reached the maximum limit of {MAX_REQUESTS_PER_PROJECT} requests for this project. This limit is fixed and does not renew."
                 )
         except PyMongoError:
-            logger.exception("Mongo error checking pending requests: client=%s project=%s", client_id, project_id)
+            logger.exception("Mongo error checking total requests: client=%s project=%s", client_id, project_id)
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to verify request limit")
 
         try:
@@ -95,11 +95,11 @@ class RequestService:
             created = self.repo.create_request(client_id, freelancer_id, client.get("first_name"), client.get("last_name"), freelancer.get("first_name"), freelancer.get("last_name"), project_id, project_name=project_details.get("title"))
             logger.info("Request created: id=%s client=%s freelancer=%s", getattr(created, "id", None), client_id, freelancer_id)
             
-            # Check if this request reached the limit (5/5) and send notification to client
+            # Check if this request reached the limit (10/10) and send notification to client
             try:
-                new_pending_requests = self.repo.count_pending_requests_by_client_and_project(client_id, project_id)
-                if new_pending_requests == MAX_REQUESTS_PER_PROJECT:
-                    # Client just reached the limit (5/5) for this project, notify the client
+                new_total_requests = self.repo.count_total_requests_by_client_and_project(client_id, project_id)
+                if new_total_requests == MAX_REQUESTS_PER_PROJECT:
+                    # Client just reached the limit for this project, notify the client
                     try:
                         from app.services.notification import NotificationService
                         notification_service = NotificationService()
@@ -107,12 +107,12 @@ class RequestService:
                             client_id=client_id,
                             max_requests=MAX_REQUESTS_PER_PROJECT
                         )
-                        logger.info("Limit reached notification sent to client: %s project=%s (reached %d/%d)", client_id, project_id, new_pending_requests, MAX_REQUESTS_PER_PROJECT)
+                        logger.info("Limit reached notification sent to client: %s project=%s (reached %d/%d)", client_id, project_id, new_total_requests, MAX_REQUESTS_PER_PROJECT)
                     except Exception as e:
                         logger.warning("Failed to send limit reached notification: %s", e)
                         # Don't fail the request creation if notification fails
             except Exception as e:
-                logger.warning("Failed to check pending requests after creation: %s", e)
+                logger.warning("Failed to check total requests after creation: %s", e)
                 # Continue even if check fails
             
             # Send notification to freelancer about new request received
@@ -160,17 +160,17 @@ class RequestService:
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to fetch received requests")
 
     def get_total_request_count(self, client_id: str, project_id: str) -> int:
-        """Get number of PENDING requests sent by a client for a specific project"""
+        """Get total number of requests sent by a client for a specific project"""
         if not client_id:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "client_id is required")
         if not project_id:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "project_id is required")
         try:
-            count = self.repo.count_pending_requests_by_client_and_project(client_id, project_id)
-            logger.debug("Fetched pending request count: client=%s project=%s count=%s", client_id, project_id, count)
+            count = self.repo.count_total_requests_by_client_and_project(client_id, project_id)
+            logger.debug("Fetched total request count: client=%s project=%s count=%s", client_id, project_id, count)
             return count
         except PyMongoError:
-            logger.exception("Mongo error fetching pending request count: client=%s project=%s", client_id, project_id)
+            logger.exception("Mongo error fetching total request count: client=%s project=%s", client_id, project_id)
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to fetch request count")
 
     # ---------- Respond ----------

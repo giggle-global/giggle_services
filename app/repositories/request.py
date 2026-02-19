@@ -70,9 +70,10 @@ class RequestRepository:
     
 
     def get_sent_requests(self, client_id: str) -> list:
-        print("Fetching sent requests for client:", client_id)
+        # print("Fetching sent requests for client:", client_id)
         rejected_count = self.reject_expired_requests()
-        print(f"Rejected {rejected_count} expired requests.")
+        # if rejected_count > 0:
+        #     print(f"Rejected {rejected_count} expired requests.")
         pipeline = [
             {"$match": {"client_id": client_id, "status": {"$in": [RequestStatus.PENDING.value, RequestStatus.ACCEPTED.value, RequestStatus.REJECTED.value]}}},
             {
@@ -153,7 +154,7 @@ class RequestRepository:
             }
         ]
         data = list(self.collection.aggregate(pipeline))
-        print("Fetched profile pics for sent requests:", data)
+        # logger.debug(f"Fetched {len(data)} sent requests with profile pics")
         return data
 
     def get_received_requests(self, freelancer_id: str) -> list:
@@ -266,17 +267,17 @@ class RequestRepository:
             "status": {"$in": [RequestStatus.PENDING.value, RequestStatus.ACCEPTED.value]}
         })
     
-    def count_pending_requests_by_client_and_project(self, client_id: str, project_id: str) -> int:
+    def count_total_requests_by_client_and_project(self, client_id: str, project_id: str) -> int:
         """
-        Count number of PENDING requests sent by a client for a specific project.
+        Count number of requests sent by a client for a specific project.
         
-        Only PENDING requests count toward the limit. When a request is ACCEPTED or REJECTED,
-        it's no longer PENDING, so the count automatically reduces.
+        This includes PENDING, ACCEPTED, and REJECTED requests to enforce a strict limit
+        that does not renew when a request is responded to.
         """
         return self.collection.count_documents({
             "client_id": client_id,
             "project_id": project_id,
-            "status": RequestStatus.PENDING.value
+            "status": {"$in": [RequestStatus.PENDING.value, RequestStatus.ACCEPTED.value, RequestStatus.REJECTED.value]}
         })
     
     def get_request_by_parties(self, project_id: str, freelancer_id: str, client_id: str) -> Optional[dict]:

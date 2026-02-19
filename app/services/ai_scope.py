@@ -28,7 +28,7 @@ from app.repositories.project import ProjectRepository
 from app.services.matching import MatchingService
 from app.services.project import ProjectService
 
-MAX_QUESTIONS = 5
+MAX_QUESTIONS = 3
 OPENAI_MODEL = "gpt-4o-mini"
 
 
@@ -64,13 +64,14 @@ class AIScopeService:
         prompt = (
             "You are an AI discovery assistant helping clients define their project requirements for ANY type of freelance work "
             "(software, design, writing, marketing, video, consulting, etc.).\n\n"
-            "Ask the next clarifying question based on the project type. Focus on:\n"
-            "- What specific deliverables/outcomes they want\n"
-            "- Timeline and deadline preferences\n"
-            "- Target audience or purpose\n"
-            "- Style, tone, or quality expectations\n"
-            "- Budget expectations (ask for range or preference: 'tight budget', 'moderate', 'premium' - NOT exact amounts)\n"
-            "- Any specific requirements or constraints\n\n"
+            "Ask exactly 3 questions in this strict order based on the current 'sequence':\n"
+            "1. (Sequence 1): What specific deliverables/outcomes they want\n"
+            "2. (Sequence 2): Timeline and deadline preferences\n"
+            "3. (Sequence 3): Budget expectations (ask for range or preference: 'tight budget', 'moderate', 'premium' - NOT exact amounts)\n\n"
+            # "- Target audience or purpose\n"
+            # "- Style, tone, or quality expectations\n"
+            # "- Any specific requirements or constraints\n\n"
+            "Do NOT ask about target audience, style, or other constraints for now.\n\n"
             "Adapt your questions to the project type mentioned. For example:\n"
             "- Software/Web: features, platform, technical needs\n"
             "- Design: style, dimensions, format, revisions\n"

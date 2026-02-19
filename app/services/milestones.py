@@ -350,31 +350,32 @@ class MilestoneService:
                             agreement_id,
                             portfolio_err,
                         )
-                else:
-                    # Client hasn't given review yet, send notifications
-                    try:
-                        # Notify client: Agreement has been done and need the review
-                        self.notification_service.create_notification(
-                            user_id=client_id,
-                            notification_type=NotificationType.AGREEMENT_UPDATED,
-                            title="Review Required",
-                            message="Agreement has been done and need the review",
-                            data={"agreement_id": agreement_id, "type": "review_required"},
-                            # Client messages page with agreement context
-                            link=f"/owner/gig?agreement_id={agreement_id}"
-                        )
-                        # Notify freelancer: Agreement has been done
-                        self.notification_service.create_notification(
-                            user_id=freelancer_id,
-                            notification_type=NotificationType.AGREEMENT_UPDATED,
-                            title="Agreement Completed",
-                            message="Agreement has been done",
-                            data={"agreement_id": agreement_id, "type": "agreement_done"},
-                            # Freelancer messages page with agreement context
-                            link=f"/creator/gig?agreement_id={agreement_id}"
-                        )
-                    except Exception as e:
-                        logger.warning(f"Failed to send notifications for agreement {agreement_id}: {e}")
+                # else:
+                #     # Client hasn't given review yet, send notifications
+                #     try:
+                #         # Notify client: Agreement has been done and need the review
+                #         self.notification_service.create_notification(
+                #             user_id=client_id,
+                #             notification_type=NotificationType.AGREEMENT_UPDATED,
+                #             title="Review Required",
+                #             message="Agreement has been done and need the review",
+                #             data={"agreement_id": agreement_id, "type": "review_required"},
+                #             # Client messages page with agreement context
+                #             link=f"/owner/gig?agreement_id={agreement_id}"
+                #         )
+                #         # Notify freelancer: Agreement has been done
+                #         self.notification_service.create_notification(
+                #             user_id=freelancer_id,
+                #             notification_type=NotificationType.AGREEMENT_UPDATED,
+                #             title="Agreement Completed",
+                #             message="Agreement has been done",
+                #             data={"agreement_id": agreement_id, "type": "agreement_done"},
+                #             # Freelancer messages page with agreement context
+                #             link=f"/creator/gig?agreement_id={agreement_id}"
+                #         )
+                #     except Exception as e:
+                #         logger.warning(f"Failed to send notifications for agreement {agreement_id}: {e}")
+                pass
 
         return updated_ms
 
@@ -501,40 +502,40 @@ class MilestoneService:
         if not updated_ok:
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to verify milestone")
 
-        # Notify freelancer that client has verified the milestone
-        try:
-            milestone_title = ms.get("title", "Milestone")
-            agreement_id = ms["agreement_id"]
-            project_title = ag.get("title")
-            freelancer_id = ag.get("freelancer", {}).get("user_id")
-            
-            if freelancer_id:
-                self.notification_service.notify_milestone_verified(
-                    freelancer_id=freelancer_id,
-                    milestone_title=milestone_title,
-                    milestone_id=milestone_id,
-                    agreement_id=agreement_id,
-                    project_title=project_title,
-                )
-        except Exception as notify_err:
-            logger.warning("Failed to send milestone verified notification for milestone %s: %s", milestone_id, notify_err)
+        # # Notify freelancer that client has verified the milestone
+        # try:
+        #     milestone_title = ms.get("title", "Milestone")
+        #     agreement_id = ms["agreement_id"]
+        #     project_title = ag.get("title")
+        #     freelancer_id = ag.get("freelancer", {}).get("user_id")
+        #     
+        #     if freelancer_id:
+        #         self.notification_service.notify_milestone_verified(
+        #             freelancer_id=freelancer_id,
+        #             milestone_title=milestone_title,
+        #             milestone_id=milestone_id,
+        #             agreement_id=agreement_id,
+        #             project_title=project_title,
+        #         )
+        # except Exception as notify_err:
+        #     logger.warning("Failed to send milestone verified notification for milestone %s: %s", milestone_id, notify_err)
 
-        # Notify client to send payment after verification
-        try:
-            payment_info = ms.get("payment", {}) if isinstance(ms, dict) else {}
-            amount = payment_info.get("amount")
-            currency = payment_info.get("currency")
-            self.notification_service.notify_milestone_payment_reminder(
-                client_id=ag["client"]["user_id"],
-                milestone_title=ms.get("title", "Milestone"),
-                milestone_id=milestone_id,
-                agreement_id=ms["agreement_id"],
-                project_title=ag.get("title"),
-                amount=amount,
-                currency=currency,
-            )
-        except Exception as notify_err:
-            logger.warning("Failed to send payment reminder notification for milestone %s: %s", milestone_id, notify_err)
+        # # Notify client to send payment after verification
+        # try:
+        #     payment_info = ms.get("payment", {}) if isinstance(ms, dict) else {}
+        #     amount = payment_info.get("amount")
+        #     currency = payment_info.get("currency")
+        #     self.notification_service.notify_milestone_payment_reminder(
+        #         client_id=ag["client"]["user_id"],
+        #         milestone_title=ms.get("title", "Milestone"),
+        #         milestone_id=milestone_id,
+        #         agreement_id=ms["agreement_id"],
+        #         project_title=ag.get("title"),
+        #         amount=amount,
+        #         currency=currency,
+        #     )
+        # except Exception as notify_err:
+        #     logger.warning("Failed to send payment reminder notification for milestone %s: %s", milestone_id, notify_err)
 
         return self.milestone_repo.get_by_id(milestone_id)
 
@@ -577,23 +578,23 @@ class MilestoneService:
         if not updated_ok:
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to complete milestone")
 
-        # Notify client that freelancer has completed the milestone work
-        try:
-            milestone_title = ms.get("title", "Milestone")
-            agreement_id = ms["agreement_id"]
-            project_title = ag.get("title")
-            client_id = ag.get("client", {}).get("user_id")
-            
-            if client_id:
-                self.notification_service.notify_milestone_work_completed(
-                    client_id=client_id,
-                    milestone_title=milestone_title,
-                    milestone_id=milestone_id,
-                    agreement_id=agreement_id,
-                    project_title=project_title,
-                )
-        except Exception as notify_err:
-            logger.warning("Failed to send milestone work completed notification for milestone %s: %s", milestone_id, notify_err)
+        # # Notify client that freelancer has completed the milestone work
+        # try:
+        #     milestone_title = ms.get("title", "Milestone")
+        #     agreement_id = ms["agreement_id"]
+        #     project_title = ag.get("title")
+        #     client_id = ag.get("client", {}).get("user_id")
+        #     
+        #     if client_id:
+        #         self.notification_service.notify_milestone_work_completed(
+        #             client_id=client_id,
+        #             milestone_title=milestone_title,
+        #             milestone_id=milestone_id,
+        #             agreement_id=agreement_id,
+        #             project_title=project_title,
+        #         )
+        # except Exception as notify_err:
+        #     logger.warning("Failed to send milestone work completed notification for milestone %s: %s", milestone_id, notify_err)
 
         return self.milestone_repo.get_by_id(milestone_id)
 
@@ -636,22 +637,22 @@ class MilestoneService:
         if not updated_ok:
             raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to mark payment as sent")
 
-        # Notify freelancer that client marked payment as sent
-        try:
-            payment_info = ms.get("payment", {}) if isinstance(ms, dict) else {}
-            amount = payment_info.get("amount")
-            currency = payment_info.get("currency")
-            self.notification_service.notify_milestone_payment_confirmed(
-                freelancer_id=ag["freelancer"]["user_id"],
-                milestone_title=ms.get("title", "Milestone"),
-                milestone_id=milestone_id,
-                agreement_id=ms["agreement_id"],
-                project_title=ag.get("title"),
-                amount=amount,
-                currency=currency,
-            )
-        except Exception as notify_err:
-            logger.warning("Failed to send payment confirmation notification for milestone %s: %s", milestone_id, notify_err)
+        # # Notify freelancer that client marked payment as sent
+        # try:
+        #     payment_info = ms.get("payment", {}) if isinstance(ms, dict) else {}
+        #     amount = payment_info.get("amount")
+        #     currency = payment_info.get("currency")
+        #     self.notification_service.notify_milestone_payment_confirmed(
+        #         freelancer_id=ag["freelancer"]["user_id"],
+        #         milestone_title=ms.get("title", "Milestone"),
+        #         milestone_id=milestone_id,
+        #         agreement_id=ms["agreement_id"],
+        #         project_title=ag.get("title"),
+        #         amount=amount,
+        #         currency=currency,
+        #     )
+        # except Exception as notify_err:
+        #     logger.warning("Failed to send payment confirmation notification for milestone %s: %s", milestone_id, notify_err)
 
         return self.milestone_repo.get_by_id(milestone_id)
 
@@ -701,37 +702,37 @@ class MilestoneService:
             payment_data["payment_released"] = True
             self.milestone_repo.update(milestone_id, {"payment": payment_data})
 
-        # Send milestone completed notifications to both client and freelancer
-        try:
-            milestone_title = ms.get("title", "Milestone")
-            agreement_id = ms["agreement_id"]
-            project_title = ag.get("title")
-            client_id = ag.get("client", {}).get("user_id")
-            freelancer_id = ag.get("freelancer", {}).get("user_id")
-            
-            # Notify client that milestone is completed
-            if client_id:
-                self.notification_service.notify_milestone_completed(
-                    user_id=client_id,
-                    milestone_title=milestone_title,
-                    milestone_id=milestone_id,
-                    agreement_id=agreement_id,
-                    project_title=project_title,
-                    recipient_role="CL",
-                )
-            
-            # Notify freelancer that milestone is completed
-            if freelancer_id:
-                self.notification_service.notify_milestone_completed(
-                    user_id=freelancer_id,
-                    milestone_title=milestone_title,
-                    milestone_id=milestone_id,
-                    agreement_id=agreement_id,
-                    project_title=project_title,
-                    recipient_role="FL",
-                )
-        except Exception as notify_err:
-            logger.warning("Failed to send milestone completed notifications for milestone %s: %s", milestone_id, notify_err)
+        # # Send milestone completed notifications to both client and freelancer
+        # try:
+        #     milestone_title = ms.get("title", "Milestone")
+        #     agreement_id = ms["agreement_id"]
+        #     project_title = ag.get("title")
+        #     client_id = ag.get("client", {}).get("user_id")
+        #     freelancer_id = ag.get("freelancer", {}).get("user_id")
+        #     
+        #     # Notify client that milestone is completed
+        #     if client_id:
+        #         self.notification_service.notify_milestone_completed(
+        #             user_id=client_id,
+        #             milestone_title=milestone_title,
+        #             milestone_id=milestone_id,
+        #             agreement_id=agreement_id,
+        #             project_title=project_title,
+        #             recipient_role="CL",
+        #         )
+        #     
+        #     # Notify freelancer that milestone is completed
+        #     if freelancer_id:
+        #         self.notification_service.notify_milestone_completed(
+        #             user_id=freelancer_id,
+        #             milestone_title=milestone_title,
+        #             milestone_id=milestone_id,
+        #             agreement_id=agreement_id,
+        #             project_title=project_title,
+        #             recipient_role="FL",
+        #         )
+        # except Exception as notify_err:
+        #     logger.warning("Failed to send milestone completed notifications for milestone %s: %s", milestone_id, notify_err)
 
         # Move to next milestone if available
         milestones = self.milestone_repo.list_for_agreement(ms["agreement_id"])
@@ -770,28 +771,29 @@ class MilestoneService:
                 if has_review:
                     # Client has given review, mark agreement as Completed
                     self.agreement_repo.update(ms["agreement_id"], {"status": "Completed"})
-                else:
-                    # Client hasn't given review yet, send notifications
-                    try:
-                        # Notify client: Agreement has been done and need the review
-                        self.notification_service.create_notification(
-                            user_id=client_id,
-                            notification_type=NotificationType.AGREEMENT_UPDATED,
-                            title="Review Required",
-                            message="Agreement has been done and need the review",
-                            data={"agreement_id": agreement_id, "type": "review_required"},
-                            link=f"/owner/milestone?agreement_id={agreement_id}"
-                        )
-                        # Notify freelancer: Agreement has been done
-                        self.notification_service.create_notification(
-                            user_id=freelancer_id,
-                            notification_type=NotificationType.AGREEMENT_UPDATED,
-                            title="Agreement Completed",
-                            message="Agreement has been done",
-                            data={"agreement_id": agreement_id, "type": "agreement_done"},
-                            link=f"/creator/gig?agreement_id={agreement_id}"
-                        )
-                    except Exception as e:
-                        logger.warning(f"Failed to send notifications for agreement {agreement_id}: {e}")
+                # else:
+                #     # Client hasn't given review yet, send notifications
+                #     try:
+                #         # Notify client: Agreement has been done and need the review
+                #         self.notification_service.create_notification(
+                #             user_id=client_id,
+                #             notification_type=NotificationType.AGREEMENT_UPDATED,
+                #             title="Review Required",
+                #             message="Agreement has been done and need the review",
+                #             data={"agreement_id": agreement_id, "type": "review_required"},
+                #             link=f"/owner/milestone?agreement_id={agreement_id}"
+                #         )
+                #         # Notify freelancer: Agreement has been done
+                #         self.notification_service.create_notification(
+                #             user_id=freelancer_id,
+                #             notification_type=NotificationType.AGREEMENT_UPDATED,
+                #             title="Agreement Completed",
+                #             message="Agreement has been done",
+                #             data={"agreement_id": agreement_id, "type": "agreement_done"},
+                #             link=f"/creator/gig?agreement_id={agreement_id}"
+                #         )
+                #     except Exception as e:
+                #         logger.warning(f"Failed to send notifications for agreement {agreement_id}: {e}")
+                pass
 
         return self.milestone_repo.get_by_id(milestone_id)

@@ -1,4 +1,4 @@
-# agreements/service.py
+ # agreements/service.py
 from typing import Dict, Any, List, Optional
 from app.models.agreements import AgreementCreate, AgreementInDB, AgreementStatus, SignatureRecord, AgreementFilter
 from app.repositories.agreements import AgreementRepository
@@ -157,63 +157,117 @@ class AgreementService:
                 })
                 created = self.repo.get_by_id(created["agreement_id"])
 
+            # # Send notification to the recipient (if client created, notify freelancer;
+            # # # Send notification to the other party (recipient)
+            # # try:
+            # #     from app.services.notification import NotificationService
+            # #     from app.repositories.user import UserRepository
+            # #     notification_service = NotificationService()
+            # #     user_repo = UserRepository()
+            # #     
+            # #     # Determine recipient and creator name
+            # #     creator_name = "User"
+            # #     if created_by == client_id:
+            # #         recipient_id = freelancer_id
+            # #         recipient_role = "FL"
+            # #         # Get client name from client reference
+            # #         creator_ref = ag.client
+            # #         creator_name = creator_ref.name
+            # #         if not creator_name:
+            # #             creator_user = user_repo.get_user_by_id(created_by)
+            # #             if creator_user:
+            # #                 creator_name = f"{creator_user.get('first_name', '')} {creator_user.get('last_name', '')}".strip() or creator_user.get('username', 'User')
+            # #             else:
+            # #                 creator_name = creator_ref.email or "User"
+            # #     elif created_by == freelancer_id:
+            # #         recipient_id = client_id
+            # #         recipient_role = "CL"
+            # #         # Get freelancer name from freelancer reference
+            # #         creator_ref = ag.freelancer
+            # #         creator_name = creator_ref.name
+            # #         if not creator_name:
+            # #             creator_user = user_repo.get_user_by_id(created_by)
+            # #             if creator_user:
+            # #                 creator_name = f"{creator_user.get('first_name', '')} {creator_user.get('last_name', '')}".strip() or creator_user.get('username', 'User')
+            # #             else:
+            # #                 creator_name = creator_ref.email or "User"
+            # #     else:
+            # #         # Admin case - fetch from user repo
+            # #         creator_user = user_repo.get_user_by_id(created_by)
+            # #         if creator_user:
+            # #             creator_name = f"{creator_user.get('first_name', '')} {creator_user.get('last_name', '')}".strip() or creator_user.get('username', 'Admin')
+            # #         else:
+            # #             creator_name = "Admin"
+            # #     
+            # #     notification_service.notify_agreement_created(
+            # #         recipient_id=recipient_id,
+            # #         creator_name=creator_name,
+            # #         agreement_title=payload.title,
+            # #         agreement_id=created["agreement_id"],
+            # #         project_id=payload.project_id,
+            # #         recipient_role=recipient_role
+            # #     )
+            # #     logger.info("Notification sent to recipient: %s for agreement: %s", recipient_id, created["agreement_id"])
+            # # except Exception as e:
+            # #     logger.warning("Failed to send agreement creation notification (agreement still created): %s", e)
+            # #     # Don't fail the agreement creation if notification fails
             # Send notification to the recipient (if client created, notify freelancer; if freelancer created, notify client)
-            try:
-                from app.services.notification import NotificationService
-                from app.repositories.user import UserRepository
-                notification_service = NotificationService()
-                user_repo = UserRepository()
-                
-                # Determine recipient and creator info
-                client_id = payload.client.user_id
-                freelancer_id = payload.freelancer.user_id
-                
-                # Determine who created the agreement and who should receive notification
-                if created_by == client_id:
-                    # Client created, notify freelancer
-                    recipient_id = freelancer_id
-                    recipient_role = "FL"
-                    creator_ref = payload.client
-                elif created_by == freelancer_id:
-                    # Freelancer created, notify client
-                    recipient_id = client_id
-                    recipient_role = "CL"
-                    creator_ref = payload.freelancer
-                else:
-                    # Admin or other role created - notify freelancer by default
-                    recipient_id = freelancer_id
-                    recipient_role = "FL"
-                    creator_ref = None  # Will fetch from user repo
-                
-                # Get creator name from UserRef or fetch from user repo
-                if creator_ref:
-                    creator_name = creator_ref.name
-                    if not creator_name:
-                        creator_user = user_repo.get_user_by_id(created_by)
-                        if creator_user:
-                            creator_name = f"{creator_user.get('first_name', '')} {creator_user.get('last_name', '')}".strip() or creator_user.get('username', 'User')
-                        else:
-                            creator_name = creator_ref.email or "User"
-                else:
-                    # Admin case - fetch from user repo
-                    creator_user = user_repo.get_user_by_id(created_by)
-                    if creator_user:
-                        creator_name = f"{creator_user.get('first_name', '')} {creator_user.get('last_name', '')}".strip() or creator_user.get('username', 'Admin')
-                    else:
-                        creator_name = "Admin"
-                
-                notification_service.notify_agreement_created(
-                    recipient_id=recipient_id,
-                    creator_name=creator_name,
-                    agreement_title=payload.title,
-                    agreement_id=created["agreement_id"],
-                    project_id=payload.project_id,
-                    recipient_role=recipient_role
-                )
-                logger.info("Notification sent to recipient: %s for agreement: %s", recipient_id, created["agreement_id"])
-            except Exception as e:
-                logger.warning("Failed to send agreement creation notification (agreement still created): %s", e)
-                # Don't fail the agreement creation if notification fails
+            # try:
+            #     from app.services.notification import NotificationService
+            #     from app.repositories.user import UserRepository
+            #     notification_service = NotificationService()
+            #     user_repo = UserRepository()
+            #     
+            #     # Determine recipient and creator info
+            #     client_id = payload.client.user_id
+            #     freelancer_id = payload.freelancer.user_id
+            #     
+            #     # Determine who created the agreement and who should receive notification
+            #     if created_by == client_id:
+            #         # Client created, notify freelancer
+            #         recipient_id = freelancer_id
+            #         recipient_role = "FL"
+            #         creator_ref = payload.client
+            #     elif created_by == freelancer_id:
+            #         # Freelancer created, notify client
+            #         recipient_id = client_id
+            #         recipient_role = "CL"
+            #         creator_ref = payload.freelancer
+            #     else:
+            #         # Admin or other role created - notify freelancer by default
+            #         recipient_id = freelancer_id
+            #         recipient_role = "FL"
+            #         creator_ref = None  # Will fetch from user repo
+            #     
+            #     # Get creator name from UserRef or fetch from user repo
+            #     if creator_ref:
+            #         creator_name = creator_ref.name
+            #         if not creator_name:
+            #             creator_user = user_repo.get_user_by_id(created_by)
+            #             if creator_user:
+            #                 creator_name = f"{creator_user.get('first_name', '')} {creator_user.get('last_name', '')}".strip() or creator_user.get('username', 'User')
+            #             else:
+            #                 creator_name = creator_ref.email or "User"
+            #     else:
+            #         # Admin case - fetch from user repo
+            #         creator_user = user_repo.get_user_by_id(created_by)
+            #         if creator_user:
+            #             creator_name = f"{creator_user.get('first_name', '')} {creator_user.get('last_name', '')}".strip() or creator_user.get('username', 'Admin')
+            #         else:
+            #             creator_name = "Admin"
+            #     
+            #     notification_service.notify_agreement_created(
+            #         recipient_id=recipient_id,
+            #         creator_name=creator_name,
+            #         agreement_title=payload.title,
+            #         agreement_id=created["agreement_id"],
+            #         project_id=payload.project_id,
+            #         recipient_role=recipient_role
+            #     )
+            #     logger.info("Notification sent to recipient: %s for agreement: %s", recipient_id, created["agreement_id"])
+            # except Exception as e:
+            #     logger.warning("Failed to send agreement creation notification (agreement still created): %s", e)
+            #     # Don't fail the agreement creation if notification fails
 
             return created
         except PyMongoError:
@@ -280,44 +334,44 @@ class AgreementService:
 
         updated = self.repo.update(agreement_id, update)
         
-        # Send notification to the other party if they haven't signed yet
-        # Only send if this is a new signature (wasn't signed before)
-        try:
-            from app.services.notification import NotificationService
-            notification_service = NotificationService()
-            
-            client_id = ag["client"]["user_id"]
-            freelancer_id = ag["freelancer"]["user_id"]
-            agreement_title = ag.get("title", "Agreement")
-            project_id = ag.get("project_id")
-            
-            # Check if freelancer just signed (was false, now true) and client hasn't signed
-            if not old_freelancer_signed and update["freelancer_signed"] and not update["client_signed"]:
-                freelancer_name = ag["freelancer"].get("name", "Freelancer")
-                notification_service.notify_agreement_sign_reminder(
-                    recipient_id=client_id,
-                    agreement_title=agreement_title,
-                    agreement_id=agreement_id,
-                    project_id=project_id,
-                    other_party_name=freelancer_name,
-                    recipient_role="CL"
-                )
-                logger.info("Sign reminder notification sent to client: %s for agreement: %s", client_id, agreement_id)
-            
-            # Check if client just signed (was false, now true) and freelancer hasn't signed
-            elif not old_client_signed and update["client_signed"] and not update["freelancer_signed"]:
-                client_name = ag["client"].get("name", "Client")
-                notification_service.notify_agreement_sign_reminder(
-                    recipient_id=freelancer_id,
-                    agreement_title=agreement_title,
-                    agreement_id=agreement_id,
-                    project_id=project_id,
-                    other_party_name=client_name,
-                    recipient_role="FL"
-                )
-                logger.info("Sign reminder notification sent to freelancer: %s for agreement: %s", freelancer_id, agreement_id)
-        except Exception as e:
-            logger.warning("Failed to send agreement sign reminder notification (agreement still signed): %s", e)
+        # # Send notification to the other party if they haven't signed yet
+        # # Only send if this is a new signature (wasn't signed before)
+        # try:
+        #     from app.services.notification import NotificationService
+        #     notification_service = NotificationService()
+        #     
+        #     client_id = ag["client"]["user_id"]
+        #     freelancer_id = ag["freelancer"]["user_id"]
+        #     agreement_title = ag.get("title", "Agreement")
+        #     project_id = ag.get("project_id")
+        #     
+        #     # Check if freelancer just signed (was false, now true) and client hasn't signed
+        #     if not old_freelancer_signed and update["freelancer_signed"] and not update["client_signed"]:
+        #         freelancer_name = ag["freelancer"].get("name", "Freelancer")
+        #         notification_service.notify_agreement_sign_reminder(
+        #             recipient_id=client_id,
+        #             agreement_title=agreement_title,
+        #             agreement_id=agreement_id,
+        #             project_id=project_id,
+        #             other_party_name=freelancer_name,
+        #             recipient_role="CL"
+        #         )
+        #         logger.info("Sign reminder notification sent to client: %s for agreement: %s", client_id, agreement_id)
+        #     
+        #     # Check if client just signed (was false, now true) and freelancer hasn't signed
+        #     elif not old_client_signed and update["client_signed"] and not update["freelancer_signed"]:
+        #         client_name = ag["client"].get("name", "Client")
+        #         notification_service.notify_agreement_sign_reminder(
+        #             recipient_id=freelancer_id,
+        #             agreement_title=agreement_title,
+        #             agreement_id=agreement_id,
+        #             project_id=project_id,
+        #             other_party_name=client_name,
+        #             recipient_role="FL"
+        #         )
+        #         logger.info("Sign reminder notification sent to freelancer: %s for agreement: %s", freelancer_id, agreement_id)
+        # except Exception as e:
+        #     logger.warning("Failed to send agreement sign reminder notification (agreement still signed): %s", e)
             # Continue even if notification fails - agreement is already signed
         
         return updated
@@ -437,57 +491,57 @@ class AgreementService:
 
         updated = self.repo.update(agreement_id, update_payload)
         
-        # Send notification to the other party when agreement is updated
-        try:
-            from app.services.notification import NotificationService
-            notification_service = NotificationService()
-            
-            client_id = ag["client"]["user_id"]
-            freelancer_id = ag["freelancer"]["user_id"]
-            agreement_title = ag.get("title", "Agreement")
-            project_id = ag.get("project_id")
-            current_user_id = user.get("user_id")
-            
-            # Notify the other party (not the one who made the update)
-            if current_user_id == client_id:
-                # Client updated, notify freelancer
-                notification_service.notify_agreement_updated(
-                    recipient_id=freelancer_id,
-                    agreement_title=agreement_title,
-                    agreement_id=agreement_id,
-                    project_id=project_id,
-                    recipient_role="FL"
-                )
-                logger.info("Agreement update notification sent to freelancer: %s for agreement: %s", freelancer_id, agreement_id)
-            elif current_user_id == freelancer_id:
-                # Freelancer updated, notify client
-                notification_service.notify_agreement_updated(
-                    recipient_id=client_id,
-                    agreement_title=agreement_title,
-                    agreement_id=agreement_id,
-                    project_id=project_id,
-                    recipient_role="CL"
-                )
-                logger.info("Agreement update notification sent to client: %s for agreement: %s", client_id, agreement_id)
-            # If admin updated, notify both parties
-            elif user.get("role") == "SA":
-                notification_service.notify_agreement_updated(
-                    recipient_id=client_id,
-                    agreement_title=agreement_title,
-                    agreement_id=agreement_id,
-                    project_id=project_id,
-                    recipient_role="CL"
-                )
-                notification_service.notify_agreement_updated(
-                    recipient_id=freelancer_id,
-                    agreement_title=agreement_title,
-                    agreement_id=agreement_id,
-                    project_id=project_id,
-                    recipient_role="FL"
-                )
-                logger.info("Agreement update notification sent to both parties for agreement: %s", agreement_id)
-        except Exception as e:
-            logger.warning("Failed to send agreement update notification (agreement still updated): %s", e)
+        # # Send notification to the other party when agreement is updated
+        # try:
+        #     from app.services.notification import NotificationService
+        #     notification_service = NotificationService()
+        #     
+        #     client_id = ag["client"]["user_id"]
+        #     freelancer_id = ag["freelancer"]["user_id"]
+        #     agreement_title = ag.get("title", "Agreement")
+        #     project_id = ag.get("project_id")
+        #     current_user_id = user.get("user_id")
+        #     
+        #     # Notify the other party (not the one who made the update)
+        #     if current_user_id == client_id:
+        #         # Client updated, notify freelancer
+        #         notification_service.notify_agreement_updated(
+        #             recipient_id=freelancer_id,
+        #             agreement_title=agreement_title,
+        #             agreement_id=agreement_id,
+        #             project_id=project_id,
+        #             recipient_role="FL"
+        #         )
+        #         logger.info("Agreement update notification sent to freelancer: %s for agreement: %s", freelancer_id, agreement_id)
+        #     elif current_user_id == freelancer_id:
+        #         # Freelancer updated, notify client
+        #         notification_service.notify_agreement_updated(
+        #             recipient_id=client_id,
+        #             agreement_title=agreement_title,
+        #             agreement_id=agreement_id,
+        #             project_id=project_id,
+        #             recipient_role="CL"
+        #         )
+        #         logger.info("Agreement update notification sent to client: %s for agreement: %s", client_id, agreement_id)
+        #     # If admin updated, notify both parties
+        #     elif user.get("role") == "SA":
+        #         notification_service.notify_agreement_updated(
+        #             recipient_id=client_id,
+        #             agreement_title=agreement_title,
+        #             agreement_id=agreement_id,
+        #             project_id=project_id,
+        #             recipient_role="CL"
+        #         )
+        #         notification_service.notify_agreement_updated(
+        #             recipient_id=freelancer_id,
+        #             agreement_title=agreement_title,
+        #             agreement_id=agreement_id,
+        #             project_id=project_id,
+        #             recipient_role="FL"
+        #         )
+        #         logger.info("Agreement update notification sent to both parties for agreement: %s", agreement_id)
+        # except Exception as e:
+        #     logger.warning("Failed to send agreement update notification (agreement still updated): %s", e)
             # Continue even if notification fails - agreement is already updated
         
         return updated
@@ -645,49 +699,50 @@ class AgreementService:
         
         # Send notification to the other party when version is accepted
         if accepted:
-            try:
-                from app.services.notification import NotificationService
-                from app.repositories.user import UserRepository
-                notification_service = NotificationService()
-                user_repo = UserRepository()
-                
-                client_id = ag["client"]["user_id"]
-                freelancer_id = ag["freelancer"]["user_id"]
-                agreement_title = ag.get("title", "Agreement")
-                project_id = ag.get("project_id")
-                current_user_id = user.get("user_id")
-                
-                # Get the name of the user who accepted
-                accepting_user = user_repo.get_user_by_id(current_user_id)
-                accepting_user_name = "User"
-                if accepting_user:
-                    accepting_user_name = f"{accepting_user.get('first_name', '')} {accepting_user.get('last_name', '')}".strip() or accepting_user.get('username', 'User')
-                
-                # Notify the other party (not the one who accepted)
-                if current_user_id == client_id:
-                    # Client accepted, notify freelancer
-                    notification_service.notify_agreement_version_accepted(
-                        recipient_id=freelancer_id,
-                        accepting_party_name=accepting_user_name,
-                        agreement_title=agreement_title,
-                        agreement_id=agreement_id,
-                        project_id=project_id,
-                        recipient_role="FL"
-                    )
-                    logger.info("Agreement version acceptance notification sent to freelancer: %s for agreement: %s", freelancer_id, agreement_id)
-                elif current_user_id == freelancer_id:
-                    # Freelancer accepted, notify client
-                    notification_service.notify_agreement_version_accepted(
-                        recipient_id=client_id,
-                        accepting_party_name=accepting_user_name,
-                        agreement_title=agreement_title,
-                        agreement_id=agreement_id,
-                        project_id=project_id,
-                        recipient_role="CL"
-                    )
-                    logger.info("Agreement version acceptance notification sent to client: %s for agreement: %s", client_id, agreement_id)
-            except Exception as e:
-                logger.warning("Failed to send agreement version acceptance notification (acceptance still saved): %s", e)
+            # try:
+            #     from app.services.notification import NotificationService
+            #     from app.repositories.user import UserRepository
+            #     notification_service = NotificationService()
+            #     user_repo = UserRepository()
+            #     
+            #     client_id = ag["client"]["user_id"]
+            #     freelancer_id = ag["freelancer"]["user_id"]
+            #     agreement_title = ag.get("title", "Agreement")
+            #     project_id = ag.get("project_id")
+            #     current_user_id = user.get("user_id")
+            #     
+            #     # Get the name of the user who accepted
+            #     accepting_user = user_repo.get_user_by_id(current_user_id)
+            #     accepting_user_name = "User"
+            #     if accepting_user:
+            #         accepting_user_name = f"{accepting_user.get('first_name', '')} {accepting_user.get('last_name', '')}".strip() or accepting_user.get('username', 'User')
+            #     
+            #     # Notify the other party (not the one who accepted)
+            #     if current_user_id == client_id:
+            #         # Client accepted, notify freelancer
+            #         notification_service.notify_agreement_version_accepted(
+            #             recipient_id=freelancer_id,
+            #             accepting_party_name=accepting_user_name,
+            #             agreement_title=agreement_title,
+            #             agreement_id=agreement_id,
+            #             project_id=project_id,
+            #             recipient_role="FL"
+            #         )
+            #         logger.info("Agreement version acceptance notification sent to freelancer: %s for agreement: %s", freelancer_id, agreement_id)
+            #     elif current_user_id == freelancer_id:
+            #         # Freelancer accepted, notify client
+            #         notification_service.notify_agreement_version_accepted(
+            #             recipient_id=client_id,
+            #             accepting_party_name=accepting_user_name,
+            #             agreement_title=agreement_title,
+            #             agreement_id=agreement_id,
+            #             project_id=project_id,
+            #             recipient_role="CL"
+            #         )
+            #         logger.info("Agreement version acceptance notification sent to client: %s for agreement: %s", client_id, agreement_id)
+            # except Exception as e:
+            #     logger.warning("Failed to send agreement version acceptance notification (acceptance still saved): %s", e)
                 # Continue even if notification fails - acceptance is already saved
+            pass
         
         return updated

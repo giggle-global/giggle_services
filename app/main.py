@@ -38,12 +38,14 @@ import time
 
 import logging
 
+from logging.handlers import RotatingFileHandler
+
 logging.basicConfig(
     level=logging.INFO,   # INFO, WARNING, ERROR, CRITICAL (changed from DEBUG for performance)
     format="%(asctime)s [%(levelname)s] [%(name)s] %(message)s",
     handlers=[
         logging.StreamHandler(),                    # console
-        logging.FileHandler("app.log", "a"),   # file
+        RotatingFileHandler("app.log", maxBytes=10*1024*1024, backupCount=5),   # file (10MB x 5 backups)
     ]
 )
 

@@ -60,31 +60,31 @@ class ReviewService:
         # Update has_review flag on the project based on actual review count
         self._update_project_review_flag(review_in.project_id)
         
-        # Notify freelancer that client has given a review
-        try:
-            agreement = self.agreement_repo.get_by_id(review_in.gig_id)
-            if agreement:
-                freelancer_id = agreement.get("freelancer", {}).get("user_id")
-                if freelancer_id:
-                    # Get client name from agreement or full_client
-                    client_name = agreement.get("client", {}).get("name") or full_client.get("first_name", "") + " " + full_client.get("last_name", "")
-                    client_name = client_name.strip() or "Client"
-                    
-                    # Get project name from project_data
-                    project_name = project_data.get("title") or project_data.get("project_title") or "Project"
-                    
-                    # When freelancer receives a review, route them to the milestone
-                    # view for this agreement so they can see the review details.
-                    self.notification_service.create_notification(
-                        user_id=freelancer_id,
-                        notification_type=NotificationType.AGREEMENT_UPDATED,
-                        title="Review Received",
-                        message=f"{client_name} has given a review for the project '{project_name}'",
-                        data={"agreement_id": review_in.gig_id, "type": "review_received", "client_name": client_name, "project_name": project_name},
-                        link=f"/creator/milestone?agreement_id={review_in.gig_id}&view_review=true",
-                    )
-        except Exception as e:
-            logger.warning(f"Failed to send notification to freelancer after review creation: {e}")
+        # # Notify freelancer that client has given a review
+        # try:
+        #     agreement = self.agreement_repo.get_by_id(review_in.gig_id)
+        #     if agreement:
+        #         freelancer_id = agreement.get("freelancer", {}).get("user_id")
+        #         if freelancer_id:
+        #             # Get client name from agreement or full_client
+        #             client_name = agreement.get("client", {}).get("name") or full_client.get("first_name", "") + " " + full_client.get("last_name", "")
+        #             client_name = client_name.strip() or "Client"
+        #             
+        #             # Get project name from project_data
+        #             project_name = project_data.get("title") or project_data.get("project_title") or "Project"
+        #             
+        #             # When freelancer receives a review, route them to the milestone
+        #             # view for this agreement so they can see the review details.
+        #             self.notification_service.create_notification(
+        #                 user_id=freelancer_id,
+        #                 notification_type=NotificationType.AGREEMENT_UPDATED,
+        #                 title="Review Received",
+        #                 message=f"{client_name} has given a review for the project '{project_name}'",
+        #                 data={"agreement_id": review_in.gig_id, "type": "review_received", "client_name": client_name, "project_name": project_name},
+        #                 link=f"/creator/milestone?agreement_id={review_in.gig_id}&view_review=true",
+        #             )
+        # except Exception as e:
+        #     logger.warning(f"Failed to send notification to freelancer after review creation: {e}")
         
         # Check if all milestones are completed with payment received, and if so, mark agreement as Completed
         self._check_and_complete_agreement(review_in.gig_id)
@@ -157,47 +157,47 @@ class ReviewService:
                             project = None
                             project_name = None
 
-                    # Notify client that the agreement is fully completed
-                    if client_id:
-                        self.notification_service.create_notification(
-                            user_id=client_id,
-                            notification_type=NotificationType.AGREEMENT_COMPLETED,
-                            title="Agreement Completed",
-                            message=(
-                                f'Work for project "{project_name}" has been fully completed.'
-                                if project_name
-                                else "Work for this project has been fully completed."
-                            ),
-                            data={
-                                "agreement_id": agreement_id,
-                                "project_id": project_id,
-                                "project_name": project_name,
-                                "type": "agreement_completed",
-                            },
-                            # Client messages page with agreement context
-                            link=f"/owner/messages?agreement_id={agreement_id}",
-                        )
-
-                    # Notify freelancer that the agreement is fully completed
-                    if freelancer_id:
-                        self.notification_service.create_notification(
-                            user_id=freelancer_id,
-                            notification_type=NotificationType.AGREEMENT_COMPLETED,
-                            title="Agreement Completed",
-                            message=(
-                                f'Work for project "{project_name}" has been fully completed.'
-                                if project_name
-                                else "Work for this project has been fully completed."
-                            ),
-                            data={
-                                "agreement_id": agreement_id,
-                                "project_id": project_id,
-                                "project_name": project_name,
-                                "type": "agreement_completed",
-                            },
-                            # Freelancer gig page with agreement context, navigate to archive tab
-                            link=f"/creator/gig?agreement_id={agreement_id}&tab=1",
-                        )
+        #             # Notify client that the agreement is fully completed
+        #             if client_id:
+        #                 self.notification_service.create_notification(
+        #                     user_id=client_id,
+        #                     notification_type=NotificationType.AGREEMENT_COMPLETED,
+        #                     title="Agreement Completed",
+        #                     message=(
+        #                         f'Work for project "{project_name}" has been fully completed.'
+        #                         if project_name
+        #                         else "Work for this project has been fully completed."
+        #                     ),
+        #                     data={
+        #                         "agreement_id": agreement_id,
+        #                         "project_id": project_id,
+        #                         "project_name": project_name,
+        #                         "type": "agreement_completed",
+        #                     },
+        #                     # Client messages page with agreement context
+        #                     link=f"/owner/messages?agreement_id={agreement_id}",
+        #                 )
+        # 
+        #             # Notify freelancer that the agreement is fully completed
+        #             if freelancer_id:
+        #                 self.notification_service.create_notification(
+        #                     user_id=freelancer_id,
+        #                     notification_type=NotificationType.AGREEMENT_COMPLETED,
+        #                     title="Agreement Completed",
+        #                     message=(
+        #                         f'Work for project "{project_name}" has been fully completed.'
+        #                         if project_name
+        #                         else "Work for this project has been fully completed."
+        #                     ),
+        #                     data={
+        #                         "agreement_id": agreement_id,
+        #                         "project_id": project_id,
+        #                         "project_name": project_name,
+        #                         "type": "agreement_completed",
+        #                     },
+        #                     # Freelancer gig page with agreement context, navigate to archive tab
+        #                     link=f"/creator/gig?agreement_id={agreement_id}&tab=1",
+        #                 )
 
                     # Auto-create or update freelancer portfolio entry for this project
                     try:

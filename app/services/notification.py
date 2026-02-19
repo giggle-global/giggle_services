@@ -34,6 +34,18 @@ class NotificationService:
         Create a notification and optionally send via RabbitMQ and email
         """
         try:
+            # Only allow request-related notifications
+            allowed_types = {
+                NotificationType.REQUEST_RECEIVED,
+                NotificationType.REQUEST_ACCEPTED,
+                NotificationType.REQUEST_REJECTED,
+                NotificationType.CLIENT_REQUEST_LIMIT_REACHED
+            }
+            
+            if notification_type not in allowed_types:
+                logger.info("Skipping notification of type %s (only request-related notifications are currently enabled)", notification_type)
+                return {}
+
             # Create notification in database
             notification_data = {
                 "user_id": user_id,
@@ -213,21 +225,22 @@ class NotificationService:
         route to use. For now, default to the generic milestone page, which is
         available under both owner and creator namespaces.
         """
-        return self.create_notification(
-            user_id=user_id,
-            notification_type=NotificationType.MILESTONE_REMINDER,
-            title="Milestone Reminder",
-            message=f"Milestone '{milestone_title}' is due in 24 hours",
-            data={
-                "milestone_id": milestone_id,
-                "agreement_id": agreement_id,
-                "due_date": due_date,
-                "milestone_title": milestone_title,
-            },
-            # Generic milestone page; role-specific layout wraps this component
-            link=f"/milestone?agreement_id={agreement_id}",
-            send_email=True,
-        )
+        # return self.create_notification(
+        #     user_id=user_id,
+        #     notification_type=NotificationType.MILESTONE_REMINDER,
+        #     title="Milestone Reminder",
+        #     message=f"Milestone '{milestone_title}' is due in 24 hours",
+        #     data={
+        #         "milestone_id": milestone_id,
+        #         "agreement_id": agreement_id,
+        #         "due_date": due_date,
+        #         "milestone_title": milestone_title,
+        #     },
+        #     # Generic milestone page; role-specific layout wraps this component
+        #     link=f"/milestone?agreement_id={agreement_id}",
+        #     send_email=True,
+        # )
+        return {}
 
     def notify_milestone_payment_reminder(
         self,
@@ -245,26 +258,27 @@ class NotificationService:
             # Format amount to 2 decimal places
             formatted_amount = f"{amount:.2f}"
             amount_text = f" {currency or ''}{formatted_amount}"
-        project_text = f" in project '{project_title}'" if project_title else ""
-        message = f"Please send payment for milestone '{milestone_title}'{project_text}{amount_text}".strip()
-
-        return self.create_notification(
-            user_id=client_id,
-            notification_type=NotificationType.MILESTONE_PAYMENT_REMINDER,
-            title="Payment Needed for Milestone",
-            message=message,
-            data={
-                "milestone_id": milestone_id,
-                "agreement_id": agreement_id,
-                "milestone_title": milestone_title,
-                "project_title": project_title,
-                "amount": amount,
-                "currency": currency,
-            },
-            # Route client to gig page for this agreement
-            link=f"/owner/gig?agreement_id={agreement_id}",
-            send_email=True,
-        )
+        # project_text = f" in project '{project_title}'" if project_title else ""
+        # message = f"Please send payment for milestone '{milestone_title}'{project_text}{amount_text}".strip()
+        # 
+        # return self.create_notification(
+        #     user_id=client_id,
+        #     notification_type=NotificationType.MILESTONE_PAYMENT_REMINDER,
+        #     title="Payment Needed for Milestone",
+        #     message=message,
+        #     data={
+        #         "milestone_id": milestone_id,
+        #         "agreement_id": agreement_id,
+        #         "milestone_title": milestone_title,
+        #         "project_title": project_title,
+        #         "amount": amount,
+        #         "currency": currency,
+        #     },
+        #     # Route client to gig page for this agreement
+        #     link=f"/owner/gig?agreement_id={agreement_id}",
+        #     send_email=True,
+        # )
+        return {}
 
     def notify_milestone_payment_confirmed(
         self,
@@ -282,26 +296,27 @@ class NotificationService:
             # Format amount to 2 decimal places
             formatted_amount = f"{amount:.2f}"
             amount_text = f" {currency or ''}{formatted_amount}"
-        project_text = f" in project '{project_title}'" if project_title else ""
-        message = f"Payment has been sent for milestone '{milestone_title}'{project_text}{amount_text}. Have you received it?".strip()
-
-        return self.create_notification(
-            user_id=freelancer_id,
-            notification_type=NotificationType.MILESTONE_PAYMENT_CONFIRMED,
-            title="Payment Sent for Milestone",
-            message=message,
-            data={
-                "milestone_id": milestone_id,
-                "agreement_id": agreement_id,
-                "milestone_title": milestone_title,
-                "project_title": project_title,
-                "amount": amount,
-                "currency": currency,
-            },
-            # Route freelancer to gig page for this agreement
-            link=f"/creator/gig?agreement_id={agreement_id}",
-            send_email=True,
-        )
+        # project_text = f" in project '{project_title}'" if project_title else ""
+        # message = f"Payment has been sent for milestone '{milestone_title}'{project_text}{amount_text}. Have you received it?".strip()
+        # 
+        # return self.create_notification(
+        #     user_id=freelancer_id,
+        #     notification_type=NotificationType.MILESTONE_PAYMENT_CONFIRMED,
+        #     title="Payment Sent for Milestone",
+        #     message=message,
+        #     data={
+        #         "milestone_id": milestone_id,
+        #         "agreement_id": agreement_id,
+        #         "milestone_title": milestone_title,
+        #         "project_title": project_title,
+        #         "amount": amount,
+        #         "currency": currency,
+        #     },
+        #     # Route freelancer to gig page for this agreement
+        #     link=f"/creator/gig?agreement_id={agreement_id}",
+        #     send_email=True,
+        # )
+        return {}
 
     def notify_milestone_completed(
         self,
@@ -313,32 +328,33 @@ class NotificationService:
         recipient_role: Optional[str] = None,
     ):
         """Notify both client and freelancer that milestone has been completed (after payment received)."""
-        project_text = f" in project '{project_title}'" if project_title else ""
-        message = f"Milestone '{milestone_title}'{project_text} has been completed successfully."
-        
-        # Determine URL based on recipient role
-        if recipient_role == "CL":
-            link = f"/owner/gig?agreement_id={agreement_id}"
-        elif recipient_role == "FL":
-            link = f"/creator/gig?agreement_id={agreement_id}"
-        else:
-            # Fallback to generic gig if role not provided
-            link = f"/gig?agreement_id={agreement_id}"
-
-        return self.create_notification(
-            user_id=user_id,
-            notification_type=NotificationType.MILESTONE_COMPLETED,
-            title="Milestone Completed",
-            message=message,
-            data={
-                "milestone_id": milestone_id,
-                "agreement_id": agreement_id,
-                "milestone_title": milestone_title,
-                "project_title": project_title,
-            },
-            link=link,
-            send_email=True,
-        )
+        # project_text = f" in project '{project_title}'" if project_title else ""
+        # message = f"Milestone '{milestone_title}'{project_text} has been completed successfully."
+        # 
+        # # Determine URL based on recipient role
+        # if recipient_role == "CL":
+        #     link = f"/owner/gig?agreement_id={agreement_id}"
+        # elif recipient_role == "FL":
+        #     link = f"/creator/gig?agreement_id={agreement_id}"
+        # else:
+        #     # Fallback to generic gig if role not provided
+        #     link = f"/gig?agreement_id={agreement_id}"
+        # 
+        # return self.create_notification(
+        #     user_id=user_id,
+        #     notification_type=NotificationType.MILESTONE_COMPLETED,
+        #     title="Milestone Completed",
+        #     message=message,
+        #     data={
+        #         "milestone_id": milestone_id,
+        #         "agreement_id": agreement_id,
+        #         "milestone_title": milestone_title,
+        #         "project_title": project_title,
+        #     },
+        #     link=link,
+        #     send_email=True,
+        # )
+        return {}
 
     def notify_milestone_work_completed(
         self,
@@ -349,23 +365,24 @@ class NotificationService:
         project_title: str | None = None,
     ):
         """Notify client that freelancer has completed the milestone work (waiting for verification)."""
-        project_text = f" in project '{project_title}'" if project_title else ""
-        message = f"Freelancer has completed milestone '{milestone_title}'{project_text}. Please verify the work."
-
-        return self.create_notification(
-            user_id=client_id,
-            notification_type=NotificationType.MILESTONE_COMPLETED,
-            title="Milestone Work Completed",
-            message=message,
-            data={
-                "milestone_id": milestone_id,
-                "agreement_id": agreement_id,
-                "milestone_title": milestone_title,
-                "project_title": project_title,
-            },
-            link=f"/owner/gig?agreement_id={agreement_id}",
-            send_email=True,
-        )
+        # project_text = f" in project '{project_title}'" if project_title else ""
+        # message = f"Freelancer has completed milestone '{milestone_title}'{project_text}. Please verify the work."
+        # 
+        # return self.create_notification(
+        #     user_id=client_id,
+        #     notification_type=NotificationType.MILESTONE_COMPLETED,
+        #     title="Milestone Work Completed",
+        #     message=message,
+        #     data={
+        #         "milestone_id": milestone_id,
+        #         "agreement_id": agreement_id,
+        #         "milestone_title": milestone_title,
+        #         "project_title": project_title,
+        #     },
+        #     link=f"/owner/gig?agreement_id={agreement_id}",
+        #     send_email=True,
+        # )
+        return {}
 
     def notify_milestone_verified(
         self,
@@ -376,23 +393,24 @@ class NotificationService:
         project_title: str | None = None,
     ):
         """Notify freelancer that client has verified the milestone (ready for payment)."""
-        project_text = f" in project '{project_title}'" if project_title else ""
-        message = f"Client has verified milestone '{milestone_title}'{project_text}. Payment will be sent soon."
-
-        return self.create_notification(
-            user_id=freelancer_id,
-            notification_type=NotificationType.MILESTONE_APPROVED,
-            title="Milestone Verified",
-            message=message,
-            data={
-                "milestone_id": milestone_id,
-                "agreement_id": agreement_id,
-                "milestone_title": milestone_title,
-                "project_title": project_title,
-            },
-            link=f"/creator/gig?agreement_id={agreement_id}",
-            send_email=True,
-        )
+        # project_text = f" in project '{project_title}'" if project_title else ""
+        # message = f"Client has verified milestone '{milestone_title}'{project_text}. Payment will be sent soon."
+        # 
+        # return self.create_notification(
+        #     user_id=freelancer_id,
+        #     notification_type=NotificationType.MILESTONE_APPROVED,
+        #     title="Milestone Verified",
+        #     message=message,
+        #     data={
+        #         "milestone_id": milestone_id,
+        #         "agreement_id": agreement_id,
+        #         "milestone_title": milestone_title,
+        #         "project_title": project_title,
+        #     },
+        #     link=f"/creator/gig?agreement_id={agreement_id}",
+        #     send_email=True,
+        # )
+        return {}
 
     def notify_request_accepted(
         self,
@@ -494,29 +512,30 @@ class NotificationService:
             except Exception as e:
                 logger.warning(f"Failed to determine recipient role from agreement {agreement_id}: {e}")
         
-        # Determine URL based on recipient role
-        if recipient_role == "CL":
-            link = f"/owner/gig-agreement?agreement_id={agreement_id}"
-        elif recipient_role == "FL":
-            link = f"/creator/gig-agreement?agreement_id={agreement_id}"
-        else:
-            # Fallback to generic gig-agreement if role not provided
-            link = f"/gig-agreement?agreement_id={agreement_id}"
-        
-        return self.create_notification(
-            user_id=recipient_id,
-            notification_type=NotificationType.AGREEMENT_SIGN_REMINDER,
-            title="Reminder to Sign Agreement",
-            message=f"The other party has signed the agreement '{agreement_title}'. Please sign the agreement to proceed.",
-            data={
-                "agreement_id": agreement_id,
-                "project_id": project_id,
-                "agreement_title": agreement_title,
-                "other_party_name": other_party_name
-            },
-            link=link,
-            send_email=True
-        )
+        # # Determine URL based on recipient role
+        # if recipient_role == "CL":
+        #     link = f"/owner/gig-agreement?agreement_id={agreement_id}"
+        # elif recipient_role == "FL":
+        #     link = f"/creator/gig-agreement?agreement_id={agreement_id}"
+        # else:
+        #     # Fallback to generic gig-agreement if role not provided
+        #     link = f"/gig-agreement?agreement_id={agreement_id}"
+        # 
+        # return self.create_notification(
+        #     user_id=recipient_id,
+        #     notification_type=NotificationType.AGREEMENT_SIGN_REMINDER,
+        #     title="Reminder to Sign Agreement",
+        #     message=f"The other party has signed the agreement '{agreement_title}'. Please sign the agreement to proceed.",
+        #     data={
+        #         "agreement_id": agreement_id,
+        #         "project_id": project_id,
+        #         "agreement_title": agreement_title,
+        #         "other_party_name": other_party_name
+        #     },
+        #     link=link,
+        #     send_email=True
+        # )
+        return {}
 
     def notify_agreement_created(
         self,
@@ -544,29 +563,30 @@ class NotificationService:
             except Exception as e:
                 logger.warning(f"Failed to determine recipient role from agreement {agreement_id}: {e}")
         
-        # Determine URL based on recipient role
-        if recipient_role == "CL":
-            link = f"/owner/gig-agreement?agreement_id={agreement_id}"
-        elif recipient_role == "FL":
-            link = f"/creator/gig-agreement?agreement_id={agreement_id}"
-        else:
-            # Fallback to generic gig-agreement if role not provided
-            link = f"/gig-agreement?agreement_id={agreement_id}"
-        
-        return self.create_notification(
-            user_id=recipient_id,
-            notification_type=NotificationType.AGREEMENT_CREATED,
-            title="New Agreement Created",
-            message=f"A new agreement has been created: {agreement_title}",
-            data={
-                "agreement_id": agreement_id,
-                "project_id": project_id,
-                "creator_name": creator_name,
-                "agreement_title": agreement_title
-            },
-            link=link,
-            send_email=True
-        )
+        # # Determine URL based on recipient role
+        # if recipient_role == "CL":
+        #     link = f"/owner/gig-agreement?agreement_id={agreement_id}"
+        # elif recipient_role == "FL":
+        #     link = f"/creator/gig-agreement?agreement_id={agreement_id}"
+        # else:
+        #     # Fallback to generic gig-agreement if role not provided
+        #     link = f"/gig-agreement?agreement_id={agreement_id}"
+        # 
+        # return self.create_notification(
+        #     user_id=recipient_id,
+        #     notification_type=NotificationType.AGREEMENT_CREATED,
+        #     title="New Agreement Created",
+        #     message=f"A new agreement has been created: {agreement_title}",
+        #     data={
+        #         "agreement_id": agreement_id,
+        #         "project_id": project_id,
+        #         "creator_name": creator_name,
+        #         "agreement_title": agreement_title
+        #     },
+        #     link=link,
+        #     send_email=True
+        # )
+        return {}
 
     def notify_agreement_updated(
         self,
@@ -593,28 +613,29 @@ class NotificationService:
             except Exception as e:
                 logger.warning(f"Failed to determine recipient role from agreement {agreement_id}: {e}")
         
-        # Determine URL based on recipient role
-        if recipient_role == "CL":
-            link = f"/owner/gig-agreement?agreement_id={agreement_id}"
-        elif recipient_role == "FL":
-            link = f"/creator/gig-agreement?agreement_id={agreement_id}"
-        else:
-            # Fallback to generic gig-agreement if role not provided
-            link = f"/gig-agreement?agreement_id={agreement_id}"
-        
-        return self.create_notification(
-            user_id=recipient_id,
-            notification_type=NotificationType.AGREEMENT_UPDATED,
-            title="Agreement Updated",
-            message=f"The agreement has been updated: {agreement_title}",
-            data={
-                "agreement_id": agreement_id,
-                "project_id": project_id,
-                "agreement_title": agreement_title
-            },
-            link=link,
-            send_email=True
-        )
+        # # Determine URL based on recipient role
+        # if recipient_role == "CL":
+        #     link = f"/owner/gig-agreement?agreement_id={agreement_id}"
+        # elif recipient_role == "FL":
+        #     link = f"/creator/gig-agreement?agreement_id={agreement_id}"
+        # else:
+        #     # Fallback to generic gig-agreement if role not provided
+        #     link = f"/gig-agreement?agreement_id={agreement_id}"
+        # 
+        # return self.create_notification(
+        #     user_id=recipient_id,
+        #     notification_type=NotificationType.AGREEMENT_UPDATED,
+        #     title="Agreement Updated",
+        #     message=f"The agreement has been updated: {agreement_title}",
+        #     data={
+        #         "agreement_id": agreement_id,
+        #         "project_id": project_id,
+        #         "agreement_title": agreement_title
+        #     },
+        #     link=link,
+        #     send_email=True
+        # )
+        return {}
 
     def notify_agreement_version_accepted(
         self,
@@ -642,30 +663,31 @@ class NotificationService:
             except Exception as e:
                 logger.warning(f"Failed to determine recipient role from agreement {agreement_id}: {e}")
         
-        # Determine URL based on recipient role
-        if recipient_role == "CL":
-            link = f"/owner/gig-agreement?agreement_id={agreement_id}"
-        elif recipient_role == "FL":
-            link = f"/creator/gig-agreement?agreement_id={agreement_id}"
-        else:
-            # Fallback to generic gig-agreement if role not provided
-            link = f"/gig-agreement?agreement_id={agreement_id}"
-        
-        return self.create_notification(
-            user_id=recipient_id,
-            notification_type=NotificationType.AGREEMENT_UPDATED,
-            title="Agreement Version Accepted",
-            message=f"The other party has accepted your version of the agreement '{agreement_title}'. You can now proceed to sign the agreement.",
-            data={
-                "agreement_id": agreement_id,
-                "project_id": project_id,
-                "agreement_title": agreement_title,
-                "accepting_party_name": accepting_party_name,
-                "type": "version_accepted"
-            },
-            link=link,
-            send_email=True
-        )
+        # # Determine URL based on recipient role
+        # if recipient_role == "CL":
+        #     link = f"/owner/gig-agreement?agreement_id={agreement_id}"
+        # elif recipient_role == "FL":
+        #     link = f"/creator/gig-agreement?agreement_id={agreement_id}"
+        # else:
+        #     # Fallback to generic gig-agreement if role not provided
+        #     link = f"/gig-agreement?agreement_id={agreement_id}"
+        # 
+        # return self.create_notification(
+        #     user_id=recipient_id,
+        #     notification_type=NotificationType.AGREEMENT_UPDATED,
+        #     title="Agreement Version Accepted",
+        #     message=f"The other party has accepted your version of the agreement '{agreement_title}'. You can now proceed to sign the agreement.",
+        #     data={
+        #         "agreement_id": agreement_id,
+        #         "project_id": project_id,
+        #         "agreement_title": agreement_title,
+        #         "accepting_party_name": accepting_party_name,
+        #         "type": "version_accepted"
+        #     },
+        #     link=link,
+        #     send_email=True
+        # )
+        return {}
 
     def notify_dispute_raised(
         self,
@@ -692,84 +714,85 @@ class NotificationService:
         - Else if project_id exists (from message page): route to /owner/messages or /creator/messages with project_id
         - Else: fallback to /owner/messages or /creator/messages with ticket_id
         """
-        # Map internal roles to friendly labels
-        role_map = {
-            "CL": "owner",
-            "FL": "creator",
-        }
-        friendly_role = role_map.get(raised_by_role, "user")
-
-        context_parts = []
-        if project_name:
-            context_parts.append(f"project \"{project_name}\"")
-        # We deliberately do NOT show agreement_id in the user-facing text
-        # If we want to indicate there is an agreement, use a generic label only
-        if agreement_id:
-            context_parts.append("agreement")
-        context = " for " + ", ".join(context_parts) if context_parts else ""
-
-        title = "Dispute raised"
-        message = f"A dispute has been raised by the {friendly_role} about \"{subject}\"{context}."
-
-        # Determine recipient's role (client or freelancer)
-        recipient_role = None
-        if client_id and recipient_id == client_id:
-            recipient_role = "client"
-        elif freelancer_id and recipient_id == freelancer_id:
-            recipient_role = "freelancer"
-        else:
-            # Fallback: try to get role from user repository
-            try:
-                user = self.user_repo.get_user(user_id=recipient_id)
-                if user:
-                    role_code = user.get("role", "")
-                    if role_code == "CL":
-                        recipient_role = "client"
-                    elif role_code == "FL":
-                        recipient_role = "freelancer"
-            except Exception:
-                logger.warning(f"Could not determine recipient role for user_id={recipient_id}, defaulting to client")
-                recipient_role = "client"  # Default fallback
-
-        # Determine routing based on source and recipient role:
-        # - If created from gig page (has agreement_id): route to gig page with agreement_id
-        # - If created from message page (has project_id, no agreement_id): route to messages page with project_id
-        # - Otherwise: fallback to messages page with ticket_id
-        if agreement_id:
-            # From gig page - route to gig page
-            if recipient_role == "client":
-                link = f"/owner/gig?agreement_id={agreement_id}"
-            else:
-                link = f"/creator/gig?agreement_id={agreement_id}"
-        elif project_id:
-            # From message page - route to messages page
-            if recipient_role == "client":
-                link = f"/owner/messages?project_id={project_id}"
-            else:
-                link = f"/creator/messages?project_id={project_id}"
-        else:
-            # Fallback - route to messages page with ticket_id
-            if recipient_role == "client":
-                link = f"/owner/messages?ticket_id={ticket_id}"
-            else:
-                link = f"/creator/messages?ticket_id={ticket_id}"
-
-        return self.create_notification(
-            user_id=recipient_id,
-            notification_type=NotificationType.DISPUTE_RAISED,
-            title=title,
-            message=message,
-            data={
-                "ticket_id": ticket_id,
-                "project_name": project_name,
-                "agreement_id": agreement_id,
-                "project_id": project_id,
-                "raised_by_role": raised_by_role,
-                "raised_by_role_label": friendly_role,
-            },
-            link=link,
-            send_email=True,
-        )
+        # # Map internal roles to friendly labels
+        # role_map = {
+        #     "CL": "owner",
+        #     "FL": "creator",
+        # }
+        # friendly_role = role_map.get(raised_by_role, "user")
+        # 
+        # context_parts = []
+        # if project_name:
+        #     context_parts.append(f"project \"{project_name}\"")
+        # # We deliberately do NOT show agreement_id in the user-facing text
+        # # If we want to indicate there is an agreement, use a generic label only
+        # if agreement_id:
+        #     context_parts.append("agreement")
+        # context = " for " + ", ".join(context_parts) if context_parts else ""
+        # 
+        # title = "Dispute raised"
+        # message = f"A dispute has been raised by the {friendly_role} about \"{subject}\"{context}."
+        # 
+        # # Determine recipient's role (client or freelancer)
+        # recipient_role = None
+        # if client_id and recipient_id == client_id:
+        #     recipient_role = "client"
+        # elif freelancer_id and recipient_id == freelancer_id:
+        #     recipient_role = "freelancer"
+        # else:
+        #     # Fallback: try to get role from user repository
+        #     try:
+        #         user = self.user_repo.get_user(user_id=recipient_id)
+        #         if user:
+        #             role_code = user.get("role", "")
+        #             if role_code == "CL":
+        #                 recipient_role = "client"
+        #             elif role_code == "FL":
+        #                 recipient_role = "freelancer"
+        #     except Exception:
+        #         logger.warning(f"Could not determine recipient role for user_id={recipient_id}, defaulting to client")
+        #         recipient_role = "client"  # Default fallback
+        # 
+        # # Determine routing based on source and recipient role:
+        # # - If created from gig page (has agreement_id): route to gig page with agreement_id
+        # # - If created from message page (has project_id, no agreement_id): route to messages page with project_id
+        # # - Otherwise: fallback to messages page with ticket_id
+        # if agreement_id:
+        #     # From gig page - route to gig page
+        #     if recipient_role == "client":
+        #         link = f"/owner/gig?agreement_id={agreement_id}"
+        #     else:
+        #         link = f"/creator/gig?agreement_id={agreement_id}"
+        # elif project_id:
+        #     # From message page - route to messages page
+        #     if recipient_role == "client":
+        #         link = f"/owner/messages?project_id={project_id}"
+        #     else:
+        #         link = f"/creator/messages?project_id={project_id}"
+        # else:
+        #     # Fallback - route to messages page with ticket_id
+        #     if recipient_role == "client":
+        #         link = f"/owner/messages?ticket_id={ticket_id}"
+        #     else:
+        #         link = f"/creator/messages?ticket_id={ticket_id}"
+        # 
+        # return self.create_notification(
+        #     user_id=recipient_id,
+        #     notification_type=NotificationType.DISPUTE_RAISED,
+        #     title=title,
+        #     message=message,
+        #     data={
+        #         "ticket_id": ticket_id,
+        #         "project_name": project_name,
+        #         "agreement_id": agreement_id,
+        #         "project_id": project_id,
+        #         "raised_by_role": raised_by_role,
+        #         "raised_by_role_label": friendly_role,
+        #     },
+        #     link=link,
+        #     send_email=True,
+        # )
+        return {}
 
     def notify_dispute_resolved(
         self,
@@ -784,48 +807,49 @@ class NotificationService:
         Notify both parties when a dispute is resolved.
         Context uses project name (if provided) instead of project id.
         """
-        context_parts = []
-        if project_name:
-            context_parts.append(f"project \"{project_name}\"")
-        # Again, do not expose agreement_id in text; just mention agreement generically
-        if agreement_id:
-            context_parts.append("agreement")
-        context = " for " + ", ".join(context_parts) if context_parts else ""
-
-        title = "Dispute resolved"
-        message = f"The dispute \"{subject}\"{context} has been resolved."
-
-        # notify client
-        self.create_notification(
-            user_id=client_id,
-            notification_type=NotificationType.DISPUTE_RESOLVED,
-            title=title,
-            message=message,
-            data={
-                "ticket_id": ticket_id,
-                "project_name": project_name,
-                "agreement_id": agreement_id,
-                "role": "CL",
-            },
-            link=f"/owner/projects?ticket_id={ticket_id}",
-            send_email=True,
-        )
-
-        # notify freelancer
-        self.create_notification(
-            user_id=freelancer_id,
-            notification_type=NotificationType.DISPUTE_RESOLVED,
-            title=title,
-            message=message,
-            data={
-                "ticket_id": ticket_id,
-                "project_name": project_name,
-                "agreement_id": agreement_id,
-                "role": "FL",
-            },
-            link=f"/creator/gig?ticket_id={ticket_id}",
-            send_email=True,
-        )
+        # context_parts = []
+        # if project_name:
+        #     context_parts.append(f"project \"{project_name}\"")
+        # # Again, do not expose agreement_id in text; just mention agreement generically
+        # if agreement_id:
+        #     context_parts.append("agreement")
+        # context = " for " + ", ".join(context_parts) if context_parts else ""
+        # 
+        # title = "Dispute resolved"
+        # message = f"The dispute \"{subject}\"{context} has been resolved."
+        # 
+        # # notify client
+        # self.create_notification(
+        #     user_id=client_id,
+        #     notification_type=NotificationType.DISPUTE_RESOLVED,
+        #     title=title,
+        #     message=message,
+        #     data={
+        #         "ticket_id": ticket_id,
+        #         "project_name": project_name,
+        #         "agreement_id": agreement_id,
+        #         "role": "CL",
+        #     },
+        #     link=f"/owner/projects?ticket_id={ticket_id}",
+        #     send_email=True,
+        # )
+        # 
+        # # notify freelancer
+        # self.create_notification(
+        #     user_id=freelancer_id,
+        #     notification_type=NotificationType.DISPUTE_RESOLVED,
+        #     title=title,
+        #     message=message,
+        #     data={
+        #         "ticket_id": ticket_id,
+        #         "project_name": project_name,
+        #         "agreement_id": agreement_id,
+        #         "role": "FL",
+        #     },
+        #     link=f"/creator/gig?ticket_id={ticket_id}",
+        #     send_email=True,
+        # )
+        return {}
 
     def get_user_notifications(
         self,

@@ -22,6 +22,11 @@ class AvailabilityEnum(str, Enum):
     IMMEDIATE = "immediate"  # 30+hr/wk
 
 
+class PaymentTypeEnum(str, Enum):
+    HOURLY = "Hourly"
+    BUDGET = "Budget"
+
+
 class NotificationService(BaseModel):
     email: bool = Field(False, example=True)
     # sms: bool = Field(False, example=False)
@@ -75,6 +80,7 @@ class UserBase(BaseModel):
     email_verified: bool = Field(False, example=True)
     phone_verified: bool = Field(False, example=True)
     is_affiliate: Optional[bool] = Field(False, example=False)
+    preferred_payment_type: Optional[PaymentTypeEnum] = Field(None, example=PaymentTypeEnum.HOURLY.value)
 
 
 class UserCreate(UserBase):
@@ -185,6 +191,7 @@ class UserUpdate(BaseModel):
     interested_industries: Optional[List[str]] = Field(None, example=["F&B", "Healthcare", "E-commerce"])
     ongoing_gigs_count: Optional[int] = Field(0, example=2, description="Number of active gigs")
     availability: Optional[AvailabilityEnum] = Field(None, example=AvailabilityEnum.MEDIUM.value, description="Freelancer availability: low (max 10hr/wk), medium (10-30hr/wk), immediate (30+hr/wk)")
+    preferred_payment_type: Optional[PaymentTypeEnum] = Field(None, example=PaymentTypeEnum.HOURLY.value)
     
     #client-specific fields
     contact_info: Optional[ContactInfo] = None
@@ -220,7 +227,8 @@ class UserUpdate(BaseModel):
                     "timezone": "UTC+05:30",
                     "currency": "INR"
                 },
-                "availability": "medium"
+                "availability": "medium",
+                "preferred_payment_type": "Hourly"
             }
         }
 
@@ -250,6 +258,7 @@ class UserOut(BaseModel):
     kyc: Optional[bool] = Field(False, example=True)
     first_intro_done: Optional[bool] = Field(False, example=True)
     user_settings: Optional[UserSettingInfo] = None
+    preferred_payment_type: Optional[PaymentTypeEnum] = None
 
     class Config:
         from_attributes = True

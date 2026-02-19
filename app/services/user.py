@@ -152,7 +152,7 @@ class UserService:
         created = None
         try:
             logger.debug("Persisting user to Mongo: user_id=%s email=%s", user.user_id, user.email)
-            print("User data to be created:", user.model_dump())
+            # logger.debug("User data to be created: user_id=%s email=%s", user.user_id, user.email)
             created = self.user_repo.create_user(user)
             logger.info("User created in DB: user_id=%s email=%s", user.user_id, user.email)
         except PyMongoError as e:
@@ -450,7 +450,7 @@ class UserService:
 
         # Role-based enforcement: if the user is NOT a 'client', drop company/contact info
         role = current_user.get("role")
-        print("user_data before role check:", user_data)
+        # logger.debug("user_data keys before role check: %s", list(user_data.keys()))
         if role != "CL":
             user_data.pop("contact_info", None)
             user_data.pop("company_info", None)
@@ -460,7 +460,7 @@ class UserService:
             "first_name", "last_name", "email", "phone_number", "bio",
             "designation", "experience_years", "experience_months", "profile_pic",
             "language_preference", "skill_set", "contact_info", "company_info", "payment_information", "notification_service", "kyc", "first_intro_done",
-            "user_settings", "location_info", "interested_industries", "ongoing_gigs_count", "availability", "is_affiliate"
+            "user_settings", "location_info", "interested_industries", "ongoing_gigs_count", "availability", "is_affiliate", "preferred_payment_type"
         }
         update_payload = {k: v for k, v in user_data.items() if k in allowed_fields}
 
@@ -560,7 +560,7 @@ class UserService:
             logger.debug("Keycloak auth attempt for username=%s", data.email)
             tokens = authenticate_with_keycloak(username=data.email, passcode=data.password)
             logger.info("Login success for username=%s", data.email)
-            print("Tokens obtained:", tokens)
+            # logger.debug("Tokens obtained successfully")
             return tokens
         except HTTPException:
             # your keycloak client can raise 401/403; bubble up

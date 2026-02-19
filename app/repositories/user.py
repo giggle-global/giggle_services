@@ -77,7 +77,7 @@ class UserRepository:
         # print("Fetching user by ID:", user_id)
         user = self.collection.find_one({"user_id": user_id, "status": {"$in": ["ACTIVE", "BANNED"]}}, {"_id": 0})
         user = self._attach_defaults(user)
-        print("Fetched user:", user.get("user_id") if user else None)
+        # print("Fetched user:", user.get("user_id") if user else None)
         if not user:
             raise HTTPException(404, "User not found")
         
@@ -238,7 +238,7 @@ class UserRepository:
             {"user_id": user_id},
             {"$set": {"skill_set": skills_payload}}
         )
-        print("Update result:", result.raw_result)
+        # print("Update result:", result.raw_result)
         if result.matched_count == 0:
             raise HTTPException(404, "User not found")
         return self.get_user_by_id(user_id)
@@ -303,7 +303,7 @@ class UserRepository:
             {"user_id": user_id},
             {"$set": {"status": "DELETED"}}
         )
-        print("Delete result:", result.raw_result, result.matched_count)
+        # print("Delete result:", result.raw_result, result.matched_count)
         if result.matched_count == 0:
             raise HTTPException(404, "User not found.")
         return None
