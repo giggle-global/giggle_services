@@ -285,6 +285,28 @@ def generate_s3_presigned_get_url(
 
 
 # ----------------------
+# S3: fetch object bytes (for proxying to client)
+# ----------------------
+def get_s3_object_bytes(
+    bucket: str,
+    key: str,
+    region_name: Optional[str] = None,
+    s3_client=None,
+) -> bytes:
+    """
+    Fetch an S3 object and return its body as bytes.
+    Used to proxy files through the backend for reliable cross-device access.
+    """
+    client = s3_client or _s3_client(region_name=region_name)
+    try:
+        resp = client.get_object(Bucket=bucket, Key=key)
+        return resp["Body"].read()
+    except (BotoCoreError, ClientError) as exc:
+        logger.exception("Failed to get S3 object s3://%s/%s", bucket, key)
+        raise
+
+
+# ----------------------
 # S3: convenience wrapper for download + view with explicit names
 # ----------------------
 def generate_s3_presigned_urls_for_object(

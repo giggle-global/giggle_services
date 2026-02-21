@@ -4,11 +4,13 @@ import re
 from typing import Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from app.core.aws_utils import (
     generate_s3_presigned_post,
     generate_s3_presigned_urls_for_object,
+    get_s3_object_bytes,
 )
 from app.core.keycloak import get_current_user
 
@@ -186,6 +188,35 @@ def presign_portfolio_upload(
     }
 
 
+def _check_portfolio_pdf_access(project: Dict[str, Any], user: Dict[str, Any]) -> None:
+    """Shared permission check for portfolio PDF access. Raises HTTPException if denied."""
+    requester_id = user.get("user_id")
+    requester_role = user.get("role")
+    project_owner_id = project.get("user_id")
+
+    has_access = False
+    if project_owner_id == requester_id:
+        has_access = True  # Owner
+    elif requester_role == "SA":
+        has_access = True  # Super Admin
+    elif requester_role == "CL":
+        from app.services.user import UserService
+
+        user_service = UserService()
+        try:
+            target_user = user_service.get_user(user_id=project_owner_id)
+            if target_user and target_user.get("role") == "FL" and target_user.get("status") == "ACTIVE":
+                has_access = True
+        except Exception:
+            pass
+
+    if not has_access:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not allowed to view this portfolio PDF",
+        )
+
+
 @router.get("/presign/portfolio/{project_id}")
 def get_portfolio_pdf_url(
     project_id: str,
@@ -196,11 +227,9 @@ def get_portfolio_pdf_url(
     Allows portfolio owner, admins, or clients viewing freelancer portfolios.
     """
     _ensure_bucket_configured()
-    
-    # Import here to avoid circular dependency
+
     from app.services.portfolio import PortfolioService
-    from app.services.user import UserService
-    
+
     portfolio_service = PortfolioService()
     
     # Get project - need to check permissions
@@ -218,32 +247,8 @@ def get_portfolio_pdf_url(
             detail="Portfolio project not found"
         )
     
-    # Check permissions: owner, admin, or client viewing freelancer portfolio
-    requester_id = user.get("user_id")
-    requester_role = user.get("role")
-    project_owner_id = project.get("user_id")
-    
-    has_access = False
-    if project_owner_id == requester_id:
-        has_access = True  # Owner
-    elif requester_role == "SA":
-        has_access = True  # Super Admin
-    elif requester_role == "CL":
-        # Client viewing freelancer portfolio - verify target is freelancer
-        user_service = UserService()
-        try:
-            target_user = user_service.get_user(user_id=project_owner_id)
-            if target_user.get("role") == "FL" and target_user.get("status") == "ACTIVE":
-                has_access = True
-        except Exception:
-            pass
-    
-    if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not allowed to view this portfolio PDF"
-        )
-    
+    _check_portfolio_pdf_access(project, user)
+
     if not project.get("portfolio_pdf"):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -264,6 +269,68 @@ def get_portfolio_pdf_url(
         "view_url": urls["view_url"],
         "download_url": urls["download_url"],
     }
+
+
+@router.get("/portfolio/{project_id}/pdf")
+def stream_portfolio_pdf(
+    project_id: str,
+    user: Dict[str, Any] = Depends(get_current_user),
+):
+    """
+    Stream portfolio PDF through the backend.
+    Use this for reliable PDF viewing across different devices/systems,
+    avoiding presigned URL issues (signature mismatch, CORS, etc.).
+    Same permission rules as presign endpoint: owner, admin, or client viewing freelancer.
+    """
+    _ensure_bucket_configured()
+
+    from app.services.portfolio import PortfolioService
+
+    portfolio_service = PortfolioService()
+    try:
+        project = portfolio_service.repo.get_by_id(project_id)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Portfolio project not found",
+        )
+
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Portfolio project not found",
+        )
+
+    if not project.get("portfolio_pdf"):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Portfolio PDF not found for this project",
+        )
+
+    _check_portfolio_pdf_access(project, user)
+    pdf_key = project.get("portfolio_pdf")
+    filename = pdf_key.split("/")[-1] if "/" in pdf_key else "portfolio.pdf"
+
+    try:
+        body = get_s3_object_bytes(
+            bucket=S3_BUCKET,
+            key=pdf_key,
+            region_name=S3_REGION,
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to retrieve portfolio PDF",
+        )
+
+    return Response(
+        content=body,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="{filename}"',
+            "Cache-Control": "private, max-age=300",
+        },
+    )
 
 
 @router.post("/presign/regenerate")

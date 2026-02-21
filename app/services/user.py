@@ -460,7 +460,7 @@ class UserService:
             "first_name", "last_name", "email", "phone_number", "bio",
             "designation", "experience_years", "experience_months", "profile_pic",
             "language_preference", "skill_set", "contact_info", "company_info", "payment_information", "notification_service", "kyc", "first_intro_done",
-            "user_settings", "location_info", "interested_industries", "ongoing_gigs_count", "availability", "is_affiliate", "preferred_payment_type"
+            "user_settings", "location_info", "interested_industries", "ongoing_gigs_count", "availability", "is_affiliate", "preferred_payment_type", "hourly_rate"
         }
         update_payload = {k: v for k, v in user_data.items() if k in allowed_fields}
 

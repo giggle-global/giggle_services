@@ -68,11 +68,8 @@ class AIScopeService:
             "(software, design, writing, marketing, video, consulting, etc.).\n\n"
             "Ask exactly 3 questions in this strict order based on the current 'sequence':\n"
             "1. (Sequence 1): What specific deliverables/outcomes they want\n"
-            "2. (Sequence 2): Timeline and deadline preferences\n"
+            "2. (Sequence 2): ONE project-relevant question that varies by project type. Pick the most relevant topic for this project from: timeline/deadline, format, scope, platform, audience, style, revisions, technical stack, or similar. Do NOT always ask timeline; vary based on project_hint and industry.\n"
             "3. (Sequence 3): Budget expectations (ask for range or preference: 'tight budget', 'moderate', 'premium' - NOT exact amounts)\n\n"
-            # "- Target audience or purpose\n"
-            # "- Style, tone, or quality expectations\n"
-            # "- Any specific requirements or constraints\n\n"
             "Do NOT ask about target audience, style, or other constraints for now.\n\n"
             "Adapt your questions to the project type mentioned. For example:\n"
             "- Software/Web: features, platform, technical needs\n"
@@ -81,11 +78,12 @@ class AIScopeService:
             "- Marketing: channels, goals, audience demographics\n"
             "- Video: length, style, editing level, deliverable format\n\n"
             "Keep questions short, precise, and avoid yes/no questions.\n"
-            "When it makes sense, propose 3-6 SHORT answer options that a user could click on (buttons, chips, etc.). "
+            "For sequence 1 (deliverables/outcomes), you MUST provide 3-6 SHORT answer options for multi-select. "
+            "For other sequences, when it makes sense, propose 3-6 SHORT answer options. "
             "Options should be concise phrases, not sentences.\n\n"
             "Respond strictly with JSON using this schema:\n"
             '{"question": "...", "options": ["..."], "is_final": false}.\n'
-            "If you think free-text is better, you MUST still return an empty list for 'options' (e.g. \"options\": [])."
+            "Sequence 1 must have a non-empty options array. For other sequences, use empty list if free-text is better (e.g. \"options\": [])."
         )
         context = {
             "sequence": sequence,
@@ -137,7 +135,7 @@ class AIScopeService:
             "(software, design, writing, marketing, video, consulting, etc.).\n\n"
             "Generate exactly 3 questions in this strict order:\n"
             "1. (Sequence 1): What specific deliverables/outcomes they want\n"
-            "2. (Sequence 2): Timeline and deadline preferences\n"
+            "2. (Sequence 2): ONE project-relevant question that varies by project type. Pick the most relevant topic for this project from: timeline/deadline, format, scope, platform, audience, style, revisions, technical stack, or similar. Do NOT always ask timeline; vary based on project_hint and industry.\n"
             "3. (Sequence 3): Budget expectations (ask for range or preference: 'tight budget', 'moderate', 'premium' - NOT exact amounts)\n\n"
             "Adapt your questions to the project type mentioned. For example:\n"
             "- Software/Web: features, platform, technical needs\n"
@@ -146,11 +144,12 @@ class AIScopeService:
             "- Marketing: channels, goals, audience demographics\n"
             "- Video: length, style, editing level, deliverable format\n\n"
             "Keep questions short, precise, and avoid yes/no questions.\n"
-            "When it makes sense, propose 3-6 SHORT answer options that a user could click on (buttons, chips, etc.). "
+            "For sequence 1 (deliverables/outcomes), you MUST provide 3-6 SHORT answer options so users can multi-select.\n"
+            "For other questions, when it makes sense, propose 3-6 SHORT answer options. "
             "Options should be concise phrases, not sentences.\n\n"
             "Respond strictly with JSON using this schema:\n"
             '{"questions": [{"question": "...", "options": ["..."], "sequence": 1}, {"question": "...", "options": ["..."], "sequence": 2}, {"question": "...", "options": ["..."], "sequence": 3}]}.\n'
-            "If you think free-text is better for a question, you MUST still return an empty list for 'options' (e.g. \"options\": [])."
+            "Sequence 1 must have a non-empty options array. For sequence 2 or 3, use empty list if free-text is better (e.g. \"options\": [])."
         )
         context = {
             "max_questions": MAX_QUESTIONS,

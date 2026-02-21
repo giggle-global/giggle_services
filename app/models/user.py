@@ -81,6 +81,7 @@ class UserBase(BaseModel):
     phone_verified: bool = Field(False, example=True)
     is_affiliate: Optional[bool] = Field(False, example=False)
     preferred_payment_type: Optional[PaymentTypeEnum] = Field(None, example=PaymentTypeEnum.HOURLY.value)
+    hourly_rate: Optional[float] = Field(None, example=25.0)
 
 
 class UserCreate(UserBase):
@@ -192,6 +193,7 @@ class UserUpdate(BaseModel):
     ongoing_gigs_count: Optional[int] = Field(0, example=2, description="Number of active gigs")
     availability: Optional[AvailabilityEnum] = Field(None, example=AvailabilityEnum.MEDIUM.value, description="Freelancer availability: low (max 10hr/wk), medium (10-30hr/wk), immediate (30+hr/wk)")
     preferred_payment_type: Optional[PaymentTypeEnum] = Field(None, example=PaymentTypeEnum.HOURLY.value)
+    hourly_rate: Optional[float] = Field(None, example=25.0)
     
     #client-specific fields
     contact_info: Optional[ContactInfo] = None
@@ -259,6 +261,7 @@ class UserOut(BaseModel):
     first_intro_done: Optional[bool] = Field(False, example=True)
     user_settings: Optional[UserSettingInfo] = None
     preferred_payment_type: Optional[PaymentTypeEnum] = None
+    hourly_rate: Optional[float] = None
 
     class Config:
         from_attributes = True
