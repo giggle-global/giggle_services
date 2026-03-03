@@ -109,7 +109,7 @@ class PortfolioRepository:
         based on a source project (from the main projects collection).
 
         - Ensures at most one active portfolio entry per (user_id, source_project_id)
-        - Updates core fields (title, description, technologies, links, cover_image)
+        - Updates core fields (title, description, technologies, links)
         """
         try:
             existing = self.col.find_one(
@@ -135,9 +135,6 @@ class PortfolioRepository:
                     ),
                     "portfolio_link": base_payload.get(
                         "portfolio_link", existing.get("portfolio_link")
-                    ),
-                    "cover_image": base_payload.get(
-                        "cover_image", existing.get("cover_image")
                     ),
                     "portfolio_pdf": base_payload.get(
                         "portfolio_pdf", existing.get("portfolio_pdf")

@@ -324,3 +324,78 @@ def generate_s3_presigned_urls_for_object(
     view = generate_s3_presigned_get_url(bucket=bucket, key=key, expires_in=expires_in, region_name=region_name, s3_client=client, inline=True, response_content_type=response_content_type)
     download = generate_s3_presigned_get_url(bucket=bucket, key=key, expires_in=expires_in, region_name=region_name, s3_client=client, inline=False, response_content_type=response_content_type)
     return {"view_url": view, "download_url": download}
+# ----------------------
+# S3: upload object bytes
+# ----------------------
+def upload_s3_object_bytes(
+    bucket: str,
+    key: str,
+    body: bytes,
+    content_type: str = "application/octet-stream",
+    region_name: Optional[str] = None,
+    s3_client=None,
+) -> None:
+    """
+    Upload bytes directly to S3.
+    """
+    client = s3_client or _s3_client(region_name=region_name)
+    try:
+        client.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=body,
+            ContentType=content_type
+        )
+        logger.info("Successfully uploaded %d bytes to s3://%s/%s", len(body), bucket, key)
+    except (BotoCoreError, ClientError) as exc:
+        logger.exception("Failed to upload to S3: s3://%s/%s", bucket, key)
+        raise
+
+
+# ----------------------
+# PDF: Generate thumbnail from first page
+# ----------------------
+def generate_pdf_thumbnail_to_s3(
+    bucket: str,
+    pdf_key: str,
+    thumbnail_key: str,
+    region_name: Optional[str] = None,
+) -> str:
+    """
+    Extracts the first page of a PDF from S3 as a PNG and uploads it back to S3.
+    Returns the thumbnail_key if successful.
+    """
+    import fitz  # PyMuPDF
+    import io
+
+    try:
+        # 1. Get PDF bytes from S3
+        pdf_bytes = get_s3_object_bytes(bucket, pdf_key, region_name=region_name)
+        
+        # 2. Open PDF with PyMuPDF
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        if doc.page_count == 0:
+            doc.close()
+            raise ValueError("PDF has no pages")
+            
+        # 3. Get first page and render to image
+        page = doc[0]
+        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))  # 2x scale for better quality
+        
+        # 4. Save pixmap to bytes (PNG)
+        img_bytes = pix.tobytes("png")
+        doc.close()
+        
+        # 5. Upload thumbnail to S3
+        upload_s3_object_bytes(
+            bucket=bucket,
+            key=thumbnail_key,
+            body=img_bytes,
+            content_type="image/png",
+            region_name=region_name
+        )
+        
+        return thumbnail_key
+    except Exception as e:
+        logger.exception("Failed to generate PDF thumbnail for %s", pdf_key)
+        raise

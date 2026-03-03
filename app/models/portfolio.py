@@ -27,7 +27,6 @@ class ProjectBase(BaseModel):
                 "technologies": ["React", "Node.js", "MongoDB"],
                 "github_link": "https://github.com/username/repo",
                 "portfolio_link": "https://my-portfolio.example.com/project",
-                "cover_image": "s3://bucket/key.png",
                 "portfolio_pdf": "s3://bucket/portfolio.pdf"
             }
         }
@@ -43,7 +42,6 @@ class ProjectCreate(ProjectBase):
                 "technologies": ["React", "Node.js", "MongoDB"],
                 "github_link": "https://github.com/username/repo",
                 "portfolio_link": "https://my-portfolio.example.com/project",
-                "cover_image": "s3://bucket/key.png",
                 "portfolio_pdf": "s3://bucket/portfolio.pdf"
             }
         }
@@ -66,7 +64,6 @@ class ProjectUpdate(BaseModel):
                 "technologies": ["React", "Node.js", "MongoDB"],
                 "github_link": "https://github.com/username/repo",
                 "portfolio_link": "https://my-portfolio.example.com/project",
-                "cover_image": "s3://bucket/key.png",
                 "portfolio_pdf": "s3://bucket/portfolio.pdf"
             }
         }

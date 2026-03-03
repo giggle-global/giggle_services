@@ -208,15 +208,12 @@ class ReviewService:
                                 or ""
                             )
                             technologies = project.get("key_features") or []
-                            cover_image = project.get("cover_image")
-
                             portfolio_payload = {
                                 "title": project_name or "Project",
                                 "description": description,
                                 "technologies": technologies,
                                 "github_link": None,
                                 "portfolio_link": None,
-                                "cover_image": cover_image,
                             }
 
                             self.portfolio_repo.upsert_auto_project_from_source(
